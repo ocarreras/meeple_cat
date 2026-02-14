@@ -38,7 +38,8 @@ export async function preloadTileImages(): Promise<Map<string, HTMLImageElement>
     for (const tileType of TILE_TYPES) {
       const promise = new Promise<void>((resolveImage, rejectImage) => {
         const img = new Image();
-        const src = `/tiles/tile_${tileType}.svg`;
+        // const src = `/tiles/tile_${tileType}.svg`;
+        const src = `/tiles/${tileType}.png`;
 
         img.onload = () => {
           images.set(tileType, img);

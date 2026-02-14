@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { CarcassonneGameData, TilePlacement, Player } from '@/lib/types';
 import { preloadTileImages } from '@/lib/tileImages';
+import { MeepleSpotInfo } from '@/lib/meeplePlacements';
 
 interface CarcassonneBoardProps {
   gameData: CarcassonneGameData;
@@ -13,6 +14,21 @@ interface CarcassonneBoardProps {
   onCellClicked: (x: number, y: number) => void;
   isMyTurn: boolean;
   phase: string;
+  // Tile confirm
+  showConfirmButton: boolean;
+  onConfirmTile: () => void;
+  // Meeple placement overlay
+  meeplePlacementMode: boolean;
+  meepleSpots: MeepleSpotInfo[];
+  selectedMeepleSpot: string | null;
+  onMeepleSpotClick: (spot: string) => void;
+  onConfirmMeeple: () => void;
+  onSkipMeeple: () => void;
+  lastPlacedPosition: { x: number; y: number } | null;
+  playerMeepleImage: string;
+  playerSeatIndex: number;
+  // Confirmed tile to draw during meeple placement (before server has it on the board)
+  confirmedTile: { tileType: string; x: number; y: number; rotation: number } | null;
 }
 
 const TILE_SIZE = 100;
@@ -33,6 +49,18 @@ export default function CarcassonneBoard({
   onCellClicked,
   isMyTurn,
   phase,
+  showConfirmButton,
+  onConfirmTile,
+  meeplePlacementMode,
+  meepleSpots,
+  selectedMeepleSpot,
+  onMeepleSpotClick,
+  onConfirmMeeple,
+  onSkipMeeple,
+  lastPlacedPosition,
+  playerMeepleImage,
+  playerSeatIndex,
+  confirmedTile,
 }: CarcassonneBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,13 +68,15 @@ export default function CarcassonneBoard({
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  // Track canvas dimensions in state so render effect re-fires when they change
+  const [canvasDims, setCanvasDims] = useState({ width: 0, height: 0 });
 
   // Load tile images
   useEffect(() => {
     preloadTileImages().then(setTileImages);
   }, []);
 
-  // Resize observer for responsive canvas
+  // Resize observer for responsive canvas — updates canvasDims state
   useEffect(() => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
@@ -57,6 +87,7 @@ export default function CarcassonneBoard({
         const { width, height } = entry.contentRect;
         canvas.width = width;
         canvas.height = height;
+        setCanvasDims({ width, height });
       }
     });
 
@@ -64,7 +95,25 @@ export default function CarcassonneBoard({
     return () => resizeObserver.disconnect();
   }, []);
 
-  // Convert screen coordinates to grid coordinates
+  // Native wheel handler to reliably prevent default browser behavior
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setCamera((prev) => ({
+        ...prev,
+        zoom: Math.max(0.25, Math.min(4.0, prev.zoom - e.deltaY * 0.001)),
+      }));
+    };
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Convert screen coordinates to grid coordinates — fixed Y-axis
   const screenToGrid = useCallback(
     (screenX: number, screenY: number): { x: number; y: number } => {
       const canvas = canvasRef.current;
@@ -75,24 +124,30 @@ export default function CarcassonneBoard({
       const canvasY = screenY - rect.top;
 
       const worldX = (canvasX - canvas.width / 2 - camera.x) / (TILE_SIZE * camera.zoom);
-      const worldY = -(canvasY - canvas.height / 2 - camera.y) / (TILE_SIZE * camera.zoom);
+      // Negate AFTER floor, not before — fixes off-by-one on Y axis
+      const rawWorldY = (canvasY - canvas.height / 2 - camera.y) / (TILE_SIZE * camera.zoom);
 
       return {
         x: Math.floor(worldX),
-        y: Math.floor(worldY),
+        y: -Math.floor(rawWorldY),
       };
     },
     [camera]
   );
 
-  // Mouse wheel zoom
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    setCamera((prev) => ({
-      ...prev,
-      zoom: Math.max(0.25, Math.min(4.0, prev.zoom - e.deltaY * 0.001)),
-    }));
-  }, []);
+  // Convert grid coordinates to screen pixel position (for DOM overlay)
+  const gridToScreen = useCallback(
+    (gridX: number, gridY: number): { x: number; y: number } => {
+      const canvas = canvasRef.current;
+      if (!canvas) return { x: 0, y: 0 };
+
+      const screenX = (gridX * TILE_SIZE) * camera.zoom + canvas.width / 2 + camera.x;
+      const screenY = (-gridY * TILE_SIZE) * camera.zoom + canvas.height / 2 + camera.y;
+
+      return { x: screenX, y: screenY };
+    },
+    [camera]
+  );
 
   // Mouse down - start panning
   const handleMouseDown = useCallback(
@@ -141,6 +196,7 @@ export default function CarcassonneBoard({
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || !tileImages) return;
+    if (canvasDims.width === 0 || canvasDims.height === 0) return;
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -225,7 +281,7 @@ export default function CarcassonneBoard({
     }
 
     // Draw valid cell highlights (all positions, any rotation)
-    if (isMyTurn && phase === 'place_tile') {
+    if (isMyTurn && phase === 'place_tile' && !meeplePlacementMode) {
       validCells.forEach((cell) => {
         const drawX = cell.x * TILE_SIZE;
         const drawY = -cell.y * TILE_SIZE;
@@ -239,7 +295,7 @@ export default function CarcassonneBoard({
     }
 
     // Draw selected cell highlight
-    if (selectedCell) {
+    if (selectedCell && !meeplePlacementMode) {
       const drawX = selectedCell.x * TILE_SIZE;
       const drawY = -selectedCell.y * TILE_SIZE;
       ctx.strokeStyle = '#3b82f6';
@@ -247,8 +303,8 @@ export default function CarcassonneBoard({
       ctx.strokeRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
     }
 
-    // Draw tile preview at selected cell
-    if (currentPreview && gameData.current_tile) {
+    // Draw tile preview at selected cell (during tile selection phase)
+    if (currentPreview && gameData.current_tile && !meeplePlacementMode) {
       const tileImage = tileImages.get(gameData.current_tile);
       if (tileImage) {
         const drawX = currentPreview.x * TILE_SIZE;
@@ -263,9 +319,25 @@ export default function CarcassonneBoard({
       }
     }
 
+    // Draw confirmed tile during meeple placement (tile not yet on server board)
+    if (confirmedTile && meeplePlacementMode) {
+      const tileImage = tileImages.get(confirmedTile.tileType);
+      if (tileImage) {
+        const drawX = confirmedTile.x * TILE_SIZE;
+        const drawY = -confirmedTile.y * TILE_SIZE;
+
+        ctx.save();
+        ctx.translate(drawX + TILE_SIZE / 2, drawY + TILE_SIZE / 2);
+        ctx.rotate((confirmedTile.rotation * Math.PI) / 180);
+        ctx.drawImage(tileImage, -TILE_SIZE / 2, -TILE_SIZE / 2, TILE_SIZE, TILE_SIZE);
+        ctx.restore();
+      }
+    }
+
     ctx.restore();
   }, [
     camera,
+    canvasDims,
     tileImages,
     gameData,
     players,
@@ -274,13 +346,22 @@ export default function CarcassonneBoard({
     currentPreview,
     isMyTurn,
     phase,
+    meeplePlacementMode,
+    confirmedTile,
   ]);
 
+  // Compute overlay positions for buttons and meeple spots
+  const overlayTilePos = meeplePlacementMode && lastPlacedPosition
+    ? lastPlacedPosition
+    : (showConfirmButton && selectedCell ? selectedCell : null);
+
+  const tileScreenPos = overlayTilePos ? gridToScreen(overlayTilePos.x, overlayTilePos.y) : null;
+  const tileSizePx = TILE_SIZE * camera.zoom;
+
   return (
-    <div ref={containerRef} className="w-full h-full bg-gray-100">
+    <div ref={containerRef} className="w-full h-full bg-gray-100 relative overflow-hidden">
       <canvas
         ref={canvasRef}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -289,6 +370,125 @@ export default function CarcassonneBoard({
         }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
       />
+
+      {/* DOM Overlay: Confirm/Skip buttons and meeple spots */}
+      {tileScreenPos && (
+        <div
+          style={{
+            position: 'absolute',
+            left: tileScreenPos.x,
+            top: tileScreenPos.y,
+            width: tileSizePx,
+            height: tileSizePx,
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Confirm button (top-right of tile) */}
+          {showConfirmButton && !meeplePlacementMode && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onConfirmTile(); }}
+              style={{
+                position: 'absolute',
+                top: -20,
+                right: -20,
+                width: 40,
+                height: 40,
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                border: 'none',
+                background: 'none',
+                padding: 0,
+              }}
+              title="Confirm tile placement"
+            >
+              <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
+            </button>
+          )}
+
+          {/* Meeple placement mode: spots + confirm/skip */}
+          {meeplePlacementMode && (
+            <>
+              {/* Meeple spot indicators */}
+              {meepleSpots.map((spotInfo) => {
+                const isSelected = selectedMeepleSpot === spotInfo.spot;
+                // Convert from 100x100 space to actual pixel space
+                const spotX = (spotInfo.column / 100) * tileSizePx + tileSizePx / 2;
+                const spotY = (spotInfo.row / 100) * tileSizePx + tileSizePx / 2;
+                const spotSize = Math.max(20, tileSizePx * 0.22);
+
+                return (
+                  <button
+                    key={spotInfo.spot}
+                    onClick={(e) => { e.stopPropagation(); onMeepleSpotClick(spotInfo.spot); }}
+                    style={{
+                      position: 'absolute',
+                      left: spotX - spotSize / 2,
+                      top: spotY - spotSize / 2,
+                      width: spotSize,
+                      height: spotSize,
+                      pointerEvents: 'auto',
+                      cursor: 'pointer',
+                      border: isSelected ? `2px solid ${PLAYER_COLORS[playerSeatIndex % PLAYER_COLORS.length]}` : 'none',
+                      borderRadius: '50%',
+                      background: 'none',
+                      padding: 0,
+                      zIndex: isSelected ? 10 : 1,
+                    }}
+                    title={spotInfo.spot}
+                  >
+                    <img
+                      src={isSelected ? playerMeepleImage : '/spot.gif'}
+                      alt={spotInfo.spot}
+                      style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                    />
+                  </button>
+                );
+              })}
+
+              {/* Confirm meeple button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onConfirmMeeple(); }}
+                style={{
+                  position: 'absolute',
+                  top: -20,
+                  right: -20,
+                  width: 40,
+                  height: 40,
+                  pointerEvents: 'auto',
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: 'none',
+                  padding: 0,
+                }}
+                title="Confirm meeple placement"
+              >
+                <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
+              </button>
+
+              {/* Skip meeple button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onSkipMeeple(); }}
+                style={{
+                  position: 'absolute',
+                  top: -20,
+                  right: -64,
+                  width: 40,
+                  height: 40,
+                  pointerEvents: 'auto',
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: 'none',
+                  padding: 0,
+                }}
+                title="Skip meeple"
+              >
+                <img src="/icon-reject-48.png" alt="Skip" style={{ width: '100%', height: '100%' }} />
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="absolute bottom-4 left-4 bg-white px-3 py-2 rounded shadow text-sm">
         <div>Zoom: {(camera.zoom * 100).toFixed(0)}%</div>
         <div className="text-xs text-gray-500">Scroll to zoom, drag to pan</div>

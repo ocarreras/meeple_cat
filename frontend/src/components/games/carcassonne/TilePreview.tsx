@@ -50,10 +50,12 @@ export default function TilePreview({
     if (!currentTile) return 'Drawing tile...';
     if (!isMyTurn) return 'Waiting for opponent...';
     if (phase === 'place_tile') {
-      if (hasSelection) return 'Click cell to rotate. Choose meeple to confirm.';
+      if (hasSelection) return 'Click cell to rotate, then confirm with checkmark.';
       return 'Click a highlighted cell to place';
     }
-    if (phase === 'place_meeple') return 'Choose a meeple placement';
+    if (phase === 'confirming_meeple') return 'Select a meeple spot on the tile, or skip.';
+    if (phase === 'waiting') return 'Waiting for server...';
+    if (phase === 'place_meeple') return 'Select a meeple spot on the tile, or skip.';
     return '';
   };
 

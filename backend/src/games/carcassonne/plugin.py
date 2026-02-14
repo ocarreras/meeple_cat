@@ -616,6 +616,7 @@ class CarcassonnePlugin:
         return {
             "board": game_data["board"],
             "features": game_data["features"],
+            "tile_feature_map": game_data["tile_feature_map"],
             "current_tile": game_data["current_tile"],
             "tiles_remaining": len(game_data["tile_bag"]),
             "meeple_supply": game_data["meeple_supply"],

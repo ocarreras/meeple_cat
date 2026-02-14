@@ -66,9 +66,13 @@ export interface Feature {
 }
 
 // Carcassonne game data structure
+// Maps position "x,y" -> { spot_name: feature_id }
+export type TileFeatureMap = Record<string, Record<string, string>>;
+
 export interface CarcassonneGameData {
   board: Board;
   features: Record<string, Feature>; // keyed by feature ID
+  tile_feature_map: TileFeatureMap; // position -> spot -> feature_id
   current_tile: string | null; // tile type ID like "A", "B", etc.
   tiles_remaining: number;
   meeple_supply: Record<PlayerId, number>; // player_id -> count
