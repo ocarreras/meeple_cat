@@ -3,10 +3,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { PlayerView, CarcassonneGameData, TilePlacement, ValidAction, isTilePlacementAction, isMeeplePlacementAction, isSkipAction } from '@/lib/types';
 import { getValidMeepleSpots, MeepleSpotInfo } from '@/lib/meeplePlacements';
+import { useGameStore } from '@/stores/gameStore';
 import CarcassonneBoard from './CarcassonneBoard';
 import TilePreview from './TilePreview';
 import MeepleSupply from './MeepleSupply';
 import ScoreBoard from '../../game/ScoreBoard';
+import GameOverSummary from './GameOverSummary';
 
 type UIPhase = 'selecting_tile' | 'confirming_meeple' | 'waiting';
 
@@ -33,6 +35,8 @@ export default function CarcassonneRenderer({
   const [confirmedPlacement, setConfirmedPlacement] = useState<TilePlacement | null>(null);
 
   const gameData = view.game_data as CarcassonneGameData;
+  const gameOver = useGameStore((state) => state.gameOver);
+  const isGameOver = view.status === 'finished' || gameOver !== null;
 
   const currentAction = view.current_phase?.expected_actions?.[0];
   const currentPlayerId = currentAction?.player_id;
@@ -277,6 +281,14 @@ export default function CarcassonneRenderer({
             rotation: confirmedPlacement.rotation,
           } : null}
         />
+        {isGameOver && (
+          <GameOverSummary
+            players={view.players}
+            finalScores={gameOver?.final_scores ?? gameData.scores}
+            winners={gameOver?.winners ?? []}
+            breakdown={gameData.end_game_breakdown}
+          />
+        )}
       </div>
 
       {/* Sidebar */}

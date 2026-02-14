@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { PlayerView } from '@/lib/types';
+import type { PlayerView, GameOverPayload } from '@/lib/types';
 
 export interface GameStore {
   // Connection state
@@ -11,6 +11,7 @@ export interface GameStore {
 
   // Game state (from server)
   view: PlayerView | null;
+  gameOver: GameOverPayload | null;
   error: string | null;
 
   // UI state
@@ -19,6 +20,7 @@ export interface GameStore {
   // Actions
   setConnected: (connected: boolean, matchId?: string, playerId?: string) => void;
   setView: (view: PlayerView) => void;
+  setGameOver: (payload: GameOverPayload) => void;
   setError: (error: string | null) => void;
   setSubmitting: (submitting: boolean) => void;
   reset: () => void;
@@ -29,6 +31,7 @@ const initialState = {
   connected: false,
   playerId: null,
   view: null,
+  gameOver: null,
   error: null,
   submitting: false,
 };
@@ -47,6 +50,11 @@ export const useGameStore = create<GameStore>((set) => ({
     set({
       view,
       error: null, // Clear error on successful state update
+    }),
+
+  setGameOver: (payload) =>
+    set({
+      gameOver: payload,
     }),
 
   setError: (error) =>

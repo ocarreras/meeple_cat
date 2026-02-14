@@ -576,13 +576,14 @@ class CarcassonnePlugin:
         events: list[Event] = []
         scores = dict(game_data["scores"])
 
-        end_scores = score_end_game(game_data)
+        end_scores, breakdown = score_end_game(game_data)
+        game_data["end_game_breakdown"] = breakdown
         for pid, points in end_scores.items():
             scores[pid] = scores.get(pid, 0) + points
             events.append(Event(
                 event_type="end_game_points",
                 player_id=pid,
-                payload={"points": points},
+                payload={"points": points, "breakdown": breakdown.get(pid, {})},
             ))
 
         game_data["scores"] = scores
@@ -613,7 +614,7 @@ class CarcassonnePlugin:
         player_id: PlayerId | None,
         players: list[Player],
     ) -> dict:
-        return {
+        view = {
             "board": game_data["board"],
             "features": game_data["features"],
             "tile_feature_map": game_data["tile_feature_map"],
@@ -623,6 +624,9 @@ class CarcassonnePlugin:
             "scores": game_data["scores"],
             "last_placed_position": game_data["last_placed_position"],
         }
+        if "end_game_breakdown" in game_data:
+            view["end_game_breakdown"] = game_data["end_game_breakdown"]
+        return view
 
     def get_spectator_summary(
         self,

@@ -24,6 +24,7 @@ export function useGameConnection(
 
   const setConnected = useGameStore((state) => state.setConnected);
   const setView = useGameStore((state) => state.setView);
+  const setGameOver = useGameStore((state) => state.setGameOver);
   const setError = useGameStore((state) => state.setError);
   const connected = useGameStore((state) => state.connected);
   const error = useGameStore((state) => state.error);
@@ -62,9 +63,8 @@ export function useGameConnection(
         case 'game_over': {
           if (isGameOverPayload(message.payload)) {
             console.log('Game over:', message.payload);
-            // Update view status to finished if we have a current view
-            // The backend should send a final state_update, but we can handle it here too
-            setError(null); // Clear any existing errors
+            setGameOver(message.payload);
+            setError(null);
           }
           break;
         }
@@ -85,7 +85,7 @@ export function useGameConnection(
         }
       }
     },
-    [setConnected, setView, setError]
+    [setConnected, setView, setGameOver, setError]
   );
 
   const handleConnect = useCallback(() => {

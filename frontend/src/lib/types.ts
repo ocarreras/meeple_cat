@@ -78,6 +78,7 @@ export interface CarcassonneGameData {
   meeple_supply: Record<PlayerId, number>; // player_id -> count
   scores: Record<PlayerId, number>; // player_id -> score
   last_placed_position: string | null; // "x,y" position or null
+  end_game_breakdown?: Record<PlayerId, Record<string, number>>; // per-player per-category end-game points
 }
 
 // Main PlayerView model

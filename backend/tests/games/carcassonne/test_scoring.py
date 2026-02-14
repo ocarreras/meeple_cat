@@ -144,10 +144,11 @@ class TestScoreEndGame:
             }
         }
 
-        scores = score_end_game(game_data)
+        scores, breakdown = score_end_game(game_data)
 
         # 2 tiles * 1 + 1 pennant * 1 = 3 points
         assert scores == {"player1": 3}
+        assert breakdown == {"player1": {"fields": 0, "roads": 0, "cities": 3, "monasteries": 0}}
 
     def test_score_incomplete_road(self):
         """Verify incomplete roads score 1 point per tile."""
@@ -163,10 +164,11 @@ class TestScoreEndGame:
             }
         }
 
-        scores = score_end_game(game_data)
+        scores, breakdown = score_end_game(game_data)
 
         # 2 tiles * 1 = 2 points
         assert scores == {"player1": 2}
+        assert breakdown == {"player1": {"fields": 0, "roads": 2, "cities": 0, "monasteries": 0}}
 
     def test_score_incomplete_monastery(self):
         """Verify incomplete monastery scores 1 + present neighbors."""
@@ -192,10 +194,11 @@ class TestScoreEndGame:
             }
         }
 
-        scores = score_end_game(game_data)
+        scores, breakdown = score_end_game(game_data)
 
         # 1 for the tile + 5 neighbors = 6 points
         assert scores == {"player1": 6}
+        assert breakdown == {"player1": {"fields": 0, "roads": 0, "cities": 0, "monasteries": 6}}
 
     def test_score_field_with_completed_cities(self):
         """Verify fields score 3 points per adjacent completed city."""
@@ -230,7 +233,7 @@ class TestScoreEndGame:
             }
         }
 
-        scores = score_end_game(game_data)
+        scores, breakdown = score_end_game(game_data)
 
         # The field borders 1 completed city, so 3 points
         # Note: This depends on the tile definition having adjacent_cities set correctly
@@ -251,10 +254,11 @@ class TestScoreEndGame:
             }
         }
 
-        scores = score_end_game(game_data)
+        scores, breakdown = score_end_game(game_data)
 
         # Should not score already-complete features
         assert scores == {}
+        assert breakdown == {}
 
     def test_score_skips_features_without_meeples(self):
         """Verify features without meeples are not scored."""
@@ -271,9 +275,10 @@ class TestScoreEndGame:
             }
         }
 
-        scores = score_end_game(game_data)
+        scores, breakdown = score_end_game(game_data)
 
         assert scores == {}
+        assert breakdown == {}
 
     def test_score_multiple_features(self):
         """Verify multiple features are scored correctly."""
@@ -296,12 +301,13 @@ class TestScoreEndGame:
             }
         }
 
-        scores = score_end_game(game_data)
+        scores, breakdown = score_end_game(game_data)
 
         # City: 1 tile = 1 point
         # Road: 2 tiles = 2 points
         # Total for player1 = 3 points
         assert scores == {"player1": 3}
+        assert breakdown == {"player1": {"fields": 0, "roads": 2, "cities": 1, "monasteries": 0}}
 
     def test_score_tied_players_in_endgame(self):
         """Verify tied players both score in end-game."""
@@ -321,7 +327,9 @@ class TestScoreEndGame:
             }
         }
 
-        scores = score_end_game(game_data)
+        scores, breakdown = score_end_game(game_data)
 
         # Both players tied with 1 meeple each, both get 2 points
         assert scores == {"player1": 2, "player2": 2}
+        assert breakdown["player1"]["cities"] == 2
+        assert breakdown["player2"]["cities"] == 2

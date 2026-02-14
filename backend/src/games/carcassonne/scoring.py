@@ -44,7 +44,9 @@ def score_completed_feature(feature: dict) -> dict[str, int]:
     return {pid: points for pid in winners}
 
 
-def score_end_game(game_data: dict) -> dict[str, int]:
+def score_end_game(
+    game_data: dict,
+) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
     """Score all incomplete features and fields at game end.
 
     Scoring rules for incomplete features:
@@ -52,8 +54,14 @@ def score_end_game(game_data: dict) -> dict[str, int]:
     - Road: 1 point per tile
     - Monastery: 1 point per tile (self + present neighbors)
     - Field: 3 points per completed adjacent city
+
+    Returns:
+        totals: {player_id: total_points}
+        breakdown: {player_id: {category: points}}
+            categories: "fields", "roads", "cities", "monasteries"
     """
     scores: dict[str, int] = {}
+    breakdown: dict[str, dict[str, int]] = {}
     features = game_data["features"]
     board_tiles = game_data["board"]["tiles"]
 
@@ -78,10 +86,11 @@ def score_end_game(game_data: dict) -> dict[str, int]:
 
         if ft in (FeatureType.CITY, "city"):
             points = len(tiles) + feature.get("pennants", 0)
+            category = "cities"
         elif ft in (FeatureType.ROAD, "road"):
             points = len(tiles)
+            category = "roads"
         elif ft in (FeatureType.MONASTERY, "monastery"):
-            # 1 point for the tile itself + 1 for each present neighbor
             if tiles:
                 pos = Position.from_key(tiles[0])
                 neighbors_present = sum(
@@ -91,17 +100,21 @@ def score_end_game(game_data: dict) -> dict[str, int]:
                 points = 1 + neighbors_present
             else:
                 points = 0
+            category = "monasteries"
         elif ft in (FeatureType.FIELD, "field"):
-            # 3 points per completed adjacent city
             adjacent_cities = _get_adjacent_completed_cities(game_data, feature)
             points = len(adjacent_cities) * 3
+            category = "fields"
         else:
             continue
 
         for pid in winners:
             scores[pid] = scores.get(pid, 0) + points
+            if pid not in breakdown:
+                breakdown[pid] = {"fields": 0, "roads": 0, "cities": 0, "monasteries": 0}
+            breakdown[pid][category] = breakdown[pid].get(category, 0) + points
 
-    return scores
+    return scores, breakdown
 
 
 def _get_adjacent_completed_cities(
