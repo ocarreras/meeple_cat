@@ -16,6 +16,19 @@ from src.games.carcassonne.types import (
 )
 
 
+def _opposite_edge(edge: str) -> str:
+    """Get the opposite edge identifier. Handles compound edges like 'E:N' -> 'W:N'."""
+    if ":" in edge:
+        direction, side = edge.split(":")
+        return f"{OPPOSITE_DIRECTION[direction]}:{side}"
+    return OPPOSITE_DIRECTION[edge]
+
+
+def _edge_direction(edge: str) -> str:
+    """Get the cardinal direction from an edge (simple or compound)."""
+    return edge.split(":")[0]
+
+
 def initialize_features_from_tile(
     tile_type_id: str,
     position_key: str,
@@ -122,27 +135,23 @@ def create_and_merge_features(
     # Step 2: Merge with adjacent tiles
     pos = Position.from_key(position_key)
 
-    for direction in DIRECTIONS:
+    # Iterate over all edge keys (including compound like "E:N" for road-side fields)
+    for edge_key, our_feature_id in list(edge_to_feature.items()):
+        direction = _edge_direction(edge_key)
         neighbor_pos = pos.neighbor(direction)
         neighbor_key = neighbor_pos.to_key()
 
         if neighbor_key not in board_tiles:
             continue
 
-        if direction not in edge_to_feature:
-            # No feature on this edge (shouldn't happen for non-field edges,
-            # but fields may not explicitly list all edges)
-            continue
-
-        our_feature_id = edge_to_feature[direction]
         # Resolve to current feature (may have been merged already)
         our_feature_id = _resolve_feature_id(features, our_feature_id, tile_feature_map)
 
-        opposite_dir = OPPOSITE_DIRECTION[direction]
+        opposite_edge = _opposite_edge(edge_key)
 
         # Find the feature on the adjacent tile that touches the opposite edge
         adj_feature_id = _find_feature_at_edge(
-            tile_feature_map, features, neighbor_key, opposite_dir
+            tile_feature_map, features, neighbor_key, opposite_edge
         )
 
         if adj_feature_id is None:
@@ -153,8 +162,8 @@ def create_and_merge_features(
         if our_feature_id == adj_feature_id:
             # Already the same feature (can happen after previous merges)
             # Still need to remove the connecting open edges
-            _remove_open_edge(features[our_feature_id], position_key, direction)
-            _remove_open_edge(features[our_feature_id], neighbor_key, opposite_dir)
+            _remove_open_edge(features[our_feature_id], position_key, edge_key)
+            _remove_open_edge(features[our_feature_id], neighbor_key, opposite_edge)
             continue
 
         # Verify same feature type
@@ -167,8 +176,8 @@ def create_and_merge_features(
         )
 
         # Remove the connecting open edges
-        _remove_open_edge(features[merged_id], position_key, direction)
-        _remove_open_edge(features[merged_id], neighbor_key, opposite_dir)
+        _remove_open_edge(features[merged_id], position_key, edge_key)
+        _remove_open_edge(features[merged_id], neighbor_key, opposite_edge)
 
         # Update edge_to_feature for subsequent merges
         for d, fid in edge_to_feature.items():

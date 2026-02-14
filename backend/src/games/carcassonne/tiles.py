@@ -26,7 +26,7 @@ TILE_CATALOG: list[TileDefinition] = [
         features=[
             TileFeature(feature_type=FeatureType.MONASTERY, edges=[], is_monastery=True, meeple_spots=["monastery"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["S"], meeple_spots=["road_S"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=["N", "E", "W"], meeple_spots=["field_NEW"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["N", "E", "W", "S:E", "S:W"], meeple_spots=["field_NEW"], adjacent_cities=[]),
         ],
         internal_connections=[],
         count=2,
@@ -65,8 +65,8 @@ TILE_CATALOG: list[TileDefinition] = [
         features=[
             TileFeature(feature_type=FeatureType.CITY, edges=["N"], meeple_spots=["city_N"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["E", "W"], meeple_spots=["road_EW"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_N"], adjacent_cities=["city_N"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=["S"], meeple_spots=["field_S"], adjacent_cities=["city_N"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:N", "W:N"], meeple_spots=["field_N"], adjacent_cities=["city_N"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S", "E:S", "W:S"], meeple_spots=["field_S"], adjacent_cities=["city_N"]),
         ],
         internal_connections=[],
         count=4,
@@ -150,8 +150,8 @@ TILE_CATALOG: list[TileDefinition] = [
         features=[
             TileFeature(feature_type=FeatureType.CITY, edges=["N"], meeple_spots=["city_N"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["E", "S"], meeple_spots=["road_ES"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=["W"], meeple_spots=["field_W"], adjacent_cities=["city_N"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_ES"], adjacent_cities=["city_N"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["W", "E:N", "S:W"], meeple_spots=["field_W"], adjacent_cities=["city_N"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:S", "S:E"], meeple_spots=["field_ES"], adjacent_cities=["city_N"]),
         ],
         internal_connections=[],
         count=3,
@@ -165,8 +165,8 @@ TILE_CATALOG: list[TileDefinition] = [
         features=[
             TileFeature(feature_type=FeatureType.CITY, edges=["N"], meeple_spots=["city_N"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["S", "W"], meeple_spots=["road_SW"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=["E"], meeple_spots=["field_E"], adjacent_cities=["city_N"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SW"], adjacent_cities=["city_N"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E", "S:E", "W:N"], meeple_spots=["field_E"], adjacent_cities=["city_N"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:W", "W:S"], meeple_spots=["field_SW"], adjacent_cities=["city_N"]),
         ],
         internal_connections=[],
         count=3,
@@ -182,10 +182,10 @@ TILE_CATALOG: list[TileDefinition] = [
             TileFeature(feature_type=FeatureType.ROAD, edges=["E"], meeple_spots=["road_E"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["S"], meeple_spots=["road_S"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["W"], meeple_spots=["road_W"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_NE"], adjacent_cities=["city_N"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SE"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SW"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_NW"], adjacent_cities=["city_N"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:N"], meeple_spots=["field_NE"], adjacent_cities=["city_N"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:S", "S:E"], meeple_spots=["field_SE"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:W", "W:S"], meeple_spots=["field_SW"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["W:N"], meeple_spots=["field_NW"], adjacent_cities=["city_N"]),
         ],
         internal_connections=[],
         count=3,
@@ -225,8 +225,8 @@ TILE_CATALOG: list[TileDefinition] = [
         features=[
             TileFeature(feature_type=FeatureType.CITY, edges=["N", "W"], has_pennant=True, meeple_spots=["city_NW"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["E", "S"], meeple_spots=["road_ES"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_NE"], adjacent_cities=["city_NW"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SE"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:N", "S:W"], meeple_spots=["field_NE"], adjacent_cities=["city_NW"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:S", "S:E"], meeple_spots=["field_SE"], adjacent_cities=[]),
         ],
         internal_connections=[],
         count=2,
@@ -240,8 +240,8 @@ TILE_CATALOG: list[TileDefinition] = [
         features=[
             TileFeature(feature_type=FeatureType.CITY, edges=["N", "W"], meeple_spots=["city_NW"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["E", "S"], meeple_spots=["road_ES"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_NE"], adjacent_cities=["city_NW"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SE"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:N", "S:W"], meeple_spots=["field_NE"], adjacent_cities=["city_NW"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:S", "S:E"], meeple_spots=["field_SE"], adjacent_cities=[]),
         ],
         internal_connections=[],
         count=3,
@@ -268,8 +268,8 @@ TILE_CATALOG: list[TileDefinition] = [
         features=[
             TileFeature(feature_type=FeatureType.CITY, edges=["N", "E", "W"], has_pennant=True, meeple_spots=["city_NEW"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["S"], meeple_spots=["road_S"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SW"], adjacent_cities=["city_NEW"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SE"], adjacent_cities=["city_NEW"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:W"], meeple_spots=["field_SW"], adjacent_cities=["city_NEW"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:E"], meeple_spots=["field_SE"], adjacent_cities=["city_NEW"]),
         ],
         internal_connections=[],
         count=2,
@@ -296,8 +296,8 @@ TILE_CATALOG: list[TileDefinition] = [
         features=[
             TileFeature(feature_type=FeatureType.CITY, edges=["N", "E", "W"], meeple_spots=["city_NEW"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["S"], meeple_spots=["road_S"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SW"], adjacent_cities=["city_NEW"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SE"], adjacent_cities=["city_NEW"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:W"], meeple_spots=["field_SW"], adjacent_cities=["city_NEW"]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:E"], meeple_spots=["field_SE"], adjacent_cities=["city_NEW"]),
         ],
         internal_connections=[],
         count=1,
@@ -310,8 +310,8 @@ TILE_CATALOG: list[TileDefinition] = [
         edges={"N": R, "E": F, "S": R, "W": F},
         features=[
             TileFeature(feature_type=FeatureType.ROAD, edges=["N", "S"], meeple_spots=["road_NS"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=["E"], meeple_spots=["field_E"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=["W"], meeple_spots=["field_W"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E", "N:E", "S:E"], meeple_spots=["field_E"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["W", "N:W", "S:W"], meeple_spots=["field_W"], adjacent_cities=[]),
         ],
         internal_connections=[],
         count=8,
@@ -324,8 +324,8 @@ TILE_CATALOG: list[TileDefinition] = [
         edges={"N": F, "E": F, "S": R, "W": R},
         features=[
             TileFeature(feature_type=FeatureType.ROAD, edges=["S", "W"], meeple_spots=["road_SW"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=["N", "E"], meeple_spots=["field_NE"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SW"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["N", "E", "S:E", "W:N"], meeple_spots=["field_NE"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:W", "W:S"], meeple_spots=["field_SW"], adjacent_cities=[]),
         ],
         internal_connections=[],
         count=9,
@@ -340,9 +340,9 @@ TILE_CATALOG: list[TileDefinition] = [
             TileFeature(feature_type=FeatureType.ROAD, edges=["N"], meeple_spots=["road_N"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["S"], meeple_spots=["road_S"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["W"], meeple_spots=["road_W"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=["E"], meeple_spots=["field_NE"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SE"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_NW"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E", "N:E", "S:E"], meeple_spots=["field_NE", "field_SE"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["N:W", "W:N"], meeple_spots=["field_NW"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:W", "W:S"], meeple_spots=["field_SW"], adjacent_cities=[]),
         ],
         internal_connections=[],
         count=4,
@@ -358,10 +358,10 @@ TILE_CATALOG: list[TileDefinition] = [
             TileFeature(feature_type=FeatureType.ROAD, edges=["E"], meeple_spots=["road_E"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["S"], meeple_spots=["road_S"]),
             TileFeature(feature_type=FeatureType.ROAD, edges=["W"], meeple_spots=["road_W"]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_NE"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SE"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_SW"], adjacent_cities=[]),
-            TileFeature(feature_type=FeatureType.FIELD, edges=[], meeple_spots=["field_NW"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["N:E", "E:N"], meeple_spots=["field_NE"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["E:S", "S:E"], meeple_spots=["field_SE"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["S:W", "W:S"], meeple_spots=["field_SW"], adjacent_cities=[]),
+            TileFeature(feature_type=FeatureType.FIELD, edges=["W:N", "N:W"], meeple_spots=["field_NW"], adjacent_cities=[]),
         ],
         internal_connections=[],
         count=1,
@@ -395,7 +395,7 @@ def get_tile_total() -> int:
 
 def get_rotated_features(tile_type_id: str, rotation: int) -> list[TileFeature]:
     """Get the features of a tile with rotation applied to edges and meeple spots."""
-    from src.games.carcassonne.types import rotate_direction, rotate_meeple_spot
+    from src.games.carcassonne.types import rotate_compound_edge, rotate_meeple_spot
 
     tile_def = TILE_LOOKUP[tile_type_id]
     if rotation == 0:
@@ -403,7 +403,7 @@ def get_rotated_features(tile_type_id: str, rotation: int) -> list[TileFeature]:
 
     rotated_features = []
     for feat in tile_def.features:
-        rotated_edges = [rotate_direction(e, rotation) for e in feat.edges]
+        rotated_edges = [rotate_compound_edge(e, rotation) for e in feat.edges]
         rotated_spots = [rotate_meeple_spot(s, rotation) for s in feat.meeple_spots]
         rotated_adj = [rotate_meeple_spot(s, rotation) for s in feat.adjacent_cities]
         rotated_features.append(TileFeature(

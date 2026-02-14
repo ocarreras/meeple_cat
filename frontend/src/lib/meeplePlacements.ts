@@ -20,105 +20,118 @@ export const MEEPLE_TYPE_ROAD = 3;
 export const MEEPLE_TYPE_FIELD = 4;
 
 /**
- * Base edge definitions for all tile types at rotation 0.
- * C=City, R=Road, F=Field.
+ * Compound edge connections for each meeple spot on each tile type (at rotation 0).
+ * Mirrors the backend's TileFeature.edges exactly.
+ *
+ * Simple edges like "N" connect through a pure field/city/road edge.
+ * Compound edges like "S:E" mean "east side of the S road" — used for fields
+ * that connect through road-split edges.
  */
-const TILE_EDGES: Record<string, Record<string, string>> = {
-  A: { N: 'F', E: 'F', S: 'R', W: 'F' },
-  B: { N: 'F', E: 'F', S: 'F', W: 'F' },
-  C: { N: 'C', E: 'C', S: 'C', W: 'C' },
-  D: { N: 'C', E: 'R', S: 'F', W: 'R' },
-  E: { N: 'C', E: 'F', S: 'F', W: 'F' },
-  F: { N: 'F', E: 'C', S: 'F', W: 'C' },
-  G: { N: 'C', E: 'F', S: 'C', W: 'F' },
-  H: { N: 'C', E: 'F', S: 'C', W: 'F' },
-  I: { N: 'C', E: 'F', S: 'F', W: 'C' },
-  J: { N: 'C', E: 'R', S: 'R', W: 'F' },
-  K: { N: 'C', E: 'F', S: 'R', W: 'R' },
-  L: { N: 'C', E: 'R', S: 'R', W: 'R' },
-  M: { N: 'C', E: 'F', S: 'F', W: 'C' },
-  N: { N: 'C', E: 'F', S: 'F', W: 'C' },
-  O: { N: 'C', E: 'R', S: 'R', W: 'C' },
-  P: { N: 'C', E: 'R', S: 'R', W: 'C' },
-  Q: { N: 'C', E: 'C', S: 'F', W: 'C' },
-  R: { N: 'C', E: 'C', S: 'R', W: 'C' },
-  S: { N: 'C', E: 'C', S: 'F', W: 'C' },
-  T: { N: 'C', E: 'C', S: 'R', W: 'C' },
-  U: { N: 'R', E: 'F', S: 'R', W: 'F' },
-  V: { N: 'F', E: 'F', S: 'R', W: 'R' },
-  W: { N: 'R', E: 'F', S: 'R', W: 'R' },
-  X: { N: 'R', E: 'R', S: 'R', W: 'R' },
+const TILE_SPOT_EDGES: Record<string, Record<string, string[]>> = {
+  A: { monastery: [], road_S: ['S'], field_NEW: ['N', 'E', 'W', 'S:E', 'S:W'] },
+  B: { monastery: [], field_NESW: ['N', 'E', 'S', 'W'] },
+  C: { city_NESW: ['N', 'E', 'S', 'W'] },
+  D: { city_N: ['N'], road_EW: ['E', 'W'], field_N: ['E:N', 'W:N'], field_S: ['S', 'E:S', 'W:S'] },
+  E: { city_N: ['N'], field_ESW: ['E', 'S', 'W'] },
+  F: { city_EW: ['E', 'W'], field_N: ['N'], field_S: ['S'] },
+  G: { city_NS: ['N', 'S'], field_E: ['E'], field_W: ['W'] },
+  H: { city_N: ['N'], city_S: ['S'], field_E: ['E'], field_W: ['W'] },
+  I: { city_N: ['N'], city_W: ['W'], field_ES: ['E', 'S'] },
+  J: { city_N: ['N'], road_ES: ['E', 'S'], field_W: ['W', 'E:N', 'S:W'], field_ES: ['E:S', 'S:E'] },
+  K: { city_N: ['N'], road_SW: ['S', 'W'], field_E: ['E', 'S:E', 'W:N'], field_SW: ['S:W', 'W:S'] },
+  L: { city_N: ['N'], road_E: ['E'], road_S: ['S'], road_W: ['W'], field_NE: ['E:N'], field_SE: ['E:S', 'S:E'], field_SW: ['S:W', 'W:S'], field_NW: ['W:N'] },
+  M: { city_NW: ['N', 'W'], field_ES: ['E', 'S'] },
+  N: { city_NW: ['N', 'W'], field_ES: ['E', 'S'] },
+  O: { city_NW: ['N', 'W'], road_ES: ['E', 'S'], field_NE: ['E:N', 'S:W'], field_SE: ['E:S', 'S:E'] },
+  P: { city_NW: ['N', 'W'], road_ES: ['E', 'S'], field_NE: ['E:N', 'S:W'], field_SE: ['E:S', 'S:E'] },
+  Q: { city_NEW: ['N', 'E', 'W'], field_S: ['S'] },
+  R: { city_NEW: ['N', 'E', 'W'], road_S: ['S'], field_SW: ['S:W'], field_SE: ['S:E'] },
+  S: { city_NEW: ['N', 'E', 'W'], field_S: ['S'] },
+  T: { city_NEW: ['N', 'E', 'W'], road_S: ['S'], field_SW: ['S:W'], field_SE: ['S:E'] },
+  U: { road_NS: ['N', 'S'], field_E: ['E', 'N:E', 'S:E'], field_W: ['W', 'N:W', 'S:W'] },
+  V: { road_SW: ['S', 'W'], field_NE: ['N', 'E', 'S:E', 'W:N'], field_SW: ['S:W', 'W:S'] },
+  W: { road_N: ['N'], road_S: ['S'], road_W: ['W'], field_NE: ['E', 'N:E', 'S:E'], field_SE: ['E', 'N:E', 'S:E'], field_NW: ['N:W', 'W:N'], field_SW: ['S:W', 'W:S'] },
+  X: { road_N: ['N'], road_E: ['E'], road_S: ['S'], road_W: ['W'], field_NE: ['N:E', 'E:N'], field_SE: ['E:S', 'S:E'], field_SW: ['S:W', 'W:S'], field_NW: ['W:N', 'N:W'] },
 };
-
-function getRotatedEdges(tileType: string, rotation: number): Record<string, string> {
-  const base = TILE_EDGES[tileType];
-  if (!base) return {};
-  const steps = ((rotation / 90) | 0) % 4;
-  const result: Record<string, string> = {};
-  for (let i = 0; i < 4; i++) {
-    const sourceIdx = ((i - steps) % 4 + 4) % 4;
-    result[DIRECTIONS[i]] = base[DIRECTIONS[sourceIdx]];
-  }
-  return result;
-}
 
 const OPPOSITE_DIR: Record<string, string> = { N: 'S', S: 'N', E: 'W', W: 'E' };
 const DIR_OFFSET: Record<string, [number, number]> = {
   N: [0, 1], S: [0, -1], E: [1, 0], W: [-1, 0],
 };
 
+/** Rotate a compound edge like "S:E" or simple edge like "N" by rotation degrees. */
+function rotateCompoundEdge(edge: string, rotation: number): string {
+  if (edge.includes(':')) {
+    const [dir, side] = edge.split(':');
+    return `${rotateDirection(dir, rotation)}:${rotateDirection(side, rotation)}`;
+  }
+  return rotateDirection(edge, rotation);
+}
+
+/** Get the opposite compound edge: "E:N" → "W:N" (same side, opposite direction). */
+function getOppositeEdge(edge: string): string {
+  if (edge.includes(':')) {
+    const [dir, side] = edge.split(':');
+    return `${OPPOSITE_DIR[dir]}:${side}`;
+  }
+  return OPPOSITE_DIR[edge];
+}
+
 /**
  * Check if a meeple spot would connect to an already-occupied feature
- * by looking at adjacent tiles' features through shared edges.
+ * by looking at adjacent tiles' features through their open_edges.
+ *
+ * Uses actual compound edge data from TILE_SPOT_EDGES (mirroring the backend)
+ * and matches against feature open_edges for precise adjacency detection.
  */
 function isSpotOccupiedByAdjacentFeature(
-  spotInfo: MeepleSpotInfo,
+  spotEdges: string[],
   position: { x: number; y: number },
-  tileEdges: Record<string, string>,
   gameData: CarcassonneGameData,
 ): boolean {
-  const parts = spotInfo.spot.split('_');
-  if (parts.length < 2) return false; // monastery — no edge connections
-
-  const featureType = parts[0]; // 'city', 'road', 'field'
-  const dirPart = parts[1];
-  const spotDirs = dirPart.split('').filter(ch => 'NESW'.includes(ch));
-
-  // Map feature type to which edge types it connects through
-  // City connects through C edges, road through R, field through F edges
-  let edgeType: string;
-  if (featureType === 'city') edgeType = 'C';
-  else if (featureType === 'road') edgeType = 'R';
-  else if (featureType === 'field') edgeType = 'F';
-  else return false;
-
-  for (const dir of spotDirs) {
-    // Only check edges that match this feature type
-    if (tileEdges[dir] !== edgeType) continue;
-
+  console.log('[meeple-check] Checking spot edges:', spotEdges, 'at position:', position);
+  for (const edge of spotEdges) {
+    const dir = edge.split(':')[0];
     const [dx, dy] = DIR_OFFSET[dir];
     const neighborKey = `${position.x + dx},${position.y + dy}`;
-    const neighborFeatureMap = gameData.tile_feature_map[neighborKey];
-    if (!neighborFeatureMap) continue;
 
-    const oppositeDir = OPPOSITE_DIR[dir];
+    if (!gameData.board.tiles[neighborKey]) {
+      console.log('[meeple-check]   edge', edge, '→ no neighbor at', neighborKey);
+      continue;
+    }
 
-    // Find neighbor's feature of the same type touching the shared edge
-    for (const [neighborSpot, featureId] of Object.entries(neighborFeatureMap)) {
-      const neighborParts = neighborSpot.split('_');
-      if (neighborParts.length < 2) continue;
-      if (neighborParts[0] !== featureType) continue;
+    const oppositeEdge = getOppositeEdge(edge);
+    console.log('[meeple-check]   edge', edge, '→ neighbor at', neighborKey, ', looking for open_edge', [neighborKey, oppositeEdge]);
 
-      const neighborDirs = neighborParts[1].split('').filter(ch => 'NESW'.includes(ch));
-      if (!neighborDirs.includes(oppositeDir)) continue;
+    // Search features for one with an open edge at [neighborKey, oppositeEdge]
+    // that already has meeples placed on it
+    let featuresWithMeeples = 0;
+    for (const [fid, feature] of Object.entries(gameData.features)) {
+      if (feature.meeples.length === 0) continue;
+      featuresWithMeeples++;
 
-      const feature = gameData.features[featureId];
-      if (feature && feature.meeples.length > 0) {
-        return true;
+      const openEdges = (feature as Record<string, unknown>).open_edges as string[][] | undefined;
+      if (!openEdges) {
+        console.log('[meeple-check]     feature', fid, 'has meeples but NO open_edges property!');
+        continue;
       }
+
+      const hasMatch = openEdges.some(
+        (oe) => oe[0] === neighborKey && oe[1] === oppositeEdge
+      );
+      if (hasMatch) {
+        console.log('[meeple-check]     MATCH! Feature', fid, 'has meeples and open_edge', [neighborKey, oppositeEdge]);
+        return true;
+      } else {
+        console.log('[meeple-check]     feature', fid, 'has meeples, open_edges:', JSON.stringify(openEdges), '→ no match');
+      }
+    }
+    if (featuresWithMeeples === 0) {
+      console.log('[meeple-check]     No features with meeples found');
     }
   }
 
+  console.log('[meeple-check] → NOT occupied');
   return false;
 }
 
@@ -240,6 +253,7 @@ export const TILE_MEEPLE_PLACEMENTS: Record<string, MeeplePlacementDef[]> = {
     { column: 20, row: -20, type: MEEPLE_TYPE_FIELD },
     { column: 20, row: 20, type: MEEPLE_TYPE_FIELD },
     { column: -20, row: -20, type: MEEPLE_TYPE_FIELD },
+    { column: -20, row: 20, type: MEEPLE_TYPE_FIELD },
     { column: 0, row: -20, type: MEEPLE_TYPE_ROAD },
     { column: 0, row: 20, type: MEEPLE_TYPE_ROAD },
     { column: -20, row: 0, type: MEEPLE_TYPE_ROAD },
@@ -284,7 +298,7 @@ export const TILE_MEEPLE_SPOT_NAMES: Record<string, string[]> = {
   T: ['city_NEW', 'field_SW', 'field_SE', 'road_S'],
   U: ['field_E', 'field_W', 'road_NS'],
   V: ['field_NE', 'field_SW', 'road_SW'],
-  W: ['field_NE', 'field_SE', 'field_NW', 'road_N', 'road_S', 'road_W'],
+  W: ['field_NE', 'field_SE', 'field_NW', 'field_SW', 'road_N', 'road_S', 'road_W'],
   X: ['field_NW', 'field_NE', 'field_SW', 'field_SE', 'road_E', 'road_W', 'road_S', 'road_N'],
 };
 
@@ -354,6 +368,7 @@ export interface MeepleSpotInfo {
   column: number;     // pixel offset X from tile center
   row: number;        // pixel offset Y from tile center
   type: number;       // meeple placement type
+  edges: string[];    // rotated compound edges this spot connects through
 }
 
 /**
@@ -370,12 +385,16 @@ export function getMeepleSpotsForTile(
 
   return placements.map((placement, i) => {
     const rotated = rotateMeeplePlacement(placement, rotation);
-    const spotName = rotateMeepleSpotName(spotNames[i], rotation);
+    const baseSpotName = spotNames[i];
+    const spotName = rotateMeepleSpotName(baseSpotName, rotation);
+    const baseEdges = TILE_SPOT_EDGES[tileType]?.[baseSpotName] ?? [];
+    const rotatedEdges = baseEdges.map(e => rotateCompoundEdge(e, rotation));
     return {
       spot: spotName,
       column: rotated.column,
       row: rotated.row,
       type: rotated.type,
+      edges: rotatedEdges,
     };
   });
 }
@@ -414,9 +433,8 @@ export function getValidMeepleSpots(
     });
   }
 
-  // Tile not yet placed (optimistic phase) — check adjacent features
-  const tileEdges = getRotatedEdges(tileType, rotation);
+  // Tile not yet placed (optimistic phase) — check adjacent features via open_edges
   return allSpots.filter((spotInfo) => {
-    return !isSpotOccupiedByAdjacentFeature(spotInfo, position, tileEdges, gameData);
+    return !isSpotOccupiedByAdjacentFeature(spotInfo.edges, position, gameData);
   });
 }

@@ -123,6 +123,18 @@ def rotate_direction(direction: str, rotation: int) -> str:
     return DIRECTIONS[(idx + steps) % 4]
 
 
+def rotate_compound_edge(edge: str, rotation: int) -> str:
+    """Rotate an edge identifier that may be compound (e.g., 'E:N' for road-side fields).
+
+    Simple edges like 'E' rotate normally.
+    Compound edges like 'E:N' rotate both the direction and the side.
+    """
+    if ":" in edge:
+        direction, side = edge.split(":")
+        return f"{rotate_direction(direction, rotation)}:{rotate_direction(side, rotation)}"
+    return rotate_direction(edge, rotation)
+
+
 def rotate_meeple_spot(spot: str, rotation: int) -> str:
     """Rotate a meeple spot name by rotating its direction components.
 

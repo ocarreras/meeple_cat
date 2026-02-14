@@ -307,6 +307,28 @@ export default function CarcassonneRenderer({
             <span className="text-lg font-bold">{gameData.tiles_remaining || 0}</span>
           </div>
         </div>
+
+        <button
+          className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs px-3 py-2 rounded border"
+          onClick={() => {
+            const state = {
+              board_tiles: gameData.board.tiles,
+              features: gameData.features,
+              tile_feature_map: gameData.tile_feature_map,
+              current_tile: gameData.current_tile,
+              meeple_supply: gameData.meeple_supply,
+              scores: gameData.scores,
+              phase,
+              uiPhase,
+              viewer_id: view.viewer_id,
+              selected_cell: selectedCell,
+              confirmed_placement: confirmedPlacement,
+            };
+            navigator.clipboard.writeText(JSON.stringify(state, null, 2));
+          }}
+        >
+          Copy debug state
+        </button>
       </div>
     </div>
   );
