@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 from src.api.auth import router as auth_router
 from src.api.games import router as games_router
 from src.api.matches import router as matches_router
+from src.api.rooms import router as rooms_router
 from src.config import settings
 from src.engine.bot_runner import BotRunner
 from src.engine.registry import PluginRegistry
@@ -19,6 +20,7 @@ from src.models.base import Base
 from src.models.database import async_session_factory, engine
 import src.models.user  # noqa: F401
 import src.models.match  # noqa: F401
+import src.models.room  # noqa: F401
 from src.ws.broadcaster import Broadcaster
 from src.ws.connection_manager import ConnectionManager
 from src.ws.handler import router as ws_router
@@ -103,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(games_router, prefix="/api/v1")
     app.include_router(matches_router, prefix="/api/v1")
+    app.include_router(rooms_router, prefix="/api/v1")
     app.include_router(ws_router)
 
     return app

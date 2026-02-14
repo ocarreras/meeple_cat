@@ -1,4 +1,10 @@
-import type { AuthTokenResponse, CreateMatchResponse } from './types';
+import type {
+  AuthTokenResponse,
+  CreateMatchResponse,
+  Room,
+  JoinRoomResponse,
+  StartRoomResponse,
+} from './types';
 
 const API_BASE_URL = '/api/v1';
 
@@ -95,6 +101,87 @@ export async function createMatch(
     },
     body: JSON.stringify(body),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Room API
+// ---------------------------------------------------------------------------
+
+export async function listRooms(gameId?: string): Promise<Room[]> {
+  const params = gameId ? `?game_id=${encodeURIComponent(gameId)}` : '';
+  return fetchJson<Room[]>(`${API_BASE_URL}/rooms${params}`);
+}
+
+export async function getRoom(roomId: string): Promise<Room> {
+  return fetchJson<Room>(`${API_BASE_URL}/rooms/${roomId}`);
+}
+
+export async function createRoom(
+  token: string,
+  gameId: string,
+  maxPlayers: number,
+  config: Record<string, unknown> = {},
+): Promise<Room> {
+  return fetchJson<Room>(`${API_BASE_URL}/rooms`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ game_id: gameId, max_players: maxPlayers, config }),
+  });
+}
+
+export async function joinRoom(
+  token: string,
+  roomId: string,
+): Promise<JoinRoomResponse> {
+  return fetchJson<JoinRoomResponse>(`${API_BASE_URL}/rooms/${roomId}/join`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function leaveRoom(
+  token: string,
+  roomId: string,
+): Promise<{ ok: boolean }> {
+  return fetchJson<{ ok: boolean }>(`${API_BASE_URL}/rooms/${roomId}/leave`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function toggleReady(
+  token: string,
+  roomId: string,
+): Promise<Room> {
+  return fetchJson<Room>(`${API_BASE_URL}/rooms/${roomId}/ready`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function addBot(
+  token: string,
+  roomId: string,
+  botId: string = 'random',
+): Promise<Room> {
+  return fetchJson<Room>(`${API_BASE_URL}/rooms/${roomId}/add-bot`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ bot_id: botId }),
+  });
+}
+
+export async function startRoom(
+  token: string,
+  roomId: string,
+): Promise<StartRoomResponse> {
+  return fetchJson<StartRoomResponse>(
+    `${API_BASE_URL}/rooms/${roomId}/start`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
 }
 
 /**

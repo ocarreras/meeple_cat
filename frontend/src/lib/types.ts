@@ -193,6 +193,42 @@ export interface CreateMatchResponse {
   status: GameStatus;
 }
 
+// Room types
+
+export type RoomStatus = "waiting" | "starting" | "in_game";
+
+export interface RoomSeat {
+  seat_index: number;
+  user_id: string | null;
+  display_name: string | null;
+  is_bot: boolean;
+  bot_id: string | null;
+  is_ready: boolean;
+}
+
+export interface Room {
+  room_id: string;
+  game_id: string;
+  created_by: string;
+  creator_name: string;
+  status: RoomStatus;
+  max_players: number;
+  config: Record<string, unknown>;
+  created_at: string;
+  seats: RoomSeat[];
+  match_id: string | null;
+}
+
+export interface JoinRoomResponse {
+  room: Room;
+  seat_index: number;
+}
+
+export interface StartRoomResponse {
+  match_id: string;
+  tokens: Record<string, string>;
+}
+
 // UI-specific types
 export interface TilePlacement {
   x: number;
