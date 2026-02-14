@@ -1,3 +1,10 @@
 __init__
+api
+auth
+config
 engine
 games
+main
+migrations
+models
+ws
