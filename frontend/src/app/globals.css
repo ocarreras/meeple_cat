@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Game-specific colors */
+  --board-bg: #f5f5dc; /* Beige for game board */
+  --tile-border: #8b7355;
+  --tile-highlight: #ffd700;
+  --feature-city: #8b4513;
+  --feature-road: #696969;
+  --feature-field: #90ee90;
+  --feature-monastery: #daa520;
+
+  /* Player colors */
+  --player-1: #ef4444; /* red */
+  --player-2: #3b82f6; /* blue */
+  --player-3: #22c55e; /* green */
+  --player-4: #eab308; /* yellow */
+  --player-5: #a855f7; /* purple */
+
+  /* UI colors */
+  --sidebar-bg: #f9fafb;
+  --card-bg: #ffffff;
+  --border-color: #e5e7eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+
+    /* Dark mode game colors */
+    --board-bg: #2a2520;
+    --tile-border: #8b7355;
+    --tile-highlight: #ffd700;
+
+    /* UI colors for dark mode */
+    --sidebar-bg: #1f2937;
+    --card-bg: #111827;
+    --border-color: #374151;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Game layout utilities */
+.game-container {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.game-board {
+  position: relative;
+  overflow: auto;
+  background: var(--board-bg);
+}
+
+.game-sidebar {
+  background: var(--sidebar-bg);
+  border-left: 1px solid var(--border-color);
+  overflow-y: auto;
+}
+
+/* Tile rendering */
+.tile {
+  position: absolute;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tile:hover {
+  transform: scale(1.05);
+  z-index: 10;
+}
+
+.tile.placed {
+  cursor: default;
+}
+
+.tile.valid-placement {
+  border: 2px solid var(--tile-highlight);
+  box-shadow: 0 0 10px var(--tile-highlight);
+}
+
+/* Meeple rendering */
+.meeple {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  z-index: 5;
+}
+
+/* Player color utilities */
+.player-color-1 { background-color: var(--player-1); }
+.player-color-2 { background-color: var(--player-2); }
+.player-color-3 { background-color: var(--player-3); }
+.player-color-4 { background-color: var(--player-4); }
+.player-color-5 { background-color: var(--player-5); }
+
+/* Card styling */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+/* Button styles */
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.btn-secondary {
+  background-color: #6b7280;
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #4b5563;
+}

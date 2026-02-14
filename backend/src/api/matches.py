@@ -89,7 +89,7 @@ async def create_match(
         db.add(match_player)
         match_players.append(match_player)
 
-    await db.flush()  # Flush to get IDs, commit handled by get_db
+    await db.commit()  # Commit so game_events FK can reference this match
 
     # Build Player objects for game session
     players = [

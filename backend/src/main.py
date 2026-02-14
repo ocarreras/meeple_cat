@@ -14,7 +14,10 @@ from src.config import settings
 from src.engine.registry import PluginRegistry
 from src.engine.session_manager import GameSessionManager
 from src.engine.state_store import StateStore
+from src.models.base import Base
 from src.models.database import async_session_factory, engine
+import src.models.user  # noqa: F401
+import src.models.match  # noqa: F401
 from src.ws.broadcaster import Broadcaster
 from src.ws.connection_manager import ConnectionManager
 from src.ws.handler import router as ws_router
@@ -27,6 +30,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     logger.info("Starting up meeple.cat server...")
+
+    # Create database tables if they don't exist
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables ensured")
 
     # Initialize Redis
     redis = Redis.from_url(settings.redis_url, decode_responses=False)

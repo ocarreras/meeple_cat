@@ -1,0 +1,13 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Green background (field) -->
+  <rect width="100" height="100" fill="#8bc34a"/>
+
+  <!-- 3-sided city (North-East-West) -->
+  <polygon points="0,0 100,0 100,100 75,75 75,25 25,25 25,75 0,100" fill="#795548"/>
+
+  <!-- Road at South -->
+  <line x1="50" y1="75" x2="50" y2="100" stroke="#9e9e9e" stroke-width="8"/>
+
+  <!-- Tile letter -->
+  <text x="50" y="50" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#fff">T</text>
+</svg>
