@@ -34,9 +34,7 @@ target_metadata = Base.metadata
 # ... etc.
 
 # Set the database URL from settings
-# Alembic needs sync URL for autogenerate
-database_url = settings.database_url.replace("+asyncpg", "")
-config.set_main_option("sqlalchemy.url", database_url)
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 
 def run_migrations_offline() -> None:
