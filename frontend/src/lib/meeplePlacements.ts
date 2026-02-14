@@ -19,6 +19,109 @@ export const MEEPLE_TYPE_CITY = 2;
 export const MEEPLE_TYPE_ROAD = 3;
 export const MEEPLE_TYPE_FIELD = 4;
 
+/**
+ * Base edge definitions for all tile types at rotation 0.
+ * C=City, R=Road, F=Field.
+ */
+const TILE_EDGES: Record<string, Record<string, string>> = {
+  A: { N: 'F', E: 'F', S: 'R', W: 'F' },
+  B: { N: 'F', E: 'F', S: 'F', W: 'F' },
+  C: { N: 'C', E: 'C', S: 'C', W: 'C' },
+  D: { N: 'C', E: 'R', S: 'F', W: 'R' },
+  E: { N: 'C', E: 'F', S: 'F', W: 'F' },
+  F: { N: 'F', E: 'C', S: 'F', W: 'C' },
+  G: { N: 'C', E: 'F', S: 'C', W: 'F' },
+  H: { N: 'C', E: 'F', S: 'C', W: 'F' },
+  I: { N: 'C', E: 'F', S: 'F', W: 'C' },
+  J: { N: 'C', E: 'R', S: 'R', W: 'F' },
+  K: { N: 'C', E: 'F', S: 'R', W: 'R' },
+  L: { N: 'C', E: 'R', S: 'R', W: 'R' },
+  M: { N: 'C', E: 'F', S: 'F', W: 'C' },
+  N: { N: 'C', E: 'F', S: 'F', W: 'C' },
+  O: { N: 'C', E: 'R', S: 'R', W: 'C' },
+  P: { N: 'C', E: 'R', S: 'R', W: 'C' },
+  Q: { N: 'C', E: 'C', S: 'F', W: 'C' },
+  R: { N: 'C', E: 'C', S: 'R', W: 'C' },
+  S: { N: 'C', E: 'C', S: 'F', W: 'C' },
+  T: { N: 'C', E: 'C', S: 'R', W: 'C' },
+  U: { N: 'R', E: 'F', S: 'R', W: 'F' },
+  V: { N: 'F', E: 'F', S: 'R', W: 'R' },
+  W: { N: 'R', E: 'F', S: 'R', W: 'R' },
+  X: { N: 'R', E: 'R', S: 'R', W: 'R' },
+};
+
+function getRotatedEdges(tileType: string, rotation: number): Record<string, string> {
+  const base = TILE_EDGES[tileType];
+  if (!base) return {};
+  const steps = ((rotation / 90) | 0) % 4;
+  const result: Record<string, string> = {};
+  for (let i = 0; i < 4; i++) {
+    const sourceIdx = ((i - steps) % 4 + 4) % 4;
+    result[DIRECTIONS[i]] = base[DIRECTIONS[sourceIdx]];
+  }
+  return result;
+}
+
+const OPPOSITE_DIR: Record<string, string> = { N: 'S', S: 'N', E: 'W', W: 'E' };
+const DIR_OFFSET: Record<string, [number, number]> = {
+  N: [0, 1], S: [0, -1], E: [1, 0], W: [-1, 0],
+};
+
+/**
+ * Check if a meeple spot would connect to an already-occupied feature
+ * by looking at adjacent tiles' features through shared edges.
+ */
+function isSpotOccupiedByAdjacentFeature(
+  spotInfo: MeepleSpotInfo,
+  position: { x: number; y: number },
+  tileEdges: Record<string, string>,
+  gameData: CarcassonneGameData,
+): boolean {
+  const parts = spotInfo.spot.split('_');
+  if (parts.length < 2) return false; // monastery — no edge connections
+
+  const featureType = parts[0]; // 'city', 'road', 'field'
+  const dirPart = parts[1];
+  const spotDirs = dirPart.split('').filter(ch => 'NESW'.includes(ch));
+
+  // Map feature type to which edge types it connects through
+  // City connects through C edges, road through R, field through F edges
+  let edgeType: string;
+  if (featureType === 'city') edgeType = 'C';
+  else if (featureType === 'road') edgeType = 'R';
+  else if (featureType === 'field') edgeType = 'F';
+  else return false;
+
+  for (const dir of spotDirs) {
+    // Only check edges that match this feature type
+    if (tileEdges[dir] !== edgeType) continue;
+
+    const [dx, dy] = DIR_OFFSET[dir];
+    const neighborKey = `${position.x + dx},${position.y + dy}`;
+    const neighborFeatureMap = gameData.tile_feature_map[neighborKey];
+    if (!neighborFeatureMap) continue;
+
+    const oppositeDir = OPPOSITE_DIR[dir];
+
+    // Find neighbor's feature of the same type touching the shared edge
+    for (const [neighborSpot, featureId] of Object.entries(neighborFeatureMap)) {
+      const neighborParts = neighborSpot.split('_');
+      if (neighborParts.length < 2) continue;
+      if (neighborParts[0] !== featureType) continue;
+
+      const neighborDirs = neighborParts[1].split('').filter(ch => 'NESW'.includes(ch));
+      if (!neighborDirs.includes(oppositeDir)) continue;
+
+      const feature = gameData.features[featureId];
+      if (feature && feature.meeples.length > 0) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export const TILE_MEEPLE_PLACEMENTS: Record<string, MeeplePlacementDef[]> = {
   A: [
     { column: 0, row: 0, type: MEEPLE_TYPE_MONASTERY },
@@ -280,6 +383,10 @@ export function getMeepleSpotsForTile(
 /**
  * Filter meeple spots to only those that are valid (feature not already occupied).
  * Uses tile_feature_map and features from game data for client-side validation.
+ *
+ * When the tile hasn't been placed yet (optimistic phase), checks adjacent tiles'
+ * features through shared edges to determine if a spot would connect to an
+ * already-occupied feature.
  */
 export function getValidMeepleSpots(
   tileType: string,
@@ -295,16 +402,21 @@ export function getValidMeepleSpots(
   const allSpots = getMeepleSpotsForTile(tileType, rotation);
   const posKey = `${position.x},${position.y}`;
   const tileFeatures = gameData.tile_feature_map[posKey];
-  if (!tileFeatures) return allSpots; // no feature map yet, show all
 
+  if (tileFeatures) {
+    // Tile already placed — use server's feature map for exact validation
+    return allSpots.filter((spotInfo) => {
+      const featureId = tileFeatures[spotInfo.spot];
+      if (!featureId) return true;
+      const feature = gameData.features[featureId];
+      if (!feature) return true;
+      return feature.meeples.length === 0;
+    });
+  }
+
+  // Tile not yet placed (optimistic phase) — check adjacent features
+  const tileEdges = getRotatedEdges(tileType, rotation);
   return allSpots.filter((spotInfo) => {
-    const featureId = tileFeatures[spotInfo.spot];
-    if (!featureId) return true; // no feature mapping, allow
-
-    const feature = gameData.features[featureId];
-    if (!feature) return true;
-
-    // If the feature already has meeples, it's occupied
-    return feature.meeples.length === 0;
+    return !isSpotOccupiedByAdjacentFeature(spotInfo, position, tileEdges, gameData);
   });
 }
