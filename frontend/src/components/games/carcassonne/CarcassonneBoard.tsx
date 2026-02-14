@@ -259,6 +259,16 @@ export default function CarcassonneBoard({
       ctx.restore();
     });
 
+    // Highlight last placed tile
+    if (gameData.last_placed_position && !meeplePlacementMode) {
+      const [lpx, lpy] = gameData.last_placed_position.split(',').map(Number);
+      const lpDrawX = lpx * TILE_SIZE;
+      const lpDrawY = -lpy * TILE_SIZE;
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 3 / camera.zoom;
+      ctx.strokeRect(lpDrawX, lpDrawY, TILE_SIZE, TILE_SIZE);
+    }
+
     // Draw valid cell highlights (all positions, any rotation)
     if (isMyTurn && phase === 'place_tile' && !meeplePlacementMode) {
       validCells.forEach((cell) => {
