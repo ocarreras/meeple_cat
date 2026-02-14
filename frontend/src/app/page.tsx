@@ -82,7 +82,7 @@ export default function Home() {
                 value={player1Name}
                 onChange={(e) => setPlayer1Name(e.target.value)}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 placeholder:text-gray-400"
                 placeholder="Enter player 1 name"
               />
             </div>
@@ -131,7 +131,7 @@ export default function Home() {
                   value={player2Name}
                   onChange={(e) => setPlayer2Name(e.target.value)}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 placeholder:text-gray-400"
                   placeholder="Enter player 2 name"
                 />
               )}
