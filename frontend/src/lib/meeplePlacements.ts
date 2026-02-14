@@ -50,7 +50,7 @@ const TILE_SPOT_EDGES: Record<string, Record<string, string[]>> = {
   T: { city_NEW: ['N', 'E', 'W'], road_S: ['S'], field_SW: ['S:W'], field_SE: ['S:E'] },
   U: { road_NS: ['N', 'S'], field_E: ['E', 'N:E', 'S:E'], field_W: ['W', 'N:W', 'S:W'] },
   V: { road_SW: ['S', 'W'], field_NE: ['N', 'E', 'S:E', 'W:N'], field_SW: ['S:W', 'W:S'] },
-  W: { road_N: ['N'], road_S: ['S'], road_W: ['W'], field_NE: ['E', 'N:E', 'S:E'], field_SE: ['E', 'N:E', 'S:E'], field_NW: ['N:W', 'W:N'], field_SW: ['S:W', 'W:S'] },
+  W: { road_N: ['N'], road_S: ['S'], road_W: ['W'], field_NE: ['E', 'N:E', 'S:E'], field_NW: ['N:W', 'W:N'], field_SW: ['S:W', 'W:S'] },
   X: { road_N: ['N'], road_E: ['E'], road_S: ['S'], road_W: ['W'], field_NE: ['N:E', 'E:N'], field_SE: ['E:S', 'S:E'], field_SW: ['S:W', 'W:S'], field_NW: ['W:N', 'N:W'] },
 };
 
@@ -89,184 +89,161 @@ function isSpotOccupiedByAdjacentFeature(
   position: { x: number; y: number },
   gameData: CarcassonneGameData,
 ): boolean {
-  console.log('[meeple-check] Checking spot edges:', spotEdges, 'at position:', position);
   for (const edge of spotEdges) {
     const dir = edge.split(':')[0];
     const [dx, dy] = DIR_OFFSET[dir];
     const neighborKey = `${position.x + dx},${position.y + dy}`;
 
-    if (!gameData.board.tiles[neighborKey]) {
-      console.log('[meeple-check]   edge', edge, '→ no neighbor at', neighborKey);
-      continue;
-    }
+    if (!gameData.board.tiles[neighborKey]) continue;
 
     const oppositeEdge = getOppositeEdge(edge);
-    console.log('[meeple-check]   edge', edge, '→ neighbor at', neighborKey, ', looking for open_edge', [neighborKey, oppositeEdge]);
 
-    // Search features for one with an open edge at [neighborKey, oppositeEdge]
-    // that already has meeples placed on it
-    let featuresWithMeeples = 0;
-    for (const [fid, feature] of Object.entries(gameData.features)) {
+    for (const feature of Object.values(gameData.features)) {
       if (feature.meeples.length === 0) continue;
-      featuresWithMeeples++;
 
       const openEdges = (feature as Record<string, unknown>).open_edges as string[][] | undefined;
-      if (!openEdges) {
-        console.log('[meeple-check]     feature', fid, 'has meeples but NO open_edges property!');
-        continue;
-      }
+      if (!openEdges) continue;
 
-      const hasMatch = openEdges.some(
-        (oe) => oe[0] === neighborKey && oe[1] === oppositeEdge
-      );
-      if (hasMatch) {
-        console.log('[meeple-check]     MATCH! Feature', fid, 'has meeples and open_edge', [neighborKey, oppositeEdge]);
+      if (openEdges.some((oe) => oe[0] === neighborKey && oe[1] === oppositeEdge)) {
         return true;
-      } else {
-        console.log('[meeple-check]     feature', fid, 'has meeples, open_edges:', JSON.stringify(openEdges), '→ no match');
       }
-    }
-    if (featuresWithMeeples === 0) {
-      console.log('[meeple-check]     No features with meeples found');
     }
   }
 
-  console.log('[meeple-check] → NOT occupied');
   return false;
 }
 
 export const TILE_MEEPLE_PLACEMENTS: Record<string, MeeplePlacementDef[]> = {
   A: [
-    { column: 0, row: 0, type: MEEPLE_TYPE_MONASTERY },
-    { column: 20, row: -20, type: MEEPLE_TYPE_FIELD },
-    { column: 0, row: 25, type: MEEPLE_TYPE_ROAD },
+    { column: -1, row: -6, type: MEEPLE_TYPE_MONASTERY },
+    { column: 26, row: -27, type: MEEPLE_TYPE_FIELD },
+    { column: -27, row: 25, type: MEEPLE_TYPE_ROAD },
   ],
   B: [
     { column: 0, row: 0, type: MEEPLE_TYPE_MONASTERY },
-    { column: 20, row: -20, type: MEEPLE_TYPE_FIELD },
+    { column: 26, row: -24, type: MEEPLE_TYPE_FIELD },
   ],
   C: [
     { column: 0, row: 0, type: MEEPLE_TYPE_CITY },
   ],
   D: [
-    { column: 0, row: -22, type: MEEPLE_TYPE_CITY },
-    { column: -15, row: -9, type: MEEPLE_TYPE_FIELD },
-    { column: 15, row: 16, type: MEEPLE_TYPE_FIELD },
-    { column: -3, row: 7, type: MEEPLE_TYPE_ROAD },
+    { column: 2, row: -41, type: MEEPLE_TYPE_CITY },
+    { column: -37, row: -18, type: MEEPLE_TYPE_FIELD },
+    { column: -37, row: 35, type: MEEPLE_TYPE_FIELD },
+    { column: 2, row: 9, type: MEEPLE_TYPE_ROAD },
   ],
   E: [
-    { column: 0, row: -22, type: MEEPLE_TYPE_CITY },
-    { column: 0, row: 10, type: MEEPLE_TYPE_FIELD },
+    { column: 3, row: -36, type: MEEPLE_TYPE_CITY },
+    { column: -1, row: 21, type: MEEPLE_TYPE_FIELD },
   ],
   F: [
-    { column: 0, row: 0, type: MEEPLE_TYPE_CITY },
-    { column: 0, row: -22, type: MEEPLE_TYPE_FIELD },
-    { column: 0, row: 26, type: MEEPLE_TYPE_FIELD },
+    { column: -1, row: 7, type: MEEPLE_TYPE_CITY },
+    { column: 1, row: -37, type: MEEPLE_TYPE_FIELD },
+    { column: -1, row: 41, type: MEEPLE_TYPE_FIELD },
   ],
   G: [
-    { column: 0, row: 0, type: MEEPLE_TYPE_CITY },
-    { column: 26, row: 0, type: MEEPLE_TYPE_FIELD },
-    { column: -22, row: 0, type: MEEPLE_TYPE_FIELD },
+    { column: 6, row: -1, type: MEEPLE_TYPE_CITY },
+    { column: 43, row: 0, type: MEEPLE_TYPE_FIELD },
+    { column: -38, row: 2, type: MEEPLE_TYPE_FIELD },
   ],
   H: [
-    { column: 0, row: -22, type: MEEPLE_TYPE_CITY },
-    { column: 0, row: 22, type: MEEPLE_TYPE_CITY },
+    { column: 1, row: -36, type: MEEPLE_TYPE_CITY },
+    { column: -1, row: 39, type: MEEPLE_TYPE_CITY },
     { column: 0, row: 0, type: MEEPLE_TYPE_FIELD },
   ],
   I: [
-    { column: 0, row: -22, type: MEEPLE_TYPE_CITY },
-    { column: -22, row: 0, type: MEEPLE_TYPE_CITY },
-    { column: 5, row: 5, type: MEEPLE_TYPE_FIELD },
+    { column: 3, row: -39, type: MEEPLE_TYPE_CITY },
+    { column: -39, row: -2, type: MEEPLE_TYPE_CITY },
+    { column: 6, row: 7, type: MEEPLE_TYPE_FIELD },
   ],
   J: [
-    { column: 0, row: -22, type: MEEPLE_TYPE_CITY },
-    { column: -22, row: -4, type: MEEPLE_TYPE_FIELD },
-    { column: 22, row: 22, type: MEEPLE_TYPE_FIELD },
-    { column: 2, row: 2, type: MEEPLE_TYPE_ROAD },
+    { column: 3, row: -37, type: MEEPLE_TYPE_CITY },
+    { column: -39, row: 5, type: MEEPLE_TYPE_FIELD },
+    { column: 36, row: 32, type: MEEPLE_TYPE_FIELD },
+    { column: -6, row: 12, type: MEEPLE_TYPE_ROAD },
   ],
   K: [
-    { column: 0, row: -22, type: MEEPLE_TYPE_CITY },
-    { column: 22, row: 10, type: MEEPLE_TYPE_FIELD },
-    { column: -15, row: 15, type: MEEPLE_TYPE_FIELD },
-    { column: 7, row: -2, type: MEEPLE_TYPE_ROAD },
+    { column: 4, row: -39, type: MEEPLE_TYPE_CITY },
+    { column: 41, row: 12, type: MEEPLE_TYPE_FIELD },
+    { column: -29, row: 19, type: MEEPLE_TYPE_FIELD },
+    { column: 4, row: 2, type: MEEPLE_TYPE_ROAD },
   ],
   L: [
-    { column: 0, row: -22, type: MEEPLE_TYPE_CITY },
-    { column: -25, row: -15, type: MEEPLE_TYPE_FIELD },
-    { column: -20, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 20, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 22, row: 0, type: MEEPLE_TYPE_ROAD },
-    { column: -22, row: 0, type: MEEPLE_TYPE_ROAD },
-    { column: 0, row: 22, type: MEEPLE_TYPE_ROAD },
+    { column: 1, row: -39, type: MEEPLE_TYPE_CITY },
+    { column: -38, row: -22, type: MEEPLE_TYPE_FIELD },
+    { column: -33, row: 32, type: MEEPLE_TYPE_FIELD },
+    { column: 34, row: 33, type: MEEPLE_TYPE_FIELD },
+    { column: 39, row: -4, type: MEEPLE_TYPE_ROAD },
+    { column: -36, row: -1, type: MEEPLE_TYPE_ROAD },
+    { column: -3, row: 33, type: MEEPLE_TYPE_ROAD },
   ],
   M: [
-    { column: -12, row: -12, type: MEEPLE_TYPE_CITY },
-    { column: 12, row: 12, type: MEEPLE_TYPE_FIELD },
+    { column: -24, row: -22, type: MEEPLE_TYPE_CITY },
+    { column: 19, row: 19, type: MEEPLE_TYPE_FIELD },
   ],
   N: [
-    { column: -12, row: -12, type: MEEPLE_TYPE_CITY },
-    { column: 12, row: 12, type: MEEPLE_TYPE_FIELD },
+    { column: -26, row: -16, type: MEEPLE_TYPE_CITY },
+    { column: 24, row: 18, type: MEEPLE_TYPE_FIELD },
   ],
   O: [
-    { column: -12, row: -12, type: MEEPLE_TYPE_CITY },
-    { column: -12, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 22, row: 22, type: MEEPLE_TYPE_FIELD },
-    { column: 9, row: 9, type: MEEPLE_TYPE_ROAD },
+    { column: -19, row: -25, type: MEEPLE_TYPE_CITY },
+    { column: -19, row: 36, type: MEEPLE_TYPE_FIELD },
+    { column: 35, row: 35, type: MEEPLE_TYPE_FIELD },
+    { column: 18, row: 15, type: MEEPLE_TYPE_ROAD },
   ],
   P: [
-    { column: -12, row: -12, type: MEEPLE_TYPE_CITY },
-    { column: -12, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 22, row: 22, type: MEEPLE_TYPE_FIELD },
-    { column: 9, row: 9, type: MEEPLE_TYPE_ROAD },
+    { column: -19, row: -25, type: MEEPLE_TYPE_CITY },
+    { column: -12, row: 33, type: MEEPLE_TYPE_FIELD },
+    { column: 34, row: 36, type: MEEPLE_TYPE_FIELD },
+    { column: 20, row: 19, type: MEEPLE_TYPE_ROAD },
   ],
   Q: [
-    { column: 0, row: -10, type: MEEPLE_TYPE_CITY },
-    { column: 0, row: 22, type: MEEPLE_TYPE_FIELD },
+    { column: 1, row: -15, type: MEEPLE_TYPE_CITY },
+    { column: 0, row: 35, type: MEEPLE_TYPE_FIELD },
   ],
   R: [
     { column: 0, row: -10, type: MEEPLE_TYPE_CITY },
-    { column: -15, row: 23, type: MEEPLE_TYPE_FIELD },
-    { column: 15, row: 23, type: MEEPLE_TYPE_FIELD },
-    { column: 0, row: 20, type: MEEPLE_TYPE_ROAD },
+    { column: -20, row: 39, type: MEEPLE_TYPE_FIELD },
+    { column: 22, row: 38, type: MEEPLE_TYPE_FIELD },
+    { column: 2, row: 35, type: MEEPLE_TYPE_ROAD },
   ],
   S: [
-    { column: 0, row: -10, type: MEEPLE_TYPE_CITY },
-    { column: 0, row: 22, type: MEEPLE_TYPE_FIELD },
+    { column: 1, row: -22, type: MEEPLE_TYPE_CITY },
+    { column: -1, row: 34, type: MEEPLE_TYPE_FIELD },
   ],
   T: [
-    { column: 0, row: -10, type: MEEPLE_TYPE_CITY },
-    { column: -15, row: 23, type: MEEPLE_TYPE_FIELD },
-    { column: 15, row: 23, type: MEEPLE_TYPE_FIELD },
-    { column: 0, row: 20, type: MEEPLE_TYPE_ROAD },
+    { column: -3, row: -17, type: MEEPLE_TYPE_CITY },
+    { column: -23, row: 38, type: MEEPLE_TYPE_FIELD },
+    { column: 16, row: 38, type: MEEPLE_TYPE_FIELD },
+    { column: -3, row: 35, type: MEEPLE_TYPE_ROAD },
   ],
   U: [
-    { column: 19, row: 0, type: MEEPLE_TYPE_FIELD },
-    { column: -19, row: 0, type: MEEPLE_TYPE_FIELD },
+    { column: 22, row: -12, type: MEEPLE_TYPE_FIELD },
+    { column: -32, row: 13, type: MEEPLE_TYPE_FIELD },
     { column: 0, row: 0, type: MEEPLE_TYPE_ROAD },
   ],
   V: [
-    { column: 10, row: -10, type: MEEPLE_TYPE_FIELD },
-    { column: -20, row: 17, type: MEEPLE_TYPE_FIELD },
-    { column: -10, row: 5, type: MEEPLE_TYPE_ROAD },
+    { column: 17, row: -14, type: MEEPLE_TYPE_FIELD },
+    { column: -30, row: 28, type: MEEPLE_TYPE_FIELD },
+    { column: -16, row: 8, type: MEEPLE_TYPE_ROAD },
   ],
   W: [
-    { column: 20, row: -20, type: MEEPLE_TYPE_FIELD },
-    { column: 20, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: -20, row: -20, type: MEEPLE_TYPE_FIELD },
-    { column: -20, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 0, row: -20, type: MEEPLE_TYPE_ROAD },
-    { column: 0, row: 20, type: MEEPLE_TYPE_ROAD },
-    { column: -20, row: 0, type: MEEPLE_TYPE_ROAD },
+    { column: 31, row: 0, type: MEEPLE_TYPE_FIELD },
+    { column: -33, row: -31, type: MEEPLE_TYPE_FIELD },
+    { column: -27, row: 30, type: MEEPLE_TYPE_FIELD },
+    { column: -2, row: -35, type: MEEPLE_TYPE_ROAD },
+    { column: -6, row: 36, type: MEEPLE_TYPE_ROAD },
+    { column: -36, row: 9, type: MEEPLE_TYPE_ROAD },
   ],
   X: [
-    { column: -20, row: -20, type: MEEPLE_TYPE_FIELD },
-    { column: 20, row: -20, type: MEEPLE_TYPE_FIELD },
-    { column: -20, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 20, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 20, row: 0, type: MEEPLE_TYPE_ROAD },
-    { column: -20, row: 0, type: MEEPLE_TYPE_ROAD },
-    { column: 0, row: 20, type: MEEPLE_TYPE_ROAD },
-    { column: 0, row: -20, type: MEEPLE_TYPE_ROAD },
+    { column: -31, row: -31, type: MEEPLE_TYPE_FIELD },
+    { column: 28, row: -26, type: MEEPLE_TYPE_FIELD },
+    { column: -30, row: 35, type: MEEPLE_TYPE_FIELD },
+    { column: 29, row: 31, type: MEEPLE_TYPE_FIELD },
+    { column: 32, row: 2, type: MEEPLE_TYPE_ROAD },
+    { column: -36, row: 4, type: MEEPLE_TYPE_ROAD },
+    { column: 1, row: 33, type: MEEPLE_TYPE_ROAD },
+    { column: -1, row: -32, type: MEEPLE_TYPE_ROAD },
   ],
 };
 
@@ -298,7 +275,7 @@ export const TILE_MEEPLE_SPOT_NAMES: Record<string, string[]> = {
   T: ['city_NEW', 'field_SW', 'field_SE', 'road_S'],
   U: ['field_E', 'field_W', 'road_NS'],
   V: ['field_NE', 'field_SW', 'road_SW'],
-  W: ['field_NE', 'field_SE', 'field_NW', 'field_SW', 'road_N', 'road_S', 'road_W'],
+  W: ['field_NE', 'field_NW', 'field_SW', 'road_N', 'road_S', 'road_W'],
   X: ['field_NW', 'field_NE', 'field_SW', 'field_SE', 'road_E', 'road_W', 'road_S', 'road_N'],
 };
 

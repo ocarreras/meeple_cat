@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { CarcassonneGameData, TilePlacement, Player } from '@/lib/types';
 import { preloadTileImages } from '@/lib/tileImages';
-import { MeepleSpotInfo } from '@/lib/meeplePlacements';
+import { MeepleSpotInfo, getMeepleSpotsForTile, MEEPLE_TYPE_MONASTERY, MEEPLE_TYPE_CITY, MEEPLE_TYPE_ROAD, MEEPLE_TYPE_FIELD } from '@/lib/meeplePlacements';
 
 interface CarcassonneBoardProps {
   gameData: CarcassonneGameData;
@@ -33,6 +33,20 @@ interface CarcassonneBoardProps {
 
 const TILE_SIZE = 100;
 const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
+
+const SPOT_COLORS: Record<number, string> = {
+  [MEEPLE_TYPE_MONASTERY]: '#FFD700',
+  [MEEPLE_TYPE_CITY]: '#DC3545',
+  [MEEPLE_TYPE_ROAD]: '#888888',
+  [MEEPLE_TYPE_FIELD]: '#28A745',
+};
+
+const MEEPLE_TYPE_NAMES: Record<number, string> = {
+  [MEEPLE_TYPE_MONASTERY]: 'Monastery',
+  [MEEPLE_TYPE_CITY]: 'City',
+  [MEEPLE_TYPE_ROAD]: 'Road',
+  [MEEPLE_TYPE_FIELD]: 'Field',
+};
 
 interface Camera {
   x: number;
@@ -245,41 +259,6 @@ export default function CarcassonneBoard({
       ctx.restore();
     });
 
-    // Draw meeples
-    if (gameData.features) {
-      Object.values(gameData.features).forEach((feature) => {
-        if (feature.meeples && feature.meeples.length > 0) {
-          feature.meeples.forEach((meeple) => {
-            const [x, y] = meeple.position.split(',').map(Number);
-
-            const playerSeat = players.find(
-              (p) => p.player_id === meeple.player_id
-            )?.seat_index || 0;
-            const playerColor = PLAYER_COLORS[playerSeat % PLAYER_COLORS.length];
-
-            let offsetX = 0;
-            let offsetY = 0;
-
-            if (meeple.spot.includes('N')) offsetY = -TILE_SIZE / 4;
-            if (meeple.spot.includes('S')) offsetY = TILE_SIZE / 4;
-            if (meeple.spot.includes('E')) offsetX = TILE_SIZE / 4;
-            if (meeple.spot.includes('W')) offsetX = -TILE_SIZE / 4;
-
-            const meepleX = x * TILE_SIZE + TILE_SIZE / 2 + offsetX;
-            const meepleY = -y * TILE_SIZE + TILE_SIZE / 2 + offsetY;
-
-            ctx.fillStyle = playerColor;
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 2 / camera.zoom;
-            ctx.beginPath();
-            ctx.arc(meepleX, meepleY, 12, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-          });
-        }
-      });
-    }
-
     // Draw valid cell highlights (all positions, any rotation)
     if (isMyTurn && phase === 'place_tile' && !meeplePlacementMode) {
       validCells.forEach((cell) => {
@@ -340,7 +319,6 @@ export default function CarcassonneBoard({
     canvasDims,
     tileImages,
     gameData,
-    players,
     validCells,
     selectedCell,
     currentPreview,
@@ -411,10 +389,10 @@ export default function CarcassonneBoard({
               {/* Meeple spot indicators */}
               {meepleSpots.map((spotInfo) => {
                 const isSelected = selectedMeepleSpot === spotInfo.spot;
-                // Convert from 100x100 space to actual pixel space
                 const spotX = (spotInfo.column / 100) * tileSizePx + tileSizePx / 2;
                 const spotY = (spotInfo.row / 100) * tileSizePx + tileSizePx / 2;
                 const spotSize = Math.max(20, tileSizePx * 0.22);
+                const typeName = MEEPLE_TYPE_NAMES[spotInfo.type] || 'Unknown';
 
                 return (
                   <button
@@ -434,13 +412,25 @@ export default function CarcassonneBoard({
                       padding: 0,
                       zIndex: isSelected ? 10 : 1,
                     }}
-                    title={spotInfo.spot}
+                    title={`${spotInfo.spot} (${typeName})`}
                   >
-                    <img
-                      src={isSelected ? playerMeepleImage : '/spot.gif'}
-                      alt={spotInfo.spot}
-                      style={{ width: '100%', height: '100%', borderRadius: '50%' }}
-                    />
+                    {isSelected ? (
+                      <img
+                        src={playerMeepleImage}
+                        alt={spotInfo.spot}
+                        style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%',
+                        backgroundColor: SPOT_COLORS[spotInfo.type] || '#888',
+                        border: '2px solid rgba(255,255,255,0.8)',
+                        boxShadow: '0 0 6px rgba(0,0,0,0.4)',
+                        animation: 'meeple-spot-pulse 1.5s ease-in-out infinite',
+                      }} />
+                    )}
                   </button>
                 );
               })}
@@ -488,6 +478,69 @@ export default function CarcassonneBoard({
           )}
         </div>
       )}
+
+      {/* DOM-rendered placed meeples */}
+      {gameData.features && Object.values(gameData.features).map((feature) =>
+        feature.meeples?.map((meeple) => {
+          const [mx, my] = meeple.position.split(',').map(Number);
+          const tile = gameData.board.tiles[meeple.position];
+          if (!tile) return null;
+
+          const spots = getMeepleSpotsForTile(tile.tile_type_id, tile.rotation);
+          const spotInfo = spots.find(s => s.spot === meeple.spot);
+
+          const tilePos = gridToScreen(mx, my);
+          const meepleSize = Math.max(18, tileSizePx * 0.2);
+
+          let screenX: number;
+          let screenY: number;
+          let typeName = feature.feature_type;
+
+          if (spotInfo) {
+            screenX = tilePos.x + (spotInfo.column / 100) * tileSizePx + tileSizePx / 2;
+            screenY = tilePos.y + (spotInfo.row / 100) * tileSizePx + tileSizePx / 2;
+            typeName = MEEPLE_TYPE_NAMES[spotInfo.type] || feature.feature_type;
+          } else {
+            screenX = tilePos.x + tileSizePx / 2;
+            screenY = tilePos.y + tileSizePx / 2;
+          }
+
+          const meepleSeat = players.find(p => p.player_id === meeple.player_id)?.seat_index ?? 0;
+
+          return (
+            <div
+              key={`${meeple.player_id}-${meeple.position}-${meeple.spot}`}
+              style={{
+                position: 'absolute',
+                left: screenX - meepleSize / 2,
+                top: screenY - meepleSize / 2,
+                width: meepleSize,
+                height: meepleSize,
+                pointerEvents: 'auto',
+              }}
+              title={typeName.charAt(0).toUpperCase() + typeName.slice(1)}
+            >
+              <img
+                src={`/meeples/${meepleSeat}.png`}
+                alt={`${meeple.player_id} meeple`}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
+                }}
+              />
+            </div>
+          );
+        })
+      )}
+
+      {/* Pulse animation for meeple spot indicators */}
+      <style>{`
+        @keyframes meeple-spot-pulse {
+          0%, 100% { transform: scale(1); opacity: 0.85; }
+          50% { transform: scale(1.15); opacity: 1; }
+        }
+      `}</style>
 
       <div className="absolute bottom-4 left-4 bg-white px-3 py-2 rounded shadow text-sm">
         <div>Zoom: {(camera.zoom * 100).toFixed(0)}%</div>

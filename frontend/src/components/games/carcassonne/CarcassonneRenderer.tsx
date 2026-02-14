@@ -324,7 +324,15 @@ export default function CarcassonneRenderer({
               selected_cell: selectedCell,
               confirmed_placement: confirmedPlacement,
             };
-            navigator.clipboard.writeText(JSON.stringify(state, null, 2));
+            const text = JSON.stringify(state, null, 2);
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
           }}
         >
           Copy debug state
