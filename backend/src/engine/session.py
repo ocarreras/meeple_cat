@@ -4,6 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from src.engine.bot_runner import BotRunner
     from src.engine.event_store import EventStoreProtocol
     from src.engine.protocol import GamePlugin
     from src.engine.state_store import StateStoreProtocol
@@ -50,6 +51,7 @@ class GameSession:
         self._event_store = event_store
         self._state_store = state_store
         self._broadcaster = broadcaster
+        self._bot_runner: BotRunner | None = None
         self._lock = asyncio.Lock()
         self._sequence_number = 0
 
@@ -91,6 +93,10 @@ class GameSession:
                 and self.state.status == GameStatus.ACTIVE
             ):
                 await self._auto_resolve_phase()
+
+        # 5. After lock release, check if a bot needs to move next
+        if self._bot_runner is not None:
+            self._bot_runner.schedule_bot_move_if_needed(self)
 
     def _validate_envelope(self, action: Action) -> None:
         """Check game is active and it's the right player's turn."""

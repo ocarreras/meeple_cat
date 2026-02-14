@@ -61,19 +61,31 @@ export async function createMatch(
   token: string,
   gameId: string,
   playerNames: string[],
-  randomSeed?: number
+  options?: {
+    randomSeed?: number;
+    botSeats?: number[];
+    config?: Record<string, unknown>;
+  },
 ): Promise<CreateMatchResponse> {
   const body: {
     game_id: string;
     player_display_names: string[];
     random_seed?: number;
+    bot_seats?: number[];
+    config?: Record<string, unknown>;
   } = {
     game_id: gameId,
     player_display_names: playerNames,
   };
 
-  if (randomSeed !== undefined) {
-    body.random_seed = randomSeed;
+  if (options?.randomSeed !== undefined) {
+    body.random_seed = options.randomSeed;
+  }
+  if (options?.botSeats && options.botSeats.length > 0) {
+    body.bot_seats = options.botSeats;
+  }
+  if (options?.config && Object.keys(options.config).length > 0) {
+    body.config = options.config;
   }
 
   return fetchJson<CreateMatchResponse>(`${API_BASE_URL}/matches`, {

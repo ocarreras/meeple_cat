@@ -48,10 +48,18 @@ const MEEPLE_TYPE_NAMES: Record<number, string> = {
   [MEEPLE_TYPE_FIELD]: 'Field',
 };
 
+const BUTTON_SIZE = 48;
+
 interface Camera {
   x: number;
   y: number;
   zoom: number;
+}
+
+function getTouchDistance(t1: Touch, t2: Touch): number {
+  return Math.sqrt(
+    Math.pow(t1.clientX - t2.clientX, 2) + Math.pow(t1.clientY - t2.clientY, 2)
+  );
 }
 
 export default function CarcassonneBoard({
@@ -84,6 +92,24 @@ export default function CarcassonneBoard({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   // Track canvas dimensions in state so render effect re-fires when they change
   const [canvasDims, setCanvasDims] = useState({ width: 0, height: 0 });
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  // Refs for touch handling (avoid stale closures in native event listeners)
+  const cameraRef = useRef(camera);
+  cameraRef.current = camera;
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchCameraStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const pinchDistRef = useRef<number | null>(null);
+  const pinchZoomStartRef = useRef<number>(1);
+  const touchMovedRef = useRef(false);
+
+  // Refs for tap detection callbacks (avoid stale closures)
+  const isMyTurnRef = useRef(isMyTurn);
+  isMyTurnRef.current = isMyTurn;
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const onCellClickedRef = useRef(onCellClicked);
+  onCellClickedRef.current = onCellClicked;
 
   // Load tile images
   useEffect(() => {
@@ -125,6 +151,90 @@ export default function CarcassonneBoard({
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     return () => canvas.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Native touch handlers — registered via useEffect to use { passive: false }
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const screenToGridFromTouch = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      const canvasX = clientX - rect.left;
+      const canvasY = clientY - rect.top;
+      const cam = cameraRef.current;
+      const worldX = (canvasX - canvas.width / 2 - cam.x) / (TILE_SIZE * cam.zoom);
+      const rawWorldY = (canvasY - canvas.height / 2 - cam.y) / (TILE_SIZE * cam.zoom);
+      return { x: Math.floor(worldX), y: -Math.floor(rawWorldY) };
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      setIsTouchDevice(true);
+
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchStartRef.current = { x: t.clientX, y: t.clientY };
+        touchCameraStartRef.current = { x: cameraRef.current.x, y: cameraRef.current.y };
+        touchMovedRef.current = false;
+        pinchDistRef.current = null;
+      } else if (e.touches.length === 2) {
+        pinchDistRef.current = getTouchDistance(e.touches[0], e.touches[1]);
+        pinchZoomStartRef.current = cameraRef.current.zoom;
+        touchMovedRef.current = true; // pinch is not a tap
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+
+      if (e.touches.length === 2 && pinchDistRef.current !== null) {
+        // Pinch-to-zoom
+        const newDist = getTouchDistance(e.touches[0], e.touches[1]);
+        const scale = newDist / pinchDistRef.current;
+        const newZoom = Math.max(0.25, Math.min(4.0, pinchZoomStartRef.current * scale));
+        setCamera((prev) => ({ ...prev, zoom: newZoom }));
+      } else if (e.touches.length === 1 && touchStartRef.current) {
+        // Single-finger pan
+        const t = e.touches[0];
+        const dx = t.clientX - touchStartRef.current.x;
+        const dy = t.clientY - touchStartRef.current.y;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+          touchMovedRef.current = true;
+        }
+        setCamera((prev) => ({
+          ...prev,
+          x: touchCameraStartRef.current.x + dx,
+          y: touchCameraStartRef.current.y + dy,
+        }));
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+
+      if (!touchMovedRef.current && touchStartRef.current && e.changedTouches.length === 1) {
+        // Tap — treat as cell click
+        const t = e.changedTouches[0];
+        if (isMyTurnRef.current && phaseRef.current === 'place_tile') {
+          const gridPos = screenToGridFromTouch(t.clientX, t.clientY);
+          onCellClickedRef.current(gridPos.x, gridPos.y);
+        }
+      }
+
+      touchStartRef.current = null;
+      pinchDistRef.current = null;
+    };
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+    };
   }, []);
 
   // Convert screen coordinates to grid coordinates — fixed Y-axis
@@ -345,6 +455,7 @@ export default function CarcassonneBoard({
 
   const tileScreenPos = overlayTilePos ? gridToScreen(overlayTilePos.x, overlayTilePos.y) : null;
   const tileSizePx = TILE_SIZE * camera.zoom;
+  const btnOffset = BUTTON_SIZE / 2;
 
   return (
     <div ref={containerRef} className="w-full h-full bg-gray-100 relative overflow-hidden">
@@ -357,6 +468,7 @@ export default function CarcassonneBoard({
           setIsDragging(false);
         }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
+        style={{ touchAction: 'none' }}
       />
 
       {/* DOM Overlay: Confirm/Skip buttons and meeple spots */}
@@ -377,10 +489,10 @@ export default function CarcassonneBoard({
               onClick={(e) => { e.stopPropagation(); onConfirmTile(); }}
               style={{
                 position: 'absolute',
-                top: -20,
-                right: -20,
-                width: 40,
-                height: 40,
+                top: -btnOffset,
+                right: -btnOffset,
+                width: BUTTON_SIZE,
+                height: BUTTON_SIZE,
                 pointerEvents: 'auto',
                 cursor: 'pointer',
                 border: 'none',
@@ -401,7 +513,7 @@ export default function CarcassonneBoard({
                 const isSelected = selectedMeepleSpot === spotInfo.spot;
                 const spotX = (spotInfo.column / 100) * tileSizePx + tileSizePx / 2;
                 const spotY = (spotInfo.row / 100) * tileSizePx + tileSizePx / 2;
-                const spotSize = Math.max(20, tileSizePx * 0.22);
+                const spotSize = Math.max(24, tileSizePx * 0.22);
                 const typeName = MEEPLE_TYPE_NAMES[spotInfo.type] || 'Unknown';
 
                 return (
@@ -450,10 +562,10 @@ export default function CarcassonneBoard({
                 onClick={(e) => { e.stopPropagation(); onConfirmMeeple(); }}
                 style={{
                   position: 'absolute',
-                  top: -20,
-                  right: -20,
-                  width: 40,
-                  height: 40,
+                  top: -btnOffset,
+                  right: -btnOffset,
+                  width: BUTTON_SIZE,
+                  height: BUTTON_SIZE,
                   pointerEvents: 'auto',
                   cursor: 'pointer',
                   border: 'none',
@@ -470,10 +582,10 @@ export default function CarcassonneBoard({
                 onClick={(e) => { e.stopPropagation(); onSkipMeeple(); }}
                 style={{
                   position: 'absolute',
-                  top: -20,
-                  right: -64,
-                  width: 40,
-                  height: 40,
+                  top: -btnOffset,
+                  right: -(btnOffset + BUTTON_SIZE + 4),
+                  width: BUTTON_SIZE,
+                  height: BUTTON_SIZE,
                   pointerEvents: 'auto',
                   cursor: 'pointer',
                   border: 'none',
@@ -552,9 +664,11 @@ export default function CarcassonneBoard({
         }
       `}</style>
 
-      <div className="absolute bottom-4 left-4 bg-white px-3 py-2 rounded shadow text-sm">
+      <div className="absolute bottom-2 left-2 md:bottom-4 md:left-4 bg-white/80 px-2 py-1 md:px-3 md:py-2 rounded shadow text-xs md:text-sm">
         <div>Zoom: {(camera.zoom * 100).toFixed(0)}%</div>
-        <div className="text-xs text-gray-500">Scroll to zoom, drag to pan</div>
+        <div className="text-xs text-gray-500">
+          {isTouchDevice ? 'Pinch to zoom, drag to pan' : 'Scroll to zoom, drag to pan'}
+        </div>
       </div>
     </div>
   );

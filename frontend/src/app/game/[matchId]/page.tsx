@@ -11,7 +11,7 @@ import type { ActionPayload } from '@/lib/types';
 
 function LoadingSpinner() {
   return (
-    <div className="h-screen flex items-center justify-center bg-gray-100">
+    <div className="h-dvh flex items-center justify-center bg-gray-100">
       <div className="text-center">
         <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600"></div>
         <p className="mt-4 text-gray-600 text-lg">Loading game...</p>
@@ -35,7 +35,7 @@ function GamePageContent() {
 
   if (!token) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
+      <div className="h-dvh flex items-center justify-center bg-gray-100">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md">
           <h2 className="text-2xl font-bold text-red-600 mb-4">Missing Token</h2>
           <p className="text-gray-600">
@@ -57,7 +57,7 @@ function GamePageContent() {
   );
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
+    <div className="h-dvh flex flex-col bg-gray-100">
       <GameHeader
         phase={currentPhase.name}
         tilesRemaining={view.game_data.tiles_remaining}

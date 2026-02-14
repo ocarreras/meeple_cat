@@ -11,6 +11,7 @@ from src.api.auth import router as auth_router
 from src.api.games import router as games_router
 from src.api.matches import router as matches_router
 from src.config import settings
+from src.engine.bot_runner import BotRunner
 from src.engine.registry import PluginRegistry
 from src.engine.session_manager import GameSessionManager
 from src.engine.state_store import StateStore
@@ -55,12 +56,14 @@ async def lifespan(app: FastAPI):
     state_store = StateStore(redis)
     app.state.db_session_factory = async_session_factory
 
-    # Initialize session manager
+    # Initialize bot runner and session manager
+    bot_runner = BotRunner(db_session_factory=async_session_factory)
     session_manager = GameSessionManager(
         registry=registry,
         state_store=state_store,
         broadcaster=broadcaster,
         db_session_factory=async_session_factory,
+        bot_runner=bot_runner,
     )
     app.state.session_manager = session_manager
 

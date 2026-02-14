@@ -10,6 +10,8 @@ import MeepleSupply from './MeepleSupply';
 import ScoreBoard from '../../game/ScoreBoard';
 import GameOverSummary from './GameOverSummary';
 
+const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
+
 type UIPhase = 'selecting_tile' | 'confirming_meeple' | 'waiting';
 
 interface CarcassonneRendererProps {
@@ -33,6 +35,7 @@ export default function CarcassonneRenderer({
   const [bufferedMeeple, setBufferedMeeple] = useState<string | null | undefined>(undefined);
   // Track the tile placement that was confirmed (for meeple overlay positioning)
   const [confirmedPlacement, setConfirmedPlacement] = useState<TilePlacement | null>(null);
+  const [panelExpanded, setPanelExpanded] = useState(false);
 
   const gameData = view.game_data as CarcassonneGameData;
   const gameOver = useGameStore((state) => state.gameOver);
@@ -100,6 +103,7 @@ export default function CarcassonneRenderer({
     setSelectedMeepleSpot(null);
     setBufferedMeeple(undefined);
     setConfirmedPlacement(null);
+    setPanelExpanded(false);
   }, [view.turn_number]);
 
   // Auto-send buffered meeple when server transitions to place_meeple
@@ -239,6 +243,19 @@ export default function CarcassonneRenderer({
 
   const previewRotation = currentPreview?.rotation ?? 0;
 
+  // Mobile compact status text
+  const getMobileStatus = (): string => {
+    if (isGameOver) return 'Game Over';
+    if (!isMyTurn) return "Opponent's turn";
+    if (uiPhase === 'confirming_meeple') return 'Place or skip meeple';
+    if (uiPhase === 'waiting') return 'Waiting...';
+    if (phase === 'place_tile') {
+      return selectedCell ? 'Tap to rotate, confirm' : 'Tap a cell to place';
+    }
+    if (phase === 'place_meeple') return 'Place or skip meeple';
+    return 'Waiting...';
+  };
+
   // Determine status text for TilePreview
   const getUiStatusPhase = (): string => {
     if (uiPhase === 'confirming_meeple') return 'confirming_meeple';
@@ -247,9 +264,9 @@ export default function CarcassonneRenderer({
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex flex-col md:flex-row h-full">
       {/* Board area */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0">
         <CarcassonneBoard
           gameData={gameData}
           players={view.players}
@@ -291,64 +308,96 @@ export default function CarcassonneRenderer({
         )}
       </div>
 
-      {/* Sidebar */}
-      <div className="w-80 border-l bg-gray-50 p-4 flex flex-col gap-4 overflow-y-auto">
-        <TilePreview
-          currentTile={gameData.current_tile}
-          selectedRotation={previewRotation}
-          isMyTurn={isMyTurn}
-          phase={getUiStatusPhase()}
-          hasSelection={selectedCell !== null}
-        />
-
-        <MeepleSupply
-          meepleSupply={gameData.meeple_supply || {}}
-          players={view.players}
-        />
-
-        <ScoreBoard
-          players={view.players}
-          scores={scores}
-          currentPlayerId={currentPlayerId ?? undefined}
-          viewerId={view.viewer_id ?? undefined}
-        />
-
-        <div className="bg-white rounded-lg border shadow-sm px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-600">Tiles remaining:</span>
-            <span className="text-lg font-bold">{gameData.tiles_remaining || 0}</span>
-          </div>
-        </div>
-
+      {/* Sidebar (desktop) / Bottom panel (mobile) */}
+      <div className="border-t md:border-t-0 md:border-l md:w-80 bg-gray-50 flex flex-col md:overflow-y-auto">
+        {/* Mobile compact header */}
         <button
-          className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs px-3 py-2 rounded border"
-          onClick={() => {
-            const state = {
-              board_tiles: gameData.board.tiles,
-              features: gameData.features,
-              tile_feature_map: gameData.tile_feature_map,
-              current_tile: gameData.current_tile,
-              meeple_supply: gameData.meeple_supply,
-              scores: gameData.scores,
-              phase,
-              uiPhase,
-              viewer_id: view.viewer_id,
-              selected_cell: selectedCell,
-              confirmed_placement: confirmedPlacement,
-            };
-            const text = JSON.stringify(state, null, 2);
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.left = '-9999px';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-          }}
+          className="md:hidden flex items-center gap-2 px-3 py-2 w-full text-left"
+          onClick={() => setPanelExpanded(prev => !prev)}
         >
-          Copy debug state
+          <span className="text-sm font-medium flex-1 truncate">
+            {getMobileStatus()}
+          </span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {view.players.map(p => (
+              <div key={p.player_id} className="flex items-center gap-1">
+                <div
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: PLAYER_COLORS[p.seat_index % PLAYER_COLORS.length] }}
+                />
+                <span className="text-xs font-semibold tabular-nums">{scores[p.player_id] || 0}</span>
+              </div>
+            ))}
+            <span className="text-xs text-gray-400">|</span>
+            <span className="text-xs text-gray-500">{gameData.tiles_remaining} left</span>
+            <svg
+              className={`w-4 h-4 text-gray-400 transition-transform ${panelExpanded ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
         </button>
+
+        {/* Full panel content */}
+        <div className={`${panelExpanded ? 'flex' : 'hidden'} md:flex flex-col gap-4 p-4 overflow-y-auto`}>
+          <TilePreview
+            currentTile={gameData.current_tile}
+            selectedRotation={previewRotation}
+            isMyTurn={isMyTurn}
+            phase={getUiStatusPhase()}
+            hasSelection={selectedCell !== null}
+          />
+
+          <MeepleSupply
+            meepleSupply={gameData.meeple_supply || {}}
+            players={view.players}
+          />
+
+          <ScoreBoard
+            players={view.players}
+            scores={scores}
+            currentPlayerId={currentPlayerId ?? undefined}
+            viewerId={view.viewer_id ?? undefined}
+          />
+
+          <div className="bg-white rounded-lg border shadow-sm px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-600">Tiles remaining:</span>
+              <span className="text-lg font-bold">{gameData.tiles_remaining || 0}</span>
+            </div>
+          </div>
+
+          <button
+            className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs px-3 py-2 rounded border"
+            onClick={() => {
+              const state = {
+                board_tiles: gameData.board.tiles,
+                features: gameData.features,
+                tile_feature_map: gameData.tile_feature_map,
+                current_tile: gameData.current_tile,
+                meeple_supply: gameData.meeple_supply,
+                scores: gameData.scores,
+                phase,
+                uiPhase,
+                viewer_id: view.viewer_id,
+                selected_cell: selectedCell,
+                confirmed_placement: confirmedPlacement,
+              };
+              const text = JSON.stringify(state, null, 2);
+              const ta = document.createElement('textarea');
+              ta.value = text;
+              ta.style.position = 'fixed';
+              ta.style.left = '-9999px';
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+            }}
+          >
+            Copy debug state
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -34,7 +34,7 @@ export default function GameOverSummary({
 
   return (
     <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full mx-4">
+      <div className="bg-white rounded-xl shadow-2xl p-4 md:p-6 max-w-lg w-full mx-4">
         <h2 className="text-2xl font-bold text-center mb-1">Game Over</h2>
         <p className="text-center text-lg mb-4">
           {winners.length === 1 ? (
@@ -44,6 +44,7 @@ export default function GameOverSummary({
           )}
         </p>
 
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b-2">
@@ -96,6 +97,7 @@ export default function GameOverSummary({
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

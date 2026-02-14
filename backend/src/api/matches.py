@@ -22,6 +22,7 @@ class CreateMatchRequest(BaseModel):
     player_display_names: list[str]
     config: dict = {}
     random_seed: int | None = None
+    bot_seats: list[int] = []
 
 
 class MatchResponse(BaseModel):
@@ -54,11 +55,24 @@ async def create_match(
             detail=f"Invalid player count: {player_count}. Must be between {plugin.min_players} and {plugin.max_players}",
         )
 
-    # Validate creator is in player list
-    if current_user.display_name not in request_body.player_display_names:
+    # Validate bot_seats are valid indices
+    bot_seats = set(request_body.bot_seats)
+    for seat in bot_seats:
+        if seat < 0 or seat >= player_count:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid bot seat index: {seat}",
+            )
+
+    # Validate creator is a non-bot player
+    non_bot_names = [
+        name for i, name in enumerate(request_body.player_display_names)
+        if i not in bot_seats
+    ]
+    if current_user.display_name not in non_bot_names:
         raise HTTPException(
             status_code=400,
-            detail="Creator must be in player list",
+            detail="Creator must be a non-bot player",
         )
 
     # Find or create users for all players
@@ -81,10 +95,13 @@ async def create_match(
     match_players = []
     for seat_index, display_name in enumerate(request_body.player_display_names):
         user = users[display_name]
+        is_bot = seat_index in bot_seats
         match_player = MatchPlayer(
             match_id=match.id,
             user_id=user.id,
             seat_index=seat_index,
+            is_bot=is_bot,
+            bot_id="random" if is_bot else None,
         )
         db.add(match_player)
         match_players.append(match_player)
@@ -97,6 +114,8 @@ async def create_match(
             player_id=PlayerId(str(mp.user_id)),
             display_name=users[request_body.player_display_names[mp.seat_index]].display_name,
             seat_index=mp.seat_index,
+            is_bot=mp.is_bot,
+            bot_id=mp.bot_id,
         )
         for mp in match_players
     ]
@@ -125,6 +144,7 @@ async def create_match(
                 "user_id": str(mp.user_id),
                 "display_name": users[request_body.player_display_names[mp.seat_index]].display_name,
                 "seat_index": mp.seat_index,
+                "is_bot": mp.is_bot,
             }
             for mp in match_players
         ],
@@ -161,6 +181,7 @@ async def get_match(
                 "user_id": str(mp.user_id),
                 "display_name": mp.user.display_name,
                 "seat_index": mp.seat_index,
+                "is_bot": mp.is_bot,
             }
             for mp in sorted(match.players, key=lambda x: x.seat_index)
         ],

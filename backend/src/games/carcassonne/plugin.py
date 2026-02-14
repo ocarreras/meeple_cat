@@ -79,6 +79,11 @@ class CarcassonnePlugin:
         tile_bag = build_tile_bag(expansions if expansions else None)
         rng.shuffle(tile_bag)
 
+        # Optional: limit tile count for shorter games
+        tile_count = config.options.get("tile_count")
+        if tile_count is not None and tile_count < len(tile_bag):
+            tile_bag = tile_bag[:tile_count]
+
         # Place starting tile at (0,0)
         board: dict = {
             "tiles": {

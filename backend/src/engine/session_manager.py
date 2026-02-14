@@ -20,6 +20,7 @@ from src.engine.models import (
     PersistedEvent,
     Player,
 )
+from src.engine.bot_runner import BotRunner
 from src.engine.registry import PluginRegistry
 from src.engine.session import GameSession
 
@@ -43,11 +44,13 @@ class GameSessionManager:
         state_store: StateStoreProtocol,
         broadcaster: Broadcaster,
         db_session_factory: Callable[[], AsyncSession],
+        bot_runner: BotRunner | None = None,
     ) -> None:
         self._registry = registry
         self._state_store = state_store
         self._broadcaster = broadcaster
         self._db_session_factory = db_session_factory
+        self._bot_runner = bot_runner
         self._sessions: dict[str, GameSession] = {}
 
     async def create_session(
@@ -115,6 +118,7 @@ class GameSessionManager:
             await self._state_store.save_state(state)
             await db_session.commit()
 
+        session._bot_runner = self._bot_runner
         self._sessions[match_id] = session
 
         # Auto-resolve initial phase(s) — Carcassonne starts with draw_tile (auto)
@@ -127,6 +131,10 @@ class GameSessionManager:
                 ):
                     await session._auto_resolve_phase()
                 await db_session.commit()
+
+        # Trigger bot move if the first player to act is a bot
+        if self._bot_runner:
+            self._bot_runner.schedule_bot_move_if_needed(session)
 
         logger.info(
             f"Created session for match {match_id} with game {game_id} and {len(players)} players"
@@ -167,9 +175,13 @@ class GameSessionManager:
                     events = await es.get_events(match_id)
                     session._sequence_number = len(events)
 
+                session._bot_runner = self._bot_runner
                 self._sessions[match_id] = session
                 recovered += 1
                 logger.info(f"Recovered session for match {match_id}")
+                # Trigger bot move if it was a bot's turn when server restarted
+                if self._bot_runner:
+                    self._bot_runner.schedule_bot_move_if_needed(session)
             except Exception as e:
                 logger.warning(f"Failed to recover {match_id}: {e}")
 
