@@ -97,6 +97,7 @@ export type TilePlacementAction = {
   x: number;
   y: number;
   rotation: number;
+  meeple_spots?: string[];
 };
 
 export type MeeplePlacementAction = {
@@ -192,6 +193,7 @@ export interface TilePlacement {
   x: number;
   y: number;
   rotation: number;
+  meeple_spots?: string[];
 }
 
 // Type guards

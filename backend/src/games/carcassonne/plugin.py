@@ -147,28 +147,43 @@ class CarcassonnePlugin:
         player_id: PlayerId,
     ) -> list[dict]:
         if phase.name == "place_tile":
-            return self._get_valid_tile_placements(game_data)
+            return self._get_valid_tile_placements(game_data, player_id)
         elif phase.name == "place_meeple":
             return self._get_valid_meeple_placements(game_data, player_id)
         return []
 
-    def _get_valid_tile_placements(self, game_data: dict) -> list[dict]:
+    def _get_valid_tile_placements(
+        self, game_data: dict, player_id: PlayerId,
+    ) -> list[dict]:
         current_tile = game_data["current_tile"]
         if current_tile is None:
             return []
 
         board_tiles = game_data["board"]["tiles"]
         open_positions = game_data["board"]["open_positions"]
+        has_meeples = game_data["meeple_supply"].get(player_id, 0) > 0
         placements: list[dict] = []
 
         for pos_key in open_positions:
             pos = Position.from_key(pos_key)
             for rotation in (0, 90, 180, 270):
                 if can_place_tile(board_tiles, current_tile, pos_key, rotation):
+                    # Compute approximate meeple spots for this rotation
+                    meeple_spots: list[str] = []
+                    if has_meeples:
+                        rotated_features = get_rotated_features(current_tile, rotation)
+                        seen: set[str] = set()
+                        for feat in rotated_features:
+                            for spot in feat.meeple_spots:
+                                if spot not in seen:
+                                    seen.add(spot)
+                                    meeple_spots.append(spot)
+
                     placements.append({
                         "x": pos.x,
                         "y": pos.y,
                         "rotation": rotation,
+                        "meeple_spots": meeple_spots,
                     })
 
         return placements

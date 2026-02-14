@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { PlayerView, TilePlacement } from '@/lib/types';
+import type { PlayerView } from '@/lib/types';
 
 export interface GameStore {
   // Connection state
@@ -14,16 +14,12 @@ export interface GameStore {
   error: string | null;
 
   // UI state
-  selectedRotation: number;
-  hoveredPlacement: TilePlacement | null;
   submitting: boolean;
 
   // Actions
   setConnected: (connected: boolean, matchId?: string, playerId?: string) => void;
   setView: (view: PlayerView) => void;
   setError: (error: string | null) => void;
-  setSelectedRotation: (rotation: number) => void;
-  setHoveredPlacement: (placement: TilePlacement | null) => void;
   setSubmitting: (submitting: boolean) => void;
   reset: () => void;
 }
@@ -34,8 +30,6 @@ const initialState = {
   playerId: null,
   view: null,
   error: null,
-  selectedRotation: 0,
-  hoveredPlacement: null,
   submitting: false,
 };
 
@@ -58,16 +52,6 @@ export const useGameStore = create<GameStore>((set) => ({
   setError: (error) =>
     set({
       error,
-    }),
-
-  setSelectedRotation: (rotation) =>
-    set({
-      selectedRotation: rotation,
-    }),
-
-  setHoveredPlacement: (placement) =>
-    set({
-      hoveredPlacement: placement,
     }),
 
   setSubmitting: (submitting) =>

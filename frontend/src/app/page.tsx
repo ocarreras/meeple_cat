@@ -1,11 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { getToken, createMatch } from '@/lib/api';
 
 export default function Home() {
-  const router = useRouter();
   const [player1Name, setPlayer1Name] = useState('Alice');
   const [player2Name, setPlayer2Name] = useState('Bob');
   const [loading, setLoading] = useState(false);
@@ -39,15 +37,12 @@ export default function Home() {
         })
       );
 
-      // Store created game info for showing links
+      // Show links for both players
       setCreatedGame({
         matchId: match_id,
         token1,
         token2,
       });
-
-      // Navigate to game as player 1
-      router.push(`/game/${match_id}?token=${token1}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create game');
     } finally {

@@ -7,9 +7,10 @@ import { preloadTileImages } from '@/lib/tileImages';
 interface CarcassonneBoardProps {
   gameData: CarcassonneGameData;
   players: Player[];
-  validActions: TilePlacement[];
-  onTilePlaced: (x: number, y: number, rotation: number) => void;
-  selectedRotation: number;
+  validCells: { x: number; y: number }[];
+  selectedCell: { x: number; y: number } | null;
+  currentPreview: TilePlacement | null;
+  onCellClicked: (x: number, y: number) => void;
   isMyTurn: boolean;
   phase: string;
 }
@@ -26,9 +27,10 @@ interface Camera {
 export default function CarcassonneBoard({
   gameData,
   players,
-  validActions,
-  onTilePlaced,
-  selectedRotation,
+  validCells,
+  selectedCell,
+  currentPreview,
+  onCellClicked,
   isMyTurn,
   phase,
 }: CarcassonneBoardProps) {
@@ -38,23 +40,11 @@ export default function CarcassonneBoard({
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
-  const [lastPlacedTile, setLastPlacedTile] = useState<{ x: number; y: number } | null>(null);
 
   // Load tile images
   useEffect(() => {
     preloadTileImages().then(setTileImages);
   }, []);
-
-  // Track last placed tile
-  useEffect(() => {
-    const positions = Object.keys(gameData.board.tiles);
-    if (positions.length > 0) {
-      const lastPos = positions[positions.length - 1];
-      const [x, y] = lastPos.split(',').map(Number);
-      setLastPlacedTile({ x, y });
-    }
-  }, [gameData.board.tiles]);
 
   // Resize observer for responsive canvas
   useEffect(() => {
@@ -113,7 +103,7 @@ export default function CarcassonneBoard({
     [camera]
   );
 
-  // Mouse move - pan or hover
+  // Mouse move - pan
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (isDragging) {
@@ -122,23 +112,12 @@ export default function CarcassonneBoard({
           x: e.clientX - dragStart.x,
           y: e.clientY - dragStart.y,
         }));
-      } else if (isMyTurn && phase === 'place_tile') {
-        const gridPos = screenToGrid(e.clientX, e.clientY);
-        const validPlacements = validActions.filter(
-          (action) => action.rotation === selectedRotation
-        );
-        const isValid = validPlacements.some(
-          (action) => action.x === gridPos.x && action.y === gridPos.y
-        );
-        setHoveredCell(isValid ? gridPos : null);
-      } else {
-        setHoveredCell(null);
       }
     },
-    [isDragging, dragStart, isMyTurn, phase, screenToGrid, validActions, selectedRotation]
+    [isDragging, dragStart]
   );
 
-  // Mouse up - place tile or stop panning
+  // Mouse up - click to select cell or stop panning
   const handleMouseUp = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (isDragging) {
@@ -149,21 +128,12 @@ export default function CarcassonneBoard({
 
         if (dragDistance < 5 && isMyTurn && phase === 'place_tile') {
           const gridPos = screenToGrid(e.clientX, e.clientY);
-          const validPlacements = validActions.filter(
-            (action) => action.rotation === selectedRotation
-          );
-          const isValid = validPlacements.some(
-            (action) => action.x === gridPos.x && action.y === gridPos.y
-          );
-
-          if (isValid) {
-            onTilePlaced(gridPos.x, gridPos.y, selectedRotation);
-          }
+          onCellClicked(gridPos.x, gridPos.y);
         }
       }
       setIsDragging(false);
     },
-    [isDragging, dragStart, camera, isMyTurn, phase, screenToGrid, validActions, selectedRotation, onTilePlaced]
+    [isDragging, dragStart, camera, isMyTurn, phase, screenToGrid, onCellClicked]
   );
 
   // Render canvas
@@ -217,13 +187,6 @@ export default function CarcassonneBoard({
       ctx.rotate((tile.rotation * Math.PI) / 180);
       ctx.drawImage(tileImage, -TILE_SIZE / 2, -TILE_SIZE / 2, TILE_SIZE, TILE_SIZE);
       ctx.restore();
-
-      // Highlight last placed tile
-      if (lastPlacedTile && lastPlacedTile.x === x && lastPlacedTile.y === y) {
-        ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 4 / camera.zoom;
-        ctx.strokeRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
-      }
     });
 
     // Draw meeples
@@ -233,17 +196,14 @@ export default function CarcassonneBoard({
           feature.meeples.forEach((meeple) => {
             const [x, y] = meeple.position.split(',').map(Number);
 
-            // Find player seat for color
             const playerSeat = players.find(
               (p) => p.player_id === meeple.player_id
             )?.seat_index || 0;
             const playerColor = PLAYER_COLORS[playerSeat % PLAYER_COLORS.length];
 
-            // Calculate meeple position (center of tile with slight offset)
             let offsetX = 0;
             let offsetY = 0;
 
-            // Parse spot for directional offset
             if (meeple.spot.includes('N')) offsetY = -TILE_SIZE / 4;
             if (meeple.spot.includes('S')) offsetY = TILE_SIZE / 4;
             if (meeple.spot.includes('E')) offsetX = TILE_SIZE / 4;
@@ -252,7 +212,6 @@ export default function CarcassonneBoard({
             const meepleX = x * TILE_SIZE + TILE_SIZE / 2 + offsetX;
             const meepleY = -y * TILE_SIZE + TILE_SIZE / 2 + offsetY;
 
-            // Draw meeple as a circle
             ctx.fillStyle = playerColor;
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 2 / camera.zoom;
@@ -265,15 +224,11 @@ export default function CarcassonneBoard({
       });
     }
 
-    // Draw valid placements
-    if (isMyTurn && phase === 'place_tile' && gameData.current_tile) {
-      const validPlacements = validActions.filter(
-        (action) => action.rotation === selectedRotation
-      );
-
-      validPlacements.forEach((action) => {
-        const drawX = action.x * TILE_SIZE;
-        const drawY = -action.y * TILE_SIZE;
+    // Draw valid cell highlights (all positions, any rotation)
+    if (isMyTurn && phase === 'place_tile') {
+      validCells.forEach((cell) => {
+        const drawX = cell.x * TILE_SIZE;
+        const drawY = -cell.y * TILE_SIZE;
 
         ctx.fillStyle = 'rgba(34, 197, 94, 0.3)';
         ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
@@ -283,17 +238,26 @@ export default function CarcassonneBoard({
       });
     }
 
-    // Draw hovered tile preview
-    if (hoveredCell && gameData.current_tile) {
+    // Draw selected cell highlight
+    if (selectedCell) {
+      const drawX = selectedCell.x * TILE_SIZE;
+      const drawY = -selectedCell.y * TILE_SIZE;
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 4 / camera.zoom;
+      ctx.strokeRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
+    }
+
+    // Draw tile preview at selected cell
+    if (currentPreview && gameData.current_tile) {
       const tileImage = tileImages.get(gameData.current_tile);
       if (tileImage) {
-        const drawX = hoveredCell.x * TILE_SIZE;
-        const drawY = -hoveredCell.y * TILE_SIZE;
+        const drawX = currentPreview.x * TILE_SIZE;
+        const drawY = -currentPreview.y * TILE_SIZE;
 
         ctx.save();
-        ctx.globalAlpha = 0.6;
+        ctx.globalAlpha = 0.7;
         ctx.translate(drawX + TILE_SIZE / 2, drawY + TILE_SIZE / 2);
-        ctx.rotate((selectedRotation * Math.PI) / 180);
+        ctx.rotate((currentPreview.rotation * Math.PI) / 180);
         ctx.drawImage(tileImage, -TILE_SIZE / 2, -TILE_SIZE / 2, TILE_SIZE, TILE_SIZE);
         ctx.restore();
       }
@@ -305,12 +269,11 @@ export default function CarcassonneBoard({
     tileImages,
     gameData,
     players,
-    validActions,
-    selectedRotation,
+    validCells,
+    selectedCell,
+    currentPreview,
     isMyTurn,
     phase,
-    hoveredCell,
-    lastPlacedTile,
   ]);
 
   return (
@@ -323,7 +286,6 @@ export default function CarcassonneBoard({
         onMouseUp={handleMouseUp}
         onMouseLeave={() => {
           setIsDragging(false);
-          setHoveredCell(null);
         }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
       />
