@@ -49,8 +49,8 @@ export const TILE_MEEPLE_PLACEMENTS: Record<string, MeeplePlacementDef[]> = {
   ],
   G: [
     { column: 0, row: 0, type: MEEPLE_TYPE_CITY },
-    { column: 0, row: -22, type: MEEPLE_TYPE_FIELD },
-    { column: 0, row: 26, type: MEEPLE_TYPE_FIELD },
+    { column: 26, row: 0, type: MEEPLE_TYPE_FIELD },
+    { column: -22, row: 0, type: MEEPLE_TYPE_FIELD },
   ],
   H: [
     { column: 0, row: -22, type: MEEPLE_TYPE_CITY },
@@ -84,12 +84,12 @@ export const TILE_MEEPLE_PLACEMENTS: Record<string, MeeplePlacementDef[]> = {
     { column: 0, row: 22, type: MEEPLE_TYPE_ROAD },
   ],
   M: [
-    { column: 12, row: -12, type: MEEPLE_TYPE_CITY },
-    { column: -12, row: 12, type: MEEPLE_TYPE_FIELD },
+    { column: -12, row: -12, type: MEEPLE_TYPE_CITY },
+    { column: 12, row: 12, type: MEEPLE_TYPE_FIELD },
   ],
   N: [
-    { column: 12, row: -12, type: MEEPLE_TYPE_CITY },
-    { column: -12, row: 12, type: MEEPLE_TYPE_FIELD },
+    { column: -12, row: -12, type: MEEPLE_TYPE_CITY },
+    { column: 12, row: 12, type: MEEPLE_TYPE_FIELD },
   ],
   O: [
     { column: -12, row: -12, type: MEEPLE_TYPE_CITY },
@@ -134,12 +134,12 @@ export const TILE_MEEPLE_PLACEMENTS: Record<string, MeeplePlacementDef[]> = {
     { column: -10, row: 5, type: MEEPLE_TYPE_ROAD },
   ],
   W: [
-    { column: 0, row: -20, type: MEEPLE_TYPE_FIELD },
-    { column: -22, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 22, row: 20, type: MEEPLE_TYPE_FIELD },
-    { column: 20, row: 0, type: MEEPLE_TYPE_ROAD },
-    { column: -20, row: 0, type: MEEPLE_TYPE_ROAD },
+    { column: 20, row: -20, type: MEEPLE_TYPE_FIELD },
+    { column: 20, row: 20, type: MEEPLE_TYPE_FIELD },
+    { column: -20, row: -20, type: MEEPLE_TYPE_FIELD },
+    { column: 0, row: -20, type: MEEPLE_TYPE_ROAD },
     { column: 0, row: 20, type: MEEPLE_TYPE_ROAD },
+    { column: -20, row: 0, type: MEEPLE_TYPE_ROAD },
   ],
   X: [
     { column: -20, row: -20, type: MEEPLE_TYPE_FIELD },
