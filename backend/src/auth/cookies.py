@@ -33,5 +33,11 @@ def set_auth_cookies(
 
 def clear_auth_cookies(response: Response) -> None:
     """Clear auth cookies from a response."""
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token", path="/api/v1/auth/refresh")
+    secure = settings.frontend_url.startswith("https")
+    response.delete_cookie("access_token", secure=secure, samesite="lax")
+    response.delete_cookie(
+        "refresh_token",
+        path="/api/v1/auth/refresh",
+        secure=secure,
+        samesite="lax",
+    )

@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { logout as apiLogout } from '@/lib/api';
 
 export interface AuthUser {
   userId: string;
@@ -34,6 +35,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   setInitialized: (initialized) => set({ initialized }),
 
   logout: () => {
+    // Call backend to clear httpOnly cookies and revoke refresh token
+    apiLogout().catch(() => {});
     localStorage.removeItem('meeple_lobby_user');
     localStorage.removeItem('meeple_tokens');
     set({ user: null, token: null });
