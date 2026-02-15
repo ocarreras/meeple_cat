@@ -49,7 +49,7 @@ export default function ProfilePage() {
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <button
-            onClick={() => router.push('/lobby')}
+            onClick={() => router.push('/')}
             className="text-gray-500 hover:text-gray-700 transition"
           >
             &larr; Back

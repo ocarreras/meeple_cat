@@ -23,7 +23,7 @@ export default function AuthCallbackPage() {
           avatarUrl: userInfo.avatar_url,
           isGuest: userInfo.is_guest,
         });
-        router.replace('/lobby');
+        router.replace('/');
       } catch (err) {
         console.error('Auth callback failed:', err);
         setError('Sign in failed. Please try again.');

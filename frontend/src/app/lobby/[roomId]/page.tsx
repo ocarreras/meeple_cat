@@ -93,7 +93,7 @@ export default function RoomPage() {
     try {
       await leaveRoom(roomId, token ?? undefined);
       setCurrentRoom(null);
-      router.push('/lobby');
+      router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to leave');
     } finally {
@@ -153,7 +153,7 @@ export default function RoomPage() {
           <div className="bg-white rounded-lg shadow-lg p-8 max-w-md text-center">
             <p className="text-red-600 mb-4">{error}</p>
             <a
-              href="/lobby"
+              href="/"
               className="text-blue-600 hover:text-blue-700 underline"
             >
               Back to lobby
@@ -187,7 +187,7 @@ export default function RoomPage() {
           onRemoveBot={() => {}}
           onStart={handleStart}
           onJoin={handleJoin}
-          onClose={() => router.push('/lobby')}
+          onClose={() => router.push('/')}
         />
       </div>
     </div>

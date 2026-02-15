@@ -26,7 +26,7 @@ export default function LoginPage() {
   // Redirect if already logged in
   useEffect(() => {
     if (initialized && user) {
-      router.replace('/lobby');
+      router.replace('/');
     }
   }, [initialized, user, router]);
 
@@ -54,7 +54,7 @@ export default function LoginPage() {
           token,
         })
       );
-      router.push('/lobby');
+      router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
