@@ -22,7 +22,7 @@
   "login.playAsGuest": "Jugar com a convidat",
   "login.entering": "Entrant...",
   "login.failed": "Error d'inici de sessió",
-  "login.setupHint": "L'inici de sessió amb Google no està configurat. Configura MEEPLE_GOOGLE_CLIENT_ID i MEEPLE_GOOGLE_CLIENT_SECRET al .env del backend per activar-lo. Consulta .env.example.",
+  "login.setupHint": "Error: L'inici de sessió amb Google no està configurat. Configura MEEPLE_GOOGLE_CLIENT_ID i MEEPLE_GOOGLE_CLIENT_SECRET al .env del backend per activar-lo. Consulta .env.example.",
 
   "auth.signingIn": "Iniciant sessió...",
   "auth.signInFailed": "Error d'inici de sessió",
