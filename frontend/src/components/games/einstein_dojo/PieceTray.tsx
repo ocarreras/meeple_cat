@@ -3,14 +3,16 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hexToPixel, kitePolygon } from '@/lib/hexGeometry';
-import { ALL_ORIENTATIONS, orientationInfo, NUM_ORIENTATIONS } from '@/lib/einsteinPieces';
+import { ALL_ORIENTATIONS, orientationInfo } from '@/lib/einsteinPieces';
 
 interface PieceTrayProps {
   currentOrientation: number;
   tilesRemaining: number;
   onRotate: () => void;
   onFlip: () => void;
+  onDragStart: () => void;
   isMyTurn: boolean;
+  isDragging: boolean;
   playerColor: string;
 }
 
@@ -21,12 +23,17 @@ export default function PieceTray({
   tilesRemaining,
   onRotate,
   onFlip,
+  onDragStart,
   isMyTurn,
+  isDragging,
   playerColor,
 }: PieceTrayProps) {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { chirality, rotation } = orientationInfo(currentOrientation);
+
+  // Track click vs drag on the piece canvas
+  const pointerStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -40,7 +47,6 @@ export default function PieceTray({
         onFlip();
       }
     };
-
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [isMyTurn, onRotate, onFlip]);
@@ -55,9 +61,21 @@ export default function PieceTray({
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
+    if (isDragging) {
+      // Show dimmed placeholder when dragging
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(t('game.dragging', 'Dragging...'), w / 2, h / 2);
+      return;
+    }
+
     const footprint = ALL_ORIENTATIONS[currentOrientation];
 
-    // Find bounding box of hex centers to center the preview
+    // Bounding box of hex centers
     const hexCenters = footprint.map(([q, r]) => hexToPixel(q, r, PREVIEW_SIZE));
     const minX = Math.min(...hexCenters.map(c => c.x)) - PREVIEW_SIZE;
     const maxX = Math.max(...hexCenters.map(c => c.x)) + PREVIEW_SIZE;
@@ -92,7 +110,41 @@ export default function PieceTray({
     }
 
     ctx.restore();
-  }, [currentOrientation, playerColor]);
+  }, [currentOrientation, playerColor, isDragging, t]);
+
+  // Pointer down on piece canvas — start tracking
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isMyTurn) return;
+    pointerStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() };
+  }, [isMyTurn]);
+
+  // Pointer move — if moved enough, start drag
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!pointerStartRef.current || isDragging) return;
+    const dx = e.clientX - pointerStartRef.current.x;
+    const dy = e.clientY - pointerStartRef.current.y;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      pointerStartRef.current = null;
+      onDragStart();
+    }
+  }, [isDragging, onDragStart]);
+
+  // Pointer up — if didn't drag, treat as click (rotate)
+  const handlePointerUp = useCallback(() => {
+    if (pointerStartRef.current && !isDragging) {
+      const elapsed = Date.now() - pointerStartRef.current.time;
+      // Short click = rotate
+      if (elapsed < 300) {
+        onRotate();
+      }
+    }
+    pointerStartRef.current = null;
+  }, [isDragging, onRotate]);
+
+  // Double-click to flip
+  const handleDoubleClick = useCallback(() => {
+    if (isMyTurn) onFlip();
+  }, [isMyTurn, onFlip]);
 
   return (
     <div className="bg-white rounded-lg border shadow-sm p-3">
@@ -108,10 +160,19 @@ export default function PieceTray({
           ref={canvasRef}
           width={120}
           height={100}
-          className={`border rounded bg-gray-50 ${isMyTurn ? 'cursor-pointer' : 'opacity-50'}`}
-          onClick={isMyTurn ? onRotate : undefined}
-          onDoubleClick={isMyTurn ? onFlip : undefined}
-          title={isMyTurn ? t('game.clickRotate', 'Click to rotate, double-click to flip') : ''}
+          className={`border rounded bg-gray-50 select-none ${
+            isMyTurn
+              ? isDragging
+                ? 'cursor-grabbing opacity-50'
+                : 'cursor-grab'
+              : 'opacity-50'
+          }`}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onDoubleClick={handleDoubleClick}
+          title={isMyTurn ? t('game.dragToPlace', 'Drag to board or click to rotate (R), double-click to flip (F)') : ''}
+          style={{ touchAction: 'none' }}
         />
 
         <div className="flex flex-col gap-2">

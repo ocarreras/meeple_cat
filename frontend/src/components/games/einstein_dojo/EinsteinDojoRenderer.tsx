@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlayerView, EinsteinDojoGameData } from '@/lib/types';
 import { useGameStore } from '@/stores/gameStore';
 import { orientationInfo, orientationIndex, NUM_ORIENTATIONS, isValidPlacement } from '@/lib/einsteinPieces';
-import EinsteinDojoBoard from './EinsteinDojoBoard';
+import EinsteinDojoBoard, { type BoardHandle, type GhostPiece } from './EinsteinDojoBoard';
 import PieceTray from './PieceTray';
 import ScoreBoard from '../../game/ScoreBoard';
 
@@ -25,8 +25,11 @@ export default function EinsteinDojoRenderer({
   phase,
 }: EinsteinDojoRendererProps) {
   const { t } = useTranslation();
+  const boardRef = useRef<BoardHandle>(null);
+
   const [currentOrientation, setCurrentOrientation] = useState(0);
-  const [snapTarget, setSnapTarget] = useState<{ q: number; r: number } | null>(null);
+  const [hoverHex, setHoverHex] = useState<{ q: number; r: number } | null>(null);
+  const [isDraggingFromTray, setIsDraggingFromTray] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
 
   const gameData = view.game_data as EinsteinDojoGameData;
@@ -42,93 +45,135 @@ export default function EinsteinDojoRenderer({
     ? gameData.tiles_remaining[view.viewer_id] ?? 0
     : 0;
 
+  // Refs for window event handlers (avoid stale closures)
+  const currentOrientationRef = useRef(currentOrientation);
+  currentOrientationRef.current = currentOrientation;
+  const kiteOwnersRef = useRef(gameData.board.kite_owners);
+  kiteOwnersRef.current = gameData.board.kite_owners;
+
   // Reset on turn change
   useEffect(() => {
-    setSnapTarget(null);
+    setHoverHex(null);
+    setIsDraggingFromTray(false);
     setPanelExpanded(false);
   }, [view.turn_number]);
 
-  // Rotate: cycle through 6 rotations within current chirality
+  // ── Rotate / Flip ──
+
   const handleRotate = useCallback(() => {
     setCurrentOrientation(prev => {
       const { chirality, rotation } = orientationInfo(prev);
-      const nextRotation = (rotation + 1) % 6;
-      return orientationIndex(chirality, nextRotation);
+      return orientationIndex(chirality, (rotation + 1) % 6);
     });
   }, []);
 
-  // Flip: toggle chirality, keep rotation
   const handleFlip = useCallback(() => {
     setCurrentOrientation(prev => {
       const { chirality, rotation } = orientationInfo(prev);
-      const nextChirality = chirality === 'A' ? 'B' : 'A';
-      return orientationIndex(nextChirality, rotation);
+      return orientationIndex(chirality === 'A' ? 'B' : 'A', rotation);
     });
   }, []);
 
-  // Board hex click: try to snap and place
+  // ── Board hover → live ghost ──
+
+  const handleHoverHex = useCallback((q: number, r: number) => {
+    setHoverHex(prev => {
+      if (prev && prev.q === q && prev.r === r) return prev;
+      return { q, r };
+    });
+  }, []);
+
+  const handleHoverLeave = useCallback(() => {
+    if (!isDraggingFromTray) setHoverHex(null);
+  }, [isDraggingFromTray]);
+
+  // ── Click to place ──
+
   const handleHexClicked = useCallback((q: number, r: number) => {
     if (!isMyTurn || phase !== 'place_tile') return;
 
-    // Check if this is a valid placement
-    const valid = isValidPlacement(
-      gameData.board.kite_owners,
-      currentOrientation,
-      q,
-      r,
-    );
+    if (isValidPlacement(gameData.board.kite_owners, currentOrientation, q, r)) {
+      onAction('place_tile', { anchor_q: q, anchor_r: r, orientation: currentOrientation });
+      setHoverHex(null);
+      return;
+    }
 
-    if (valid) {
-      // If clicking on the current snap target, place the tile
-      if (snapTarget && snapTarget.q === q && snapTarget.r === r) {
-        onAction('place_tile', {
-          anchor_q: q,
-          anchor_r: r,
-          orientation: currentOrientation,
-        });
-        setSnapTarget(null);
+    // Current orientation doesn't fit — try to find one that does
+    for (let o = 0; o < NUM_ORIENTATIONS; o++) {
+      if (isValidPlacement(gameData.board.kite_owners, o, q, r)) {
+        setCurrentOrientation(o);
+        // Don't auto-place — let the user see the preview first
         return;
       }
-
-      // Otherwise, set snap target
-      setSnapTarget({ q, r });
-    } else {
-      // Try all orientations at this hex to see if any work
-      let foundValid = false;
-      for (let o = 0; o < NUM_ORIENTATIONS; o++) {
-        if (isValidPlacement(gameData.board.kite_owners, o, q, r)) {
-          setCurrentOrientation(o);
-          setSnapTarget({ q, r });
-          foundValid = true;
-          break;
-        }
-      }
-      if (!foundValid) {
-        setSnapTarget(null);
-      }
     }
-  }, [isMyTurn, phase, gameData.board.kite_owners, currentOrientation, snapTarget, onAction]);
+  }, [isMyTurn, phase, gameData.board.kite_owners, currentOrientation, onAction]);
 
-  // Ghost piece for board preview
-  const ghostPiece = useMemo(() => {
-    if (!snapTarget || !isMyTurn || phase !== 'place_tile') return null;
+  // ── Drag from tray ──
+
+  const handleTrayDragStart = useCallback(() => {
+    if (!isMyTurn || phase !== 'place_tile') return;
+    setIsDraggingFromTray(true);
+  }, [isMyTurn, phase]);
+
+  // Window-level pointer events for tray drag
+  useEffect(() => {
+    if (!isDraggingFromTray) return;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      const board = boardRef.current;
+      if (!board) return;
+      const hex = board.screenToHex(e.clientX, e.clientY);
+      if (hex) setHoverHex(hex);
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      setIsDraggingFromTray(false);
+
+      const board = boardRef.current;
+      if (!board) return;
+      const hex = board.screenToHex(e.clientX, e.clientY);
+      if (!hex) return;
+
+      if (isValidPlacement(kiteOwnersRef.current, currentOrientationRef.current, hex.q, hex.r)) {
+        onAction('place_tile', {
+          anchor_q: hex.q,
+          anchor_r: hex.r,
+          orientation: currentOrientationRef.current,
+        });
+        setHoverHex(null);
+      }
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [isDraggingFromTray, onAction]);
+
+  // ── Ghost piece computation ──
+
+  const ghostPiece: GhostPiece | null = useMemo(() => {
+    if (!hoverHex || !isMyTurn || phase !== 'place_tile') return null;
 
     const valid = isValidPlacement(
       gameData.board.kite_owners,
       currentOrientation,
-      snapTarget.q,
-      snapTarget.r,
+      hoverHex.q,
+      hoverHex.r,
     );
 
     return {
       orientation: currentOrientation,
-      anchorQ: snapTarget.q,
-      anchorR: snapTarget.r,
+      anchorQ: hoverHex.q,
+      anchorR: hoverHex.r,
       valid,
     };
-  }, [snapTarget, isMyTurn, phase, gameData.board.kite_owners, currentOrientation]);
+  }, [hoverHex, isMyTurn, phase, gameData.board.kite_owners, currentOrientation]);
 
-  // Scores
+  // ── Scores ──
+
   const scores = useMemo(() => {
     const scoreMap: Record<string, number> = {};
     view.players.forEach(player => {
@@ -137,11 +182,10 @@ export default function EinsteinDojoRenderer({
     return scoreMap;
   }, [view.players, gameData.scores]);
 
-  // Mobile status text
+  // Mobile status
   const getMobileStatus = (): string => {
     if (isGameOver) return t('game.status.gameOver');
     if (!isMyTurn) return t('game.status.opponentTurn');
-    if (snapTarget) return t('game.status.tapToConfirm', 'Tap again to place');
     return t('game.status.tapToPlace');
   };
 
@@ -150,9 +194,12 @@ export default function EinsteinDojoRenderer({
       {/* Board area */}
       <div className="flex-1 relative min-h-0">
         <EinsteinDojoBoard
+          ref={boardRef}
           gameData={gameData}
           players={view.players}
           onHexClicked={handleHexClicked}
+          onHoverHex={handleHoverHex}
+          onHoverLeave={handleHoverLeave}
           isMyTurn={isMyTurn}
           phase={phase}
           ghostPiece={ghostPiece}
@@ -228,7 +275,9 @@ export default function EinsteinDojoRenderer({
             tilesRemaining={myTilesRemaining}
             onRotate={handleRotate}
             onFlip={handleFlip}
+            onDragStart={handleTrayDragStart}
             isMyTurn={isMyTurn}
+            isDragging={isDraggingFromTray}
             playerColor={playerColor}
           />
 
