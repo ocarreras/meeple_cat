@@ -114,9 +114,9 @@ export default function RoomPage() {
     }
   };
 
-  const handleAddBot = async () => {
+  const handleAddBot = async (botId: string) => {
     try {
-      const r = await addBot(roomId, 'random', token ?? undefined);
+      const r = await addBot(roomId, botId, token ?? undefined);
       setRoom(r);
       setCurrentRoom(r, currentSeatIndex);
     } catch (err) {

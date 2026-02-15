@@ -11,7 +11,7 @@ interface RoomDetailProps {
   loading: boolean;
   onReady: () => void;
   onLeave: () => void;
-  onAddBot: () => void;
+  onAddBot: (botId: string) => void;
   onRemoveBot: (seatIndex: number) => void;
   onStart: () => void;
   onJoin: () => void;
@@ -60,7 +60,7 @@ function SeatRow({
             {isEmpty
               ? t('room.emptySeat')
               : seat.is_bot
-                ? `Bot (${seat.bot_id})`
+                ? t(`room.bot.${seat.bot_id}`, `Bot (${seat.bot_id})`)
                 : seat.display_name}
           </div>
           {isCurrentUser && (
@@ -152,13 +152,22 @@ export default function RoomDetail({
               <>
                 {/* Creator: add bot */}
                 {isCreator && hasEmptySeat && (
-                  <button
-                    onClick={onAddBot}
-                    disabled={loading}
-                    className="w-full px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
-                  >
-                    {t('room.addBot')}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onAddBot('random')}
+                      disabled={loading}
+                      className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
+                    >
+                      {t('room.addRandomBot')}
+                    </button>
+                    <button
+                      onClick={() => onAddBot('mcts')}
+                      disabled={loading}
+                      className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
+                    >
+                      {t('room.addMctsBot')}
+                    </button>
+                  </div>
                 )}
 
                 {/* Non-creator: ready toggle */}

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
     from src.engine.session import GameSession
 
+from src.engine.bot_strategy import BotStrategy, get_strategy
 from src.engine.event_store import EventStore
 from src.engine.models import Action, GameStatus, PlayerId
 
@@ -27,7 +28,7 @@ class BotRunner:
     After each action completes, GameSession calls
     schedule_bot_move_if_needed() to check if the next
     expected player is a bot. If so, a task is spawned
-    to pick a random legal action after a short delay.
+    to pick an action using the strategy matching the bot's bot_id.
     """
 
     def __init__(
@@ -35,6 +36,7 @@ class BotRunner:
         db_session_factory: Callable[[], "AsyncSession"],
     ) -> None:
         self._db_session_factory = db_session_factory
+        self._strategies: dict[str, BotStrategy] = {}
 
     def schedule_bot_move_if_needed(self, session: "GameSession") -> None:
         """Check if the next expected player is a bot. If so, schedule a move."""
@@ -77,17 +79,20 @@ class BotRunner:
             if phase.expected_actions[0].player_id != player_id:
                 return
 
-            # Get valid actions from plugin
-            valid_actions = session.plugin.get_valid_actions(
-                session.state.game_data, phase, player_id
-            )
-            if not valid_actions:
-                logger.warning(
-                    f"Bot {player_id} has no valid actions in phase {phase.name}"
-                )
-                return
+            # Resolve bot_id → strategy
+            bot_id = "random"
+            for p in session.state.players:
+                if p.player_id == player_id and p.bot_id:
+                    bot_id = p.bot_id
+                    break
 
-            chosen = random.choice(valid_actions)
+            if bot_id not in self._strategies:
+                self._strategies[bot_id] = get_strategy(bot_id)
+            strategy = self._strategies[bot_id]
+
+            chosen = strategy.choose_action(
+                session.state.game_data, phase, player_id, session.plugin
+            )
             action_type = phase.expected_actions[0].action_type
 
             action = Action(

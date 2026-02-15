@@ -171,11 +171,11 @@ export default function LobbyPage() {
     }
   }, [token, currentRoom, userId, currentSeatIndex, setError, setCurrentRoom]);
 
-  const handleAddBot = useCallback(async () => {
+  const handleAddBot = useCallback(async (botId: string) => {
     if (!currentRoom) return;
 
     try {
-      const room = await addBot(currentRoom.room_id, 'random', token ?? undefined);
+      const room = await addBot(currentRoom.room_id, botId, token ?? undefined);
       setCurrentRoom(room, currentSeatIndex);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('lobby.failedBot'));
