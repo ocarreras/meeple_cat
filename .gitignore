@@ -1,0 +1,26 @@
+# Secrets
+.env
+*.env.prod
+infra/terraform/terraform.tfvars
+infra/terraform/.terraform/
+infra/k8s/meeple/values-prod.yaml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

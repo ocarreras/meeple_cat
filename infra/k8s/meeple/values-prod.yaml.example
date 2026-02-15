@@ -1,0 +1,7 @@
+# Copy to values-prod.yaml and fill in real values.
+# values-prod.yaml is gitignored — never commit secrets.
+secrets:
+  databasePassword: "generate-with-openssl-rand-hex-16"
+  jwtSecret: "generate-with-openssl-rand-hex-32"
+  googleClientId: "xxx.apps.googleusercontent.com"
+  googleClientSecret: "GOCSPX-xxx"

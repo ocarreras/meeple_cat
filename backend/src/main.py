@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 from sqlalchemy import text
 
 from src.api.auth import router as auth_router
+from src.api.health import router as health_router
 from src.api.games import router as games_router
 from src.api.matches import router as matches_router
 from src.api.rooms import router as rooms_router
@@ -95,6 +96,20 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down meeple.cat server...")
+
+    # Close all WebSocket connections gracefully so clients trigger reconnection
+    for match_id in list(cm._players.keys()):
+        for player_id, ws in list(cm._players.get(match_id, {}).items()):
+            try:
+                await ws.close(code=1001, reason="Server shutting down")
+            except Exception:
+                pass
+        for ws in list(cm._spectators.get(match_id, [])):
+            try:
+                await ws.close(code=1001, reason="Server shutting down")
+            except Exception:
+                pass
+
     await redis.close()
     await engine.dispose()
     logger.info("Server shutdown complete")
@@ -111,7 +126,7 @@ def create_app() -> FastAPI:
     # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[settings.frontend_url],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -125,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(rooms_router, prefix="/api/v1")
     app.include_router(users_router, prefix="/api/v1")
     app.include_router(ws_router)
+    app.include_router(health_router)
 
     return app
 

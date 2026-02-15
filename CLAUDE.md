@@ -10,12 +10,15 @@ Domain: `play.meeple.cat`
 
 ```
 meeple/
-├── backend/          Python (FastAPI) — REST API, WebSocket, game engine
-├── frontend/         TypeScript (Next.js 16, React 19) — web client
-├── infra/            Docker Compose, nginx, deploy scripts (AWS EC2)
-├── docs/             Design documents (00-08) — READ THESE FIRST
-├── docker-compose.yml        Local dev (postgres + redis + backend + frontend)
-└── docker-compose.prod.yml   Production (adds nginx, certbot volumes)
+├── backend/              Python (FastAPI) — REST API, WebSocket, game engine
+├── frontend/             TypeScript (Next.js 16, React 19) — web client
+├── infra/
+│   ├── terraform/        Hetzner VPS + Route 53 DNS (IaC)
+│   ├── k8s/meeple/       Helm chart (k8s manifests)
+│   └── legacy/           Old Docker Compose deploy scripts (archived)
+├── .github/workflows/    CI (pytest, tsc, lint) + CD (build, push, helm upgrade)
+├── docs/                 Design documents (00-08) — READ THESE FIRST
+└── docker-compose.yml    Local dev only (postgres + redis + backend + frontend)
 ```
 
 ## Tech stack
@@ -24,10 +27,12 @@ meeple/
 |-------|-----------|
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2 (async), Pydantic 2 |
 | Database | PostgreSQL 16, Redis 7 |
-| Frontend | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind 4, Zustand 5 |
+| Frontend | Next.js 16 (App Router, standalone output), React 19, TypeScript 5, Tailwind 4, Zustand 5 |
 | Auth | Google OIDC → JWT (HttpOnly cookies) |
 | Package mgmt | uv (backend), npm (frontend) |
-| Infra | Docker Compose on AWS EC2 (t3.medium), nginx reverse proxy |
+| Infra | k3s on Hetzner CX32, Traefik ingress, cert-manager (Let's Encrypt) |
+| IaC | Terraform (Hetzner + Route 53), Helm chart |
+| CI/CD | GitHub Actions → GHCR → helm upgrade |
 
 ## Local development
 
@@ -38,7 +43,6 @@ docker compose up -d postgres redis
 # Backend (from repo root)
 cd backend
 uv sync
-cp .env.example .env  # if needed, set MEEPLE_ prefixed vars
 uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend (from repo root)
@@ -86,6 +90,7 @@ REST under `/api/v1/`:
 - `api/rooms.py` — lobby CRUD, join, start
 - `api/matches.py` — match state, events
 - `api/users.py` — user profiles
+- `api/health.py` — `/health` (liveness) and `/ready` (readiness, checks DB + Redis)
 
 Auth (OIDC): `auth/routes.py`, `auth/jwt.py`, `auth/providers.py`
 
@@ -96,16 +101,27 @@ WebSocket: `ws/handler.py` at `/ws/game/{match_id}` — uses ticket-based auth
 - Models in `backend/src/models/` (user, room, match, base, database)
 - Auth models in `backend/src/auth/models.py` (UserAuth for multi-provider support)
 - Tables are created via `Base.metadata.create_all` in main.py lifespan (NOT Alembic yet for schema creation)
-- Manual ALTER TABLE migrations in `main.py` lifespan (lines 47-55) — this is tech debt
+- Manual ALTER TABLE migrations in `main.py` lifespan — this is tech debt
+
+### Graceful shutdown
+
+On SIGTERM (k8s rolling update), the backend:
+1. Sends WebSocket close frame (code 1001) to all connected players/spectators
+2. Frontend auto-reconnects with exponential backoff (`useWebSocket.ts`)
+3. Closes Redis and DB connections
+4. `terminationGracePeriodSeconds: 30` in the Deployment gives time for drain
+
+Game state persists in Redis. On startup, `session_manager.recover_sessions()` reloads active matches. Clients reconnect and receive current game state immediately.
 
 ## Frontend architecture
 
-- Next.js App Router with pages in `frontend/src/app/`
+- Next.js App Router with `output: "standalone"` for optimized Docker images
 - Key pages: `/` (landing), `/login`, `/lobby` (room list), `/lobby/[roomId]` (room), `/game/[matchId]` (active game), `/profile/[userId]`
 - Game UI uses canvas rendering (`components/game/BoardCanvas.tsx`)
 - Carcassonne-specific components in `components/games/carcassonne/`
 - API client in `lib/api.ts`, types in `lib/types.ts`
 - Auth state managed via `AuthInitializer.tsx` component
+- WebSocket reconnection with exponential backoff in `hooks/useWebSocket.ts`
 
 ## Running tests
 
@@ -122,40 +138,84 @@ uv run pytest tests/games/carcassonne/test_scoring.py
 
 No frontend tests yet.
 
-## Deployment
+## Infrastructure
 
-Current setup: AWS EC2 (t3.medium, eu-central-1), deployed via rsync scripts.
+### Overview
+
+- **VPS**: Hetzner CX32 (4 vCPU, 8GB RAM, ~$12/mo) running k3s
+- **Ingress**: Traefik (bundled with k3s) — handles routing, WebSocket upgrade, TLS termination
+- **TLS**: cert-manager with Let's Encrypt (automatic provisioning and renewal)
+- **DNS**: AWS Route 53 (A record → Hetzner IP)
+- **Container registry**: GitHub Container Registry (GHCR)
+- **Secrets**: Kubernetes Secrets, populated via Helm values-prod.yaml (gitignored)
+- **DB backups**: CronJob running pg_dump daily at 3 AM, 7-day retention
+
+### Terraform (infra/terraform/)
+
+Provisions the Hetzner VPS with k3s + cert-manager + Helm, and creates the Route 53 DNS record.
 
 ```bash
-# Deploy everything
-./infra/deploy-update.sh all
+cd infra/terraform
+ssh-keygen -t ed25519 -f ~/.ssh/meeple-hetzner -N ""
+cp terraform.tfvars.example terraform.tfvars  # fill in hcloud_token
+terraform init
+terraform plan
+terraform apply
 
-# Deploy only backend (with migrations)
-./infra/deploy-update.sh backend --migrate
-
-# Deploy only frontend
-./infra/deploy-update.sh frontend
-
-# First-time setup (provisions EC2, sets up DNS)
-DOMAIN=play.meeple.cat ./infra/aws-deploy.sh
-
-# Add TLS (run on server)
-sudo ./infra/setup-tls.sh play.meeple.cat
+# Fetch kubeconfig
+scp root@<IP>:/etc/rancher/k3s/k3s.yaml ~/.kube/meeple-config
+# Edit: replace 127.0.0.1 with server IP
+export KUBECONFIG=~/.kube/meeple-config
+kubectl get nodes
 ```
 
-Deploy host: `DEPLOY_HOST` env var or hardcoded IP. SSH key at `~/.ssh/meeple-deploy.pem`.
+### Helm chart (infra/k8s/meeple/)
 
-### Known infra issues
+Deploys all application components to k3s.
 
-- **Zero-downtime deploys not possible** — `deploy-update.sh` runs `docker compose up -d --build` which stops the running container, builds the new image on the server (minutes on t3.medium), then starts it. During the entire build+startup, nginx proxies to nothing → full outage. For a game platform this is especially bad: all active WebSocket connections drop, players mid-game lose their session. Needs a blue-green or rolling deploy strategy (build image first, then swap).
-- No CI/CD pipeline — deploys are manual via rsync
-- nginx TLS config is a commented-out block that gets replaced by setup-tls.sh (fragile)
-- No health endpoint on backend (the /health route referenced in compose doesn't exist yet)
-- docker-compose.prod.yml references `/opt/meeple/.env.prod` with absolute path
-- No automated DB backups
+```bash
+# Validate templates locally
+helm template meeple ./infra/k8s/meeple
+
+# Manual deploy (CI/CD does this automatically)
+helm upgrade --install meeple ./infra/k8s/meeple \
+  --namespace meeple --create-namespace \
+  -f ./infra/k8s/meeple/values.yaml \
+  -f ./infra/k8s/meeple/values-prod.yaml \
+  --wait
+```
+
+Components deployed:
+- Backend Deployment (rolling update, `maxUnavailable: 0`, readiness/liveness probes)
+- Frontend Deployment (rolling update, standalone Next.js)
+- PostgreSQL StatefulSet (10Gi PVC)
+- Redis Deployment (256MB maxmemory, allkeys-lru)
+- Traefik Ingress (routes /api/\*, /ws/\* → backend, /\* → frontend)
+- ClusterIssuer (Let's Encrypt)
+- CronJob (daily pg_dump backup)
+
+### CI/CD (.github/workflows/)
+
+**On PR to main** (`ci.yml`): runs pytest, tsc --noEmit, eslint
+
+**On push to main** (`deploy.yml`):
+1. Runs tests
+2. Builds Docker images → pushes to GHCR (tagged with git SHA)
+3. `helm upgrade` on k3s cluster with new image tags
+4. Verifies rollout status
+
+**GitHub repo secrets needed:**
+| Secret | Description |
+|--------|-------------|
+| `KUBECONFIG_DATA` | Base64-encoded k3s kubeconfig |
+| `HELM_VALUES_PROD` | Base64-encoded values-prod.yaml |
+
+### Known remaining infra issues
+
 - Manual ALTER TABLE migrations in main.py instead of proper Alembic migrations
-- CORS is wide open (`allow_origins=["*"]`) — needs restricting for production
-- Frontend Dockerfile doesn't use standalone output mode (larger image than needed)
+- Single-node k3s — no HA (acceptable for hobby project)
+- DB backups stored on same server (no offsite backup yet)
+- k8s API port (6443) open to all IPs — should restrict to your IP
 
 ## Design documents
 
@@ -178,13 +238,16 @@ The `docs/` directory contains comprehensive design specs. **Read these before m
 ### Done
 - Core game engine with plugin protocol
 - Carcassonne: full game logic, tiles, scoring, meeple placement
-- Backend: FastAPI app, REST API, WebSocket game connection
+- Backend: FastAPI app, REST API, WebSocket game connection, health endpoints
 - Auth: Google OIDC with JWT
 - Frontend: lobby system, game UI with canvas rendering, responsive layout
-- Infra: Docker Compose dev + prod, nginx, deploy scripts
+- Infra: k3s on Hetzner, Terraform IaC, Helm chart, GitHub Actions CI/CD
+- Zero-downtime rolling deployments
+- Automatic TLS via cert-manager
+- Automated daily PostgreSQL backups
+- Graceful WebSocket shutdown + client auto-reconnection
 
 ### Not yet implemented
-- CI/CD pipeline (GitHub Actions) — **priority**
 - Proper Alembic migrations (currently using create_all + manual ALTER)
 - Bot API (webhook + sandbox) — designed in doc 06
 - Replay system — designed in doc 07
@@ -193,8 +256,8 @@ The `docs/` directory contains comprehensive design specs. **Read these before m
 - Additional OIDC providers (GitHub, Discord)
 - Frontend tests
 - Monitoring (Sentry, structured logging)
-- DB backups
 - Redis state cleanup for finished games
+- Offsite DB backups
 
 ## Code conventions
 

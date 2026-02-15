@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "meeple.fullname" . }}-backend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "meeple.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "meeple.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "meeple.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.backend.terminationGracePeriodSeconds }}
+      containers:
+        - name: backend
+          image: {{ .Values.backend.image }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.port }}
+          env:
+            - name: MEEPLE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "meeple.fullname" . }}
+                  key: DATABASE_URL
+            - name: MEEPLE_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "meeple.fullname" . }}
+                  key: REDIS_URL
+            - name: MEEPLE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "meeple.fullname" . }}
+                  key: JWT_SECRET
+            - name: MEEPLE_GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "meeple.fullname" . }}
+                  key: GOOGLE_CLIENT_ID
+            - name: MEEPLE_GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "meeple.fullname" . }}
+                  key: GOOGLE_CLIENT_SECRET
+            - name: MEEPLE_HOST
+              value: "0.0.0.0"
+            - name: MEEPLE_PORT
+              value: {{ .Values.backend.port | quote }}
+            - name: MEEPLE_DEBUG
+              value: "false"
+            - name: MEEPLE_FRONTEND_URL
+              value: "https://{{ .Values.domain }}"
+            - name: MEEPLE_BASE_URL
+              value: "https://{{ .Values.domain }}"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}

@@ -1,0 +1,115 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/meeple-backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/meeple-frontend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Backend tests
+        working-directory: backend
+        run: |
+          uv sync --dev
+          uv run pytest -v
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend checks
+        working-directory: frontend
+        run: |
+          npm ci
+          npx tsc --noEmit
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+          build-args: |
+            BACKEND_URL=http://meeple-backend:8000
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - uses: azure/setup-helm@v4
+
+      - name: Decode prod values
+        run: echo "${{ secrets.HELM_VALUES_PROD }}" | base64 -d > /tmp/values-prod.yaml
+
+      - name: Helm upgrade
+        run: |
+          helm upgrade --install meeple ./infra/k8s/meeple \
+            --namespace meeple --create-namespace \
+            -f ./infra/k8s/meeple/values.yaml \
+            -f /tmp/values-prod.yaml \
+            --set backend.image=${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+            --set frontend.image=${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+            --wait --timeout 5m
+
+      - name: Verify rollout
+        run: |
+          kubectl -n meeple rollout status deployment/meeple-backend --timeout=120s
+          kubectl -n meeple rollout status deployment/meeple-frontend --timeout=120s
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/values-prod.yaml

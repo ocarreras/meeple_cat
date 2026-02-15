@@ -1,0 +1,48 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "meeple.fullname" . }}-pg-backup
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "meeple.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: pg-backup
+              image: {{ .Values.postgres.image }}
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+                  FILENAME="/backups/meeple-${TIMESTAMP}.sql.gz"
+                  echo "Starting backup: ${FILENAME}"
+                  PGPASSWORD="$DB_PASSWORD" pg_dump \
+                    -h {{ include "meeple.fullname" . }}-postgres \
+                    -U meeple meeple | gzip > "${FILENAME}"
+                  echo "Backup complete: $(du -h ${FILENAME})"
+                  find /backups -name "meeple-*.sql.gz" \
+                    -mtime +{{ .Values.backup.retentionDays }} -delete
+                  echo "Pruned old backups"
+              env:
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "meeple.fullname" . }}
+                      key: DB_PASSWORD
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ include "meeple.fullname" . }}-backups
+{{- end }}

@@ -19,7 +19,7 @@ A board game platform where you play against humans or AI in real-time. Built as
 - **Database**: PostgreSQL 16 (persistent data) + Redis 7 (hot game state, sessions)
 - **Auth**: Google OIDC → JWT
 - **Real-time**: WebSocket for game communication
-- **Infra**: Docker Compose on AWS EC2
+- **Infra**: k3s on Hetzner, Terraform, Helm, GitHub Actions CI/CD
 
 ## Game engine
 
@@ -117,10 +117,13 @@ meeple/
 │   │   ├── components/          # UI components (game canvas, lobby, carcassonne)
 │   │   └── lib/                 # API client, types, game assets
 │   └── public/
-├── infra/                       # nginx config, deploy scripts, env templates
+├── infra/
+│   ├── terraform/               # Hetzner VPS + Route 53 DNS (IaC)
+│   ├── k8s/meeple/              # Helm chart for k3s deployment
+│   └── legacy/                  # Archived Docker Compose deploy scripts
+├── .github/workflows/           # CI + CD pipelines
 ├── docs/                        # Design documents (9 files, ~150KB)
-├── docker-compose.yml           # Local development
-└── docker-compose.prod.yml      # Production deployment
+└── docker-compose.yml           # Local development
 ```
 
 ## Tests
@@ -134,17 +137,23 @@ uv run pytest tests/games/carcassonne/  # carcassonne tests only
 
 ## Deployment
 
-Production runs on a single AWS EC2 instance (t3.medium) with Docker Compose, nginx as reverse proxy, and Let's Encrypt TLS.
+Production runs on k3s (lightweight Kubernetes) on a Hetzner CX32 VPS. Infrastructure is defined as code with Terraform, app manifests as a Helm chart, and CI/CD via GitHub Actions.
+
+Pushing to `main` automatically: runs tests, builds Docker images, pushes to GHCR, and deploys via `helm upgrade` with zero-downtime rolling updates.
 
 ```bash
-# Deploy code updates
-./infra/deploy-update.sh all
+# First-time infra provisioning
+cd infra/terraform
+terraform init && terraform apply
 
-# First-time provisioning
-DOMAIN=play.meeple.cat ./infra/aws-deploy.sh
+# Manual Helm deploy (CI/CD does this automatically)
+helm upgrade --install meeple ./infra/k8s/meeple \
+  --namespace meeple --create-namespace \
+  -f ./infra/k8s/meeple/values.yaml \
+  -f ./infra/k8s/meeple/values-prod.yaml
 ```
 
-See `docs/04-infra.md` for full infrastructure documentation.
+See `CLAUDE.md` for detailed infrastructure documentation.
 
 ## Design documentation
 

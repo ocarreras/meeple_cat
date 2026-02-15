@@ -1,0 +1,69 @@
+namespace: meeple
+
+domain: play.meeple.cat
+
+backend:
+  image: ghcr.io/ocarreras/meeple-backend:latest
+  replicas: 1
+  port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  terminationGracePeriodSeconds: 30
+
+frontend:
+  image: ghcr.io/ocarreras/meeple-frontend:latest
+  replicas: 1
+  port: 3000
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+postgres:
+  image: postgres:16-alpine
+  storage: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+redis:
+  image: redis:7-alpine
+  maxmemory: 256mb
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+
+ingress:
+  enabled: true
+  className: traefik
+  tls: true
+  clusterIssuer: letsencrypt-prod
+
+# Placeholder values — override with values-prod.yaml (gitignored)
+secrets:
+  databasePassword: ""
+  jwtSecret: ""
+  googleClientId: ""
+  googleClientSecret: ""
+
+backup:
+  enabled: true
+  schedule: "0 3 * * *"
+  storage: 5Gi
+  retentionDays: 7
