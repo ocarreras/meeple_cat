@@ -21,7 +21,8 @@ export function middleware(request: NextRequest) {
   // Redirect bare domain to play.meeple.cat
   if (host === 'meeple.cat' || host === 'www.meeple.cat') {
     const url = new URL(request.url);
-    url.host = 'play.meeple.cat';
+    url.hostname = 'play.meeple.cat';
+    url.port = '';
     url.protocol = 'https';
     return NextResponse.redirect(url, 301);
   }
