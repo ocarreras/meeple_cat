@@ -65,5 +65,5 @@ secrets:
 backup:
   enabled: true
   schedule: "0 3 * * *"
-  storage: 5Gi
+  hostPath: /var/lib/meeple/backups
   retentionDays: 7

@@ -43,6 +43,7 @@ spec:
                   mountPath: /backups
           volumes:
             - name: backups
-              persistentVolumeClaim:
-                claimName: {{ include "meeple.fullname" . }}-backups
+              hostPath:
+                path: {{ .Values.backup.hostPath }}
+                type: DirectoryOrCreate
 {{- end }}
