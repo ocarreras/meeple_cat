@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/meeple-backend
@@ -135,16 +139,26 @@ jobs:
       - name: Resolve image tags
         id: images
         run: |
-          # Use new SHA tag if that image was built, otherwise use 'latest' (current running version)
+          # Use new SHA tag if that image was built, otherwise keep the currently deployed image
           if [ "${{ needs.changes.outputs.backend }}" == "true" ]; then
             echo "backend_tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           else
-            echo "backend_tag=latest" >> "$GITHUB_OUTPUT"
+            CURRENT=$(kubectl -n meeple get deployment meeple-backend -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+            if [ -n "$CURRENT" ]; then
+              echo "backend_tag=${CURRENT##*:}" >> "$GITHUB_OUTPUT"
+            else
+              echo "backend_tag=latest" >> "$GITHUB_OUTPUT"
+            fi
           fi
           if [ "${{ needs.changes.outputs.frontend }}" == "true" ]; then
             echo "frontend_tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           else
-            echo "frontend_tag=latest" >> "$GITHUB_OUTPUT"
+            CURRENT=$(kubectl -n meeple get deployment meeple-frontend -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+            if [ -n "$CURRENT" ]; then
+              echo "frontend_tag=${CURRENT##*:}" >> "$GITHUB_OUTPUT"
+            else
+              echo "frontend_tag=latest" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Helm upgrade
