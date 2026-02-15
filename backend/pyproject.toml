@@ -28,3 +28,4 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = ["slow: marks tests as slow (excluded from deploy CI)"]

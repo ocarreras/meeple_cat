@@ -1,0 +1,22 @@
+name: Nightly Tests
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # daily at 3 AM UTC
+  workflow_dispatch:        # allow manual trigger
+
+jobs:
+  backend-full-suite:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - run: uv sync --extra dev
+      - run: uv run pytest -v

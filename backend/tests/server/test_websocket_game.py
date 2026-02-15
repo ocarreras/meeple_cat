@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_websocket_game_e2e(app):
     """End-to-end test of WebSocket game play with Carcassonne."""
@@ -91,6 +92,7 @@ async def test_websocket_game_e2e(app):
                         assert alice_update["type"] == "state_update"
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_websocket_invalid_token(app):
     """Test that invalid token is rejected."""
@@ -100,6 +102,7 @@ async def test_websocket_invalid_token(app):
                 pass
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_websocket_match_not_found(app):
     """Test that connecting to non-existent match fails."""
@@ -115,6 +118,7 @@ async def test_websocket_match_not_found(app):
                 pass
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_websocket_player_not_in_match(app):
     """Test that player not in match is rejected."""

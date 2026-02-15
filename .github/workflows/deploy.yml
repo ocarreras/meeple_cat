@@ -42,7 +42,7 @@ jobs:
         with:
           version: "latest"
       - run: uv sync --extra dev
-      - run: uv run pytest -v
+      - run: uv run pytest -v -m "not slow"
 
   test-frontend:
     needs: changes
