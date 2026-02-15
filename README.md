@@ -8,9 +8,9 @@ A board game platform where you play against humans or AI in real-time. Built as
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌──────────────┐
-│  Next.js    │    │  FastAPI     │    │  PostgreSQL   │
-│  (React 19) │◄──►│  (Python)   │◄──►│  + Redis      │
-│  Frontend   │ WS │  Backend    │    │               │
+│  Next.js    │    │  FastAPI    │    │  PostgreSQL  │
+│  (React 19) │◄──►│  (Python)   │◄──►│  + Redis     │
+│  Frontend   │ WS │  Backend    │    │              │
 └─────────────┘    └─────────────┘    └──────────────┘
 ```
 
