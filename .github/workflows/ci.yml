@@ -17,7 +17,7 @@ jobs:
         with:
           version: "latest"
 
-      - run: uv sync --dev
+      - run: uv sync --extra dev
       - run: uv run pytest -v
 
   frontend-checks:

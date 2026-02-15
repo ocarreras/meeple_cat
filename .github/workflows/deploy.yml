@@ -22,7 +22,7 @@ jobs:
       - name: Backend tests
         working-directory: backend
         run: |
-          uv sync --dev
+          uv sync --extra dev
           uv run pytest -v
 
       - uses: actions/setup-node@v4
