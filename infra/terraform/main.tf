@@ -130,3 +130,11 @@ resource "aws_route53_record" "meeple_bare" {
   ttl     = 300
   records = [hcloud_server.meeple.ipv4_address]
 }
+
+resource "aws_route53_record" "meeple_www" {
+  zone_id = var.route53_zone_id
+  name    = "www.${var.bare_domain}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [var.domain]
+}
