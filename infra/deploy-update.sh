@@ -3,6 +3,7 @@
 # Push local changes to the running EC2 instance
 #
 # Usage:
+#   ./infra/deploy-update.sh infra            # sync .env.prod, compose file, nginx config
 #   ./infra/deploy-update.sh frontend
 #   ./infra/deploy-update.sh backend
 #   ./infra/deploy-update.sh backend --migrate
@@ -23,6 +24,14 @@ MIGRATE=false
 
 GREEN='\033[0;32m'; NC='\033[0m'
 info() { echo -e "${GREEN}>>>${NC} $1"; }
+SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+sync_infra() {
+    info "Syncing .env.prod and infra files..."
+    $SCP infra/.env.prod "ubuntu@$HOST:/opt/meeple/.env.prod"
+    $SCP docker-compose.prod.yml "ubuntu@$HOST:/opt/meeple/docker-compose.prod.yml"
+    eval $RSYNC infra/ "ubuntu@$HOST:/opt/meeple/infra/"
+}
 
 sync_frontend() {
     info "Syncing frontend..."
@@ -45,18 +54,24 @@ sync_backend() {
 }
 
 case "$TARGET" in
+    infra)
+        sync_infra
+        ;;
     frontend)
+        sync_infra
         sync_frontend
         ;;
     backend)
+        sync_infra
         sync_backend
         ;;
     all)
+        sync_infra
         sync_frontend
         sync_backend
         ;;
     *)
-        echo "Usage: deploy-update.sh <frontend|backend|all> [--migrate]"
+        echo "Usage: deploy-update.sh <infra|frontend|backend|all> [--migrate]"
         exit 1
         ;;
 esac

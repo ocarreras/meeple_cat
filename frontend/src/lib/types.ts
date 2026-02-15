@@ -180,6 +180,32 @@ export interface ClientMessage {
   payload?: ActionMessage | Record<string, unknown>;
 }
 
+// Auth types
+export interface AuthProvider {
+  provider_id: string;
+  display_name: string;
+}
+
+export interface UserInfoResponse {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  avatar_url: string | null;
+  is_guest: boolean;
+}
+
+export interface MatchHistoryEntry {
+  match_id: string;
+  game_id: string;
+  status: GameStatus;
+  started_at: string | null;
+  ended_at: string | null;
+  seat_index: number;
+  result: string | null;
+  score: number | null;
+  players: { display_name: string; seat_index: number; score: number | null }[];
+}
+
 // API response types
 export interface AuthTokenResponse {
   token: string;

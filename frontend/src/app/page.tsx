@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/authStore';
 import { getToken, createMatch } from '@/lib/api';
 
 const MAX_TILES = 71;
 
 export default function Home() {
   const router = useRouter();
+  const { user, token: authToken, setUser, setToken } = useAuthStore();
+
   const [showQuickPlay, setShowQuickPlay] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [tileCount, setTileCount] = useState(MAX_TILES);
@@ -16,28 +19,47 @@ export default function Home() {
 
   const handleQuickPlay = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!playerName.trim()) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const { token, user_id } = await getToken(playerName.trim());
+      let token = authToken;
+      let displayName = user?.displayName;
+
+      // If not authenticated, do guest login with entered name
+      if (!user) {
+        if (!playerName.trim()) return;
+        const resp = await getToken(playerName.trim());
+        token = resp.token;
+        displayName = playerName.trim();
+        setToken(token);
+        setUser({
+          userId: resp.user_id,
+          displayName: displayName,
+          avatarUrl: null,
+          isGuest: true,
+        });
+        localStorage.setItem(
+          'meeple_lobby_user',
+          JSON.stringify({
+            userId: resp.user_id,
+            displayName: displayName,
+            token,
+          })
+        );
+      }
+
       const config: Record<string, unknown> = {};
       if (tileCount < MAX_TILES) {
         config.tile_count = tileCount;
       }
 
       const { match_id } = await createMatch(
-        token,
+        token!,
         'carcassonne',
-        [playerName.trim(), 'Bot (Random)'],
+        [displayName!, 'Bot (Random)'],
         { botSeats: [1], config }
-      );
-
-      localStorage.setItem(
-        'meeple_tokens',
-        JSON.stringify({ [user_id]: token })
       );
 
       router.push(`/game/${match_id}?token=${token}`);
@@ -85,24 +107,33 @@ export default function Home() {
             </div>
 
             <form onSubmit={handleQuickPlay} className="space-y-6">
-              <div>
-                <label
-                  htmlFor="playerName"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Your Name
-                </label>
-                <input
-                  id="playerName"
-                  type="text"
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                  required
-                  autoFocus
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 placeholder:text-gray-400"
-                  placeholder="Enter your name"
-                />
-              </div>
+              {/* Only show name field if not already logged in */}
+              {!user && (
+                <div>
+                  <label
+                    htmlFor="playerName"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Your Name
+                  </label>
+                  <input
+                    id="playerName"
+                    type="text"
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    required
+                    autoFocus
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 placeholder:text-gray-400"
+                    placeholder="Enter your name"
+                  />
+                </div>
+              )}
+
+              {user && (
+                <p className="text-gray-600">
+                  Playing as <span className="font-medium">{user.displayName}</span>
+                </p>
+              )}
 
               <div>
                 <div className="flex items-center justify-between mb-2">

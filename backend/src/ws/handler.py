@@ -6,6 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from pydantic import ValidationError
 
 from src.auth import decode_token
+from src.auth.ws_auth import validate_ws_ticket
 from src.engine.errors import GameNotActiveError, InvalidActionError, NotYourTurnError
 from src.engine.event_store import EventStore
 from src.engine.models import Action, PlayerId
@@ -17,15 +18,35 @@ router = APIRouter()
 
 
 @router.websocket("/ws/game/{match_id}")
-async def game_websocket(ws: WebSocket, match_id: str, token: str = Query(...)):
+async def game_websocket(
+    ws: WebSocket,
+    match_id: str,
+    token: str | None = Query(None),
+    ticket: str | None = Query(None),
+):
     """WebSocket endpoint for game play."""
-    # 1. Authenticate
-    try:
-        token_data = decode_token(token)
-        player_id = PlayerId(token_data.user_id)
-    except Exception as e:
-        logger.warning(f"Authentication failed: {e}")
-        await ws.close(code=4001, reason="Authentication failed")
+    # 1. Authenticate — try ticket first, then legacy JWT token
+    player_id: PlayerId | None = None
+
+    if ticket:
+        redis = ws.app.state.redis
+        result = await validate_ws_ticket(redis, ticket)
+        if result:
+            user_id, _display_name = result
+            player_id = PlayerId(user_id)
+        else:
+            await ws.close(code=4001, reason="Invalid or expired ticket")
+            return
+    elif token:
+        try:
+            token_data = decode_token(token)
+            player_id = PlayerId(token_data.user_id)
+        except Exception as e:
+            logger.warning(f"Authentication failed: {e}")
+            await ws.close(code=4001, reason="Authentication failed")
+            return
+    else:
+        await ws.close(code=4001, reason="No authentication provided")
         return
 
     # 2. Get session

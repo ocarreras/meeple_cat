@@ -13,6 +13,16 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = True
 
+    # OIDC token settings
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
+    frontend_url: str = "http://localhost:3000"
+    base_url: str = "http://localhost:8000"
+
+    # Google OIDC (empty = disabled)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
     model_config = SettingsConfigDict(
         env_prefix="MEEPLE_",
         env_file=".env",

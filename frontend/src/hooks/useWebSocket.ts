@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
+import { getWsTicket } from '@/lib/api';
 import type { ServerMessage, ActionMessage } from '@/lib/types';
 
 export interface UseWebSocketOptions {
   matchId: string;
-  token: string;
+  token?: string; // Legacy Bearer token for guests
   onMessage: (message: ServerMessage) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
@@ -29,7 +30,7 @@ export function useWebSocket(options: UseWebSocketOptions): WebSocketReturn {
   const isManualCloseRef = useRef(false);
   const isMountedRef = useRef(true);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!isMountedRef.current) {
       return;
     }
@@ -40,10 +41,27 @@ export function useWebSocket(options: UseWebSocketOptions): WebSocketReturn {
       wsRef.current = null;
     }
 
-    // Build WebSocket URL - detect protocol from window location
+    // Get auth param — try ticket first, fall back to legacy token
+    let authParam: string;
+    try {
+      const ticket = await getWsTicket(token);
+      authParam = `ticket=${ticket}`;
+    } catch {
+      // Fall back to token for guests
+      if (token) {
+        authParam = `token=${token}`;
+      } else {
+        console.error('Cannot authenticate WebSocket: no ticket or token');
+        return;
+      }
+    }
+
+    if (!isMountedRef.current) return;
+
+    // Build WebSocket URL
     const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
-    const wsUrl = `${protocol}//${host}/ws/game/${matchId}?token=${token}`;
+    const wsUrl = `${protocol}//${host}/ws/game/${matchId}?${authParam}`;
 
     const ws = new WebSocket(wsUrl);
 

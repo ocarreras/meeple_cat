@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import { useAuthStore } from '@/stores/authStore';
 import { useGameStore } from '@/stores/gameStore';
 import { useGameConnection } from '@/hooks/useGameConnection';
 import CarcassonneRenderer from '@/components/games/carcassonne/CarcassonneRenderer';
@@ -24,27 +25,18 @@ function GamePageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const matchId = params.matchId as string;
-  const token = searchParams.get('token');
+  const urlToken = searchParams.get('token');
+  const { token: authToken } = useAuthStore();
 
-  const { sendAction } = useGameConnection(matchId, token!);
+  // Use URL token if available (legacy guest flow), otherwise auth store token
+  const token = urlToken || authToken || undefined;
+
+  const { sendAction } = useGameConnection(matchId, token);
   const { view, connected, error } = useGameStore();
 
   const handleAction = useCallback((actionType: string, payload: Record<string, unknown>) => {
     sendAction({ action_type: actionType, payload: payload as unknown as ActionPayload });
   }, [sendAction]);
-
-  if (!token) {
-    return (
-      <div className="h-dvh flex items-center justify-center bg-gray-100">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Missing Token</h2>
-          <p className="text-gray-600">
-            A valid authentication token is required to access this game.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   if (!view) {
     return <LoadingSpinner />;

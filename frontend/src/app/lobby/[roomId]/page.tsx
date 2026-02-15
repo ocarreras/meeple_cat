@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/authStore';
 import { useLobbyStore } from '@/stores/lobbyStore';
 import {
-  getToken,
   getRoom,
   joinRoom,
   leaveRoom,
@@ -20,40 +20,31 @@ export default function RoomPage() {
   const router = useRouter();
   const roomId = params.roomId as string;
 
+  const { user, token, initialized } = useAuthStore();
+  const userId = user?.userId ?? null;
+
   const {
-    userId,
-    token,
     loading,
     error,
     currentRoom,
     currentSeatIndex,
-    setUser,
     setCurrentRoom,
     setLoading,
     setError,
   } = useLobbyStore();
 
   const [room, setRoom] = useState<Room | null>(null);
-  const [loginName, setLoginName] = useState('');
 
-  // Restore user from localStorage on mount
+  // Redirect to login if not authenticated
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('meeple_lobby_user');
-      if (saved) {
-        const { userId: id, displayName: name, token: t } = JSON.parse(saved);
-        if (id && name && t) {
-          setUser(id, name, t);
-        }
-      }
-    } catch {
-      // ignore
+    if (initialized && !user) {
+      router.replace('/login');
     }
-  }, [setUser]);
+  }, [initialized, user, router]);
 
   // Fetch room data
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
 
     const fetchRoom = async () => {
       try {
@@ -68,7 +59,8 @@ export default function RoomPage() {
 
         // If game started, redirect
         if (r.status === 'in_game' && r.match_id) {
-          router.push(`/game/${r.match_id}?token=${token}`);
+          const params = token ? `?token=${token}` : '';
+          router.push(`/game/${r.match_id}${params}`);
         }
       } catch {
         setError('Room not found');
@@ -78,32 +70,7 @@ export default function RoomPage() {
     fetchRoom();
     const interval = setInterval(fetchRoom, 2000);
     return () => clearInterval(interval);
-  }, [token, roomId, userId, setCurrentRoom, setError, router]);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!loginName.trim()) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { token: authToken, user_id } = await getToken(loginName.trim());
-      setUser(user_id, loginName.trim(), authToken);
-      localStorage.setItem(
-        'meeple_lobby_user',
-        JSON.stringify({
-          userId: user_id,
-          displayName: loginName.trim(),
-          token: authToken,
-        })
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [user, token, roomId, userId, setCurrentRoom, setError, router]);
 
   const isInRoom = currentRoom?.room_id === roomId;
 
@@ -173,42 +140,11 @@ export default function RoomPage() {
     }
   };
 
-  // Login screen
-  if (!token) {
+  // Show loading while initializing
+  if (!initialized || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-center mb-2 text-gray-800">
-            Join Room
-          </h1>
-          <p className="text-center text-gray-500 mb-6 text-sm">
-            Enter your name to continue
-          </p>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input
-              type="text"
-              value={loginName}
-              onChange={(e) => setLoginName(e.target.value)}
-              required
-              autoFocus
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 placeholder:text-gray-400"
-              placeholder="Display name"
-            />
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-4 rounded-lg transition"
-            >
-              Continue
-            </button>
-          </form>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600"></div>
       </div>
     );
   }

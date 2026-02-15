@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/authStore';
 import { useLobbyStore } from '@/stores/lobbyStore';
 import {
   listRooms,
-  getToken,
   createRoom,
   joinRoom,
   leaveRoom,
@@ -21,16 +21,17 @@ import type { Room } from '@/lib/types';
 
 export default function LobbyPage() {
   const router = useRouter();
+
+  // Auth state from authStore
+  const { user, token: authToken, initialized, logout: authLogout } = useAuthStore();
+
+  // Lobby state
   const {
-    userId,
-    displayName,
-    token,
     rooms,
     currentRoom,
     currentSeatIndex,
     loading,
     error,
-    setUser,
     setRooms,
     setCurrentRoom,
     setLoading,
@@ -39,26 +40,22 @@ export default function LobbyPage() {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingRoom, setViewingRoom] = useState<Room | null>(null);
-  const [loginName, setLoginName] = useState('');
 
-  // Restore user from localStorage on mount
+  // Derived values
+  const userId = user?.userId ?? null;
+  const displayName = user?.displayName ?? null;
+  const token = authToken; // Bearer token for guest users
+
+  // Redirect to login if not authenticated
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('meeple_lobby_user');
-      if (saved) {
-        const { userId: id, displayName: name, token: t } = JSON.parse(saved);
-        if (id && name && t) {
-          setUser(id, name, t);
-        }
-      }
-    } catch {
-      // ignore
+    if (initialized && !user) {
+      router.replace('/login');
     }
-  }, [setUser]);
+  }, [initialized, user, router]);
 
   // Poll rooms every 5 seconds
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
 
     const fetchRooms = async () => {
       try {
@@ -72,11 +69,11 @@ export default function LobbyPage() {
     fetchRooms();
     const interval = setInterval(fetchRooms, 5000);
     return () => clearInterval(interval);
-  }, [token, setRooms]);
+  }, [user, setRooms]);
 
   // Poll current room more frequently for real-time feel
   useEffect(() => {
-    if (!token || !currentRoom) return;
+    if (!user || !currentRoom) return;
 
     const fetchCurrentRoom = async () => {
       try {
@@ -85,8 +82,8 @@ export default function LobbyPage() {
 
         // If game started, redirect
         if (room.status === 'in_game' && room.match_id) {
-          // Find our token — we need to re-fetch it or use stored one
-          router.push(`/game/${room.match_id}?token=${token}`);
+          const params = token ? `?token=${token}` : '';
+          router.push(`/game/${room.match_id}${params}`);
         }
       } catch {
         // Room might have been deleted
@@ -96,32 +93,7 @@ export default function LobbyPage() {
 
     const interval = setInterval(fetchCurrentRoom, 2000);
     return () => clearInterval(interval);
-  }, [token, currentRoom, currentSeatIndex, setCurrentRoom, router]);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!loginName.trim()) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { token: authToken, user_id } = await getToken(loginName.trim());
-      setUser(user_id, loginName.trim(), authToken);
-      localStorage.setItem(
-        'meeple_lobby_user',
-        JSON.stringify({
-          userId: user_id,
-          displayName: loginName.trim(),
-          token: authToken,
-        })
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [user, token, currentRoom, currentSeatIndex, setCurrentRoom, router]);
 
   const handleCreateRoom = useCallback(
     async (gameId: string, maxPlayers: number, config: Record<string, unknown>) => {
@@ -180,7 +152,6 @@ export default function LobbyPage() {
 
     try {
       const room = await toggleReady(token, currentRoom.room_id);
-      // Find our updated seat index
       const mySeat = room.seats.find((s) => s.user_id === userId);
       setCurrentRoom(room, mySeat?.seat_index ?? currentSeatIndex);
     } catch (err) {
@@ -206,7 +177,6 @@ export default function LobbyPage() {
 
     try {
       const { match_id, tokens } = await startRoom(token, currentRoom.room_id);
-      // Use our user-specific token if available, otherwise current token
       const gameToken = (userId && tokens[userId]) || token;
       router.push(`/game/${match_id}?token=${gameToken}`);
     } catch (err) {
@@ -215,57 +185,20 @@ export default function LobbyPage() {
     }
   }, [token, currentRoom, userId, setLoading, setError, router]);
 
+  const handleLogout = useCallback(() => {
+    authLogout();
+    router.push('/login');
+  }, [authLogout, router]);
+
   // Which room to show in the detail modal?
   const detailRoom = currentRoom || viewingRoom;
   const isInDetailRoom = !!currentRoom && detailRoom?.room_id === currentRoom.room_id;
 
-  // Login screen
-  if (!token) {
+  // Show nothing while initializing
+  if (!initialized || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-2 text-gray-800">
-            Game Lobby
-          </h1>
-          <p className="text-center text-gray-500 mb-8">
-            Enter your name to join
-          </p>
-
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label
-                htmlFor="displayName"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Display Name
-              </label>
-              <input
-                id="displayName"
-                type="text"
-                value={loginName}
-                onChange={(e) => setLoginName(e.target.value)}
-                required
-                autoFocus
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 placeholder:text-gray-400"
-                placeholder="Enter your name"
-              />
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-4 rounded-lg transition"
-            >
-              {loading ? 'Entering...' : 'Enter Lobby'}
-            </button>
-          </form>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600"></div>
       </div>
     );
   }
@@ -281,16 +214,36 @@ export default function LobbyPage() {
               Game Lobby
             </h1>
             <p className="text-gray-500 text-sm">
-              Playing as <span className="font-medium text-gray-700">{displayName}</span>
+              Playing as{' '}
+              <span className="font-medium text-gray-700">
+                {displayName}
+              </span>
+              {user.isGuest && (
+                <span className="text-gray-400 ml-1">(guest)</span>
+              )}
             </p>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            disabled={!!currentRoom}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition text-sm"
-          >
-            Create Room
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => router.push('/profile')}
+              className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition text-sm border border-gray-300"
+            >
+              Profile
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              disabled={!!currentRoom}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition text-sm"
+            >
+              Create Room
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-500 font-medium rounded-lg transition text-sm border border-gray-300"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
 
         {/* Error banner */}
@@ -332,7 +285,6 @@ export default function LobbyPage() {
                 onJoin={handleJoinRoom}
                 onView={(r) => {
                   if (currentRoom?.room_id === r.room_id) {
-                    // Clicking our own room opens detail
                     setViewingRoom(null);
                   } else {
                     setViewingRoom(r);

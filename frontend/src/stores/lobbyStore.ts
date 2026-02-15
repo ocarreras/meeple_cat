@@ -4,11 +4,6 @@ import { create } from 'zustand';
 import type { Room } from '@/lib/types';
 
 export interface LobbyStore {
-  // User state
-  userId: string | null;
-  displayName: string | null;
-  token: string | null;
-
   // Lobby state
   rooms: Room[];
   loading: boolean;
@@ -19,7 +14,6 @@ export interface LobbyStore {
   currentSeatIndex: number | null;
 
   // Actions
-  setUser: (userId: string, displayName: string, token: string) => void;
   setRooms: (rooms: Room[]) => void;
   setCurrentRoom: (room: Room | null, seatIndex?: number | null) => void;
   setLoading: (loading: boolean) => void;
@@ -28,9 +22,6 @@ export interface LobbyStore {
 }
 
 const initialState = {
-  userId: null,
-  displayName: null,
-  token: null,
   rooms: [],
   loading: false,
   error: null,
@@ -40,9 +31,6 @@ const initialState = {
 
 export const useLobbyStore = create<LobbyStore>((set) => ({
   ...initialState,
-
-  setUser: (userId, displayName, token) =>
-    set({ userId, displayName, token }),
 
   setRooms: (rooms) =>
     set({ rooms }),

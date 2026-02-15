@@ -6,11 +6,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
+from sqlalchemy import text
 
 from src.api.auth import router as auth_router
 from src.api.games import router as games_router
 from src.api.matches import router as matches_router
 from src.api.rooms import router as rooms_router
+from src.api.users import router as users_router
+from src.auth.routes import router as oidc_auth_router
 from src.config import settings
 from src.engine.bot_runner import BotRunner
 from src.engine.registry import PluginRegistry
@@ -21,6 +24,7 @@ from src.models.database import async_session_factory, engine
 import src.models.user  # noqa: F401
 import src.models.match  # noqa: F401
 import src.models.room  # noqa: F401
+import src.auth.models  # noqa: F401
 from src.ws.broadcaster import Broadcaster
 from src.ws.connection_manager import ConnectionManager
 from src.ws.handler import router as ws_router
@@ -37,6 +41,18 @@ async def lifespan(app: FastAPI):
     # Create database tables if they don't exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Migrate existing tables: add columns that create_all won't add to existing tables
+    async with engine.begin() as conn:
+        for stmt in [
+            "ALTER TABLE users ADD COLUMN avatar_url VARCHAR(512)",
+            "ALTER TABLE users ADD COLUMN is_guest BOOLEAN DEFAULT true",
+        ]:
+            try:
+                await conn.execute(text(stmt))
+                logger.info(f"Migration applied: {stmt}")
+            except Exception:
+                pass  # Column already exists
     logger.info("Database tables ensured")
 
     # Initialize Redis
@@ -103,9 +119,11 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(oidc_auth_router, prefix="/api/v1")
     app.include_router(games_router, prefix="/api/v1")
     app.include_router(matches_router, prefix="/api/v1")
     app.include_router(rooms_router, prefix="/api/v1")
+    app.include_router(users_router, prefix="/api/v1")
     app.include_router(ws_router)
 
     return app

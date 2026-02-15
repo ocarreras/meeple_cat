@@ -35,6 +35,8 @@ services:
     container_name: meeple_backend
     ports:
       - "8000:8000"
+    env_file:
+      - ./backend/.env
     environment:
       MEEPLE_DATABASE_URL: postgresql+asyncpg://meeple:meeple_dev@postgres:5432/meeple
       MEEPLE_REDIS_URL: redis://redis:6379/0

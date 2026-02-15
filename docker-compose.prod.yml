@@ -32,6 +32,8 @@ services:
       MEEPLE_HOST: "0.0.0.0"
       MEEPLE_PORT: "8000"
       MEEPLE_DEBUG: "false"
+    env_file:
+      - /opt/meeple/.env.prod
     depends_on:
       postgres:
         condition: service_healthy

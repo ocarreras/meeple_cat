@@ -19,7 +19,7 @@ interface GameConnectionReturn {
 
 export function useGameConnection(
   matchId: string,
-  token: string
+  token?: string
 ): GameConnectionReturn {
 
   const setConnected = useGameStore((state) => state.setConnected);
