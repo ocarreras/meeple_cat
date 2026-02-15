@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meeple Placement Editor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, system-ui, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+  h1 { text-align: center; margin-bottom: 8px; font-size: 24px; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 20px; font-size: 14px; }
+  .toolbar { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; }
+  .toolbar button {
+    padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-copy { background: #4CAF50; color: white; }
+  .btn-copy:hover { background: #45a049; }
+  .btn-reset { background: #666; color: white; }
+  .btn-reset:hover { background: #555; }
+  .btn-copy.copied { background: #2196F3; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px; max-width: 1400px; margin: 0 auto;
+  }
+  .tile-card {
+    background: #16213e; border-radius: 8px; padding: 12px; text-align: center;
+    border: 1px solid #333;
+  }
+  .tile-card h3 { margin-bottom: 8px; font-size: 16px; color: #ccc; }
+  .tile-container {
+    position: relative; display: inline-block; border: 1px solid #444;
+    user-select: none; cursor: crosshair;
+  }
+  .tile-container img {
+    display: block; width: 180px; height: 180px; image-rendering: pixelated;
+    pointer-events: none;
+  }
+  .spot {
+    position: absolute; width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid white; cursor: grab; transform: translate(-50%, -50%);
+    transition: box-shadow 0.1s; z-index: 10; font-size: 0;
+  }
+  .spot:hover, .spot.dragging {
+    box-shadow: 0 0 8px rgba(255,255,255,0.8); z-index: 20;
+    width: 22px; height: 22px;
+  }
+  .spot.dragging { cursor: grabbing; }
+  .spot-monastery { background: #FFD700; }
+  .spot-city { background: #DC3545; }
+  .spot-road { background: #888; }
+  .spot-field { background: #28A745; }
+  .spot-label {
+    position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: #aaa; white-space: nowrap; pointer-events: none;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .spot:hover .spot-label { opacity: 1; }
+  .tile-spots-info {
+    margin-top: 8px; font-size: 10px; color: #666; line-height: 1.4;
+  }
+  .legend {
+    display: flex; justify-content: center; gap: 20px; margin-bottom: 16px; font-size: 13px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot {
+    width: 14px; height: 14px; border-radius: 50%; border: 2px solid white;
+  }
+</style>
+</head>
+<body>
+
+<h1>Meeple Placement Editor</h1>
+<p class="subtitle">Drag spots to reposition. Click empty area to see coordinates. Copy result when done.</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot spot-monastery"></div> Monastery</div>
+  <div class="legend-item"><div class="legend-dot spot-city"></div> City</div>
+  <div class="legend-item"><div class="legend-dot spot-road"></div> Road</div>
+  <div class="legend-item"><div class="legend-dot spot-field"></div> Field</div>
+</div>
+
+<div class="toolbar">
+  <button class="btn-copy" id="copyBtn" onclick="copyResult()">Copy TILE_MEEPLE_PLACEMENTS</button>
+  <button class="btn-reset" onclick="resetAll()">Reset All</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const TILE_SIZE = 180; // display pixels
+const COORD_SCALE = 100; // coordinate space is -50..+50
+const SCALE = TILE_SIZE / COORD_SCALE;
+
+const TYPE_NAMES = { 1: 'monastery', 2: 'city', 3: 'road', 4: 'field' };
+const TYPE_CLASSES = { 1: 'spot-monastery', 2: 'spot-city', 3: 'spot-road', 4: 'spot-field' };
+
+const SPOT_NAMES = {
+  A: ['monastery', 'field_NEW', 'road_S'],
+  B: ['monastery', 'field_NESW'],
+  C: ['city_NESW'],
+  D: ['city_N', 'field_N', 'field_S', 'road_EW'],
+  E: ['city_N', 'field_ESW'],
+  F: ['city_EW', 'field_N', 'field_S'],
+  G: ['city_NS', 'field_E', 'field_W'],
+  H: ['city_N', 'city_S', 'field_E'],
+  I: ['city_N', 'city_W', 'field_ES'],
+  J: ['city_N', 'field_W', 'field_ES', 'road_ES'],
+  K: ['city_N', 'field_E', 'field_SW', 'road_SW'],
+  L: ['city_N', 'field_NW', 'field_SW', 'field_SE', 'road_E', 'road_W', 'road_S'],
+  M: ['city_NW', 'field_ES'],
+  N: ['city_NW', 'field_ES'],
+  O: ['city_NW', 'field_NE', 'field_SE', 'road_ES'],
+  P: ['city_NW', 'field_NE', 'field_SE', 'road_ES'],
+  Q: ['city_NEW', 'field_S'],
+  R: ['city_NEW', 'field_SW', 'field_SE', 'road_S'],
+  S: ['city_NEW', 'field_S'],
+  T: ['city_NEW', 'field_SW', 'field_SE', 'road_S'],
+  U: ['field_E', 'field_W', 'road_NS'],
+  V: ['field_NE', 'field_SW', 'road_SW'],
+  W: ['field_NE', 'field_SE', 'field_NW', 'field_SW', 'road_N', 'road_S', 'road_W'],
+  X: ['field_NW', 'field_NE', 'field_SW', 'field_SE', 'road_E', 'road_W', 'road_S', 'road_N'],
+};
+
+// Current placements — mutable, initialized from defaults
+const placements = {
+  A: [
+    { column: 0, row: 0, type: 1 },
+    { column: 20, row: -20, type: 4 },
+    { column: 0, row: 25, type: 3 },
+  ],
+  B: [
+    { column: 0, row: 0, type: 1 },
+    { column: 20, row: -20, type: 4 },
+  ],
+  C: [
+    { column: 0, row: 0, type: 2 },
+  ],
+  D: [
+    { column: 0, row: -22, type: 2 },
+    { column: -15, row: -9, type: 4 },
+    { column: 15, row: 16, type: 4 },
+    { column: -3, row: 7, type: 3 },
+  ],
+  E: [
+    { column: 0, row: -22, type: 2 },
+    { column: 0, row: 10, type: 4 },
+  ],
+  F: [
+    { column: 0, row: 0, type: 2 },
+    { column: 0, row: -22, type: 4 },
+    { column: 0, row: 26, type: 4 },
+  ],
+  G: [
+    { column: 0, row: 0, type: 2 },
+    { column: 26, row: 0, type: 4 },
+    { column: -22, row: 0, type: 4 },
+  ],
+  H: [
+    { column: 0, row: -22, type: 2 },
+    { column: 0, row: 22, type: 2 },
+    { column: 0, row: 0, type: 4 },
+  ],
+  I: [
+    { column: 0, row: -22, type: 2 },
+    { column: -22, row: 0, type: 2 },
+    { column: 5, row: 5, type: 4 },
+  ],
+  J: [
+    { column: 0, row: -22, type: 2 },
+    { column: -22, row: -4, type: 4 },
+    { column: 22, row: 22, type: 4 },
+    { column: 2, row: 2, type: 3 },
+  ],
+  K: [
+    { column: 0, row: -22, type: 2 },
+    { column: 22, row: 10, type: 4 },
+    { column: -15, row: 15, type: 4 },
+    { column: 7, row: -2, type: 3 },
+  ],
+  L: [
+    { column: 0, row: -22, type: 2 },
+    { column: -25, row: -15, type: 4 },
+    { column: -20, row: 20, type: 4 },
+    { column: 20, row: 20, type: 4 },
+    { column: 22, row: 0, type: 3 },
+    { column: -22, row: 0, type: 3 },
+    { column: 0, row: 22, type: 3 },
+  ],
+  M: [
+    { column: -12, row: -12, type: 2 },
+    { column: 12, row: 12, type: 4 },
+  ],
+  N: [
+    { column: -12, row: -12, type: 2 },
+    { column: 12, row: 12, type: 4 },
+  ],
+  O: [
+    { column: -12, row: -12, type: 2 },
+    { column: -12, row: 20, type: 4 },
+    { column: 22, row: 22, type: 4 },
+    { column: 9, row: 9, type: 3 },
+  ],
+  P: [
+    { column: -12, row: -12, type: 2 },
+    { column: -12, row: 20, type: 4 },
+    { column: 22, row: 22, type: 4 },
+    { column: 9, row: 9, type: 3 },
+  ],
+  Q: [
+    { column: 0, row: -10, type: 2 },
+    { column: 0, row: 22, type: 4 },
+  ],
+  R: [
+    { column: 0, row: -10, type: 2 },
+    { column: -15, row: 23, type: 4 },
+    { column: 15, row: 23, type: 4 },
+    { column: 0, row: 20, type: 3 },
+  ],
+  S: [
+    { column: 0, row: -10, type: 2 },
+    { column: 0, row: 22, type: 4 },
+  ],
+  T: [
+    { column: 0, row: -10, type: 2 },
+    { column: -15, row: 23, type: 4 },
+    { column: 15, row: 23, type: 4 },
+    { column: 0, row: 20, type: 3 },
+  ],
+  U: [
+    { column: 19, row: 0, type: 4 },
+    { column: -19, row: 0, type: 4 },
+    { column: 0, row: 0, type: 3 },
+  ],
+  V: [
+    { column: 10, row: -10, type: 4 },
+    { column: -20, row: 17, type: 4 },
+    { column: -10, row: 5, type: 3 },
+  ],
+  W: [
+    { column: 20, row: -20, type: 4 },
+    { column: 20, row: 20, type: 4 },
+    { column: -20, row: -20, type: 4 },
+    { column: -20, row: 20, type: 4 },
+    { column: 0, row: -20, type: 3 },
+    { column: 0, row: 20, type: 3 },
+    { column: -20, row: 0, type: 3 },
+  ],
+  X: [
+    { column: -20, row: -20, type: 4 },
+    { column: 20, row: -20, type: 4 },
+    { column: -20, row: 20, type: 4 },
+    { column: 20, row: 20, type: 4 },
+    { column: 20, row: 0, type: 3 },
+    { column: -20, row: 0, type: 3 },
+    { column: 0, row: 20, type: 3 },
+    { column: 0, row: -20, type: 3 },
+  ],
+};
+
+// Deep copy for reset
+const originalPlacements = JSON.parse(JSON.stringify(placements));
+
+function coordToPixel(col, row) {
+  return {
+    x: TILE_SIZE / 2 + col * SCALE,
+    y: TILE_SIZE / 2 + row * SCALE,
+  };
+}
+
+function pixelToCoord(px, py) {
+  return {
+    column: Math.round((px - TILE_SIZE / 2) / SCALE),
+    row: Math.round((py - TILE_SIZE / 2) / SCALE),
+  };
+}
+
+let dragState = null;
+
+function buildGrid() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  const tileIds = 'ABCDEFGHIJKLMNOPQRSTUVWX'.split('');
+  for (const tileId of tileIds) {
+    const card = document.createElement('div');
+    card.className = 'tile-card';
+
+    const title = document.createElement('h3');
+    title.textContent = `Tile ${tileId}`;
+    card.appendChild(title);
+
+    const container = document.createElement('div');
+    container.className = 'tile-container';
+    container.dataset.tile = tileId;
+
+    const img = document.createElement('img');
+    img.src = `/tiles/${tileId}.png`;
+    img.alt = `Tile ${tileId}`;
+    container.appendChild(img);
+
+    const spots = placements[tileId] || [];
+    const names = SPOT_NAMES[tileId] || [];
+    spots.forEach((spot, i) => {
+      const el = document.createElement('div');
+      const pos = coordToPixel(spot.column, spot.row);
+      el.className = `spot ${TYPE_CLASSES[spot.type] || ''}`;
+      el.style.left = pos.x + 'px';
+      el.style.top = pos.y + 'px';
+      el.dataset.tile = tileId;
+      el.dataset.index = i;
+
+      const label = document.createElement('span');
+      label.className = 'spot-label';
+      label.textContent = names[i] || `spot_${i}`;
+      el.appendChild(label);
+
+      el.addEventListener('mousedown', onSpotMouseDown);
+      container.appendChild(el);
+    });
+
+    card.appendChild(container);
+
+    const info = document.createElement('div');
+    info.className = 'tile-spots-info';
+    info.textContent = names.join(', ');
+    card.appendChild(info);
+
+    grid.appendChild(card);
+  }
+}
+
+function onSpotMouseDown(e) {
+  e.preventDefault();
+  const el = e.currentTarget;
+  const tileId = el.dataset.tile;
+  const index = parseInt(el.dataset.index);
+  const container = el.closest('.tile-container');
+  const rect = container.getBoundingClientRect();
+
+  el.classList.add('dragging');
+  dragState = { el, tileId, index, rect };
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+function onMouseMove(e) {
+  if (!dragState) return;
+  const { el, rect } = dragState;
+  let px = e.clientX - rect.left;
+  let py = e.clientY - rect.top;
+  // Clamp
+  px = Math.max(0, Math.min(TILE_SIZE, px));
+  py = Math.max(0, Math.min(TILE_SIZE, py));
+  el.style.left = px + 'px';
+  el.style.top = py + 'px';
+}
+
+function onMouseUp(e) {
+  if (!dragState) return;
+  const { el, tileId, index, rect } = dragState;
+  el.classList.remove('dragging');
+
+  let px = e.clientX - rect.left;
+  let py = e.clientY - rect.top;
+  px = Math.max(0, Math.min(TILE_SIZE, px));
+  py = Math.max(0, Math.min(TILE_SIZE, py));
+
+  const coord = pixelToCoord(px, py);
+  placements[tileId][index].column = coord.column;
+  placements[tileId][index].row = coord.row;
+
+  // Snap to grid position
+  const snapped = coordToPixel(coord.column, coord.row);
+  el.style.left = snapped.x + 'px';
+  el.style.top = snapped.y + 'px';
+
+  dragState = null;
+  document.removeEventListener('mousemove', onMouseMove);
+  document.removeEventListener('mouseup', onMouseUp);
+}
+
+function copyResult() {
+  const lines = ['export const TILE_MEEPLE_PLACEMENTS: Record<string, MeeplePlacementDef[]> = {'];
+  const typeConst = { 1: 'MEEPLE_TYPE_MONASTERY', 2: 'MEEPLE_TYPE_CITY', 3: 'MEEPLE_TYPE_ROAD', 4: 'MEEPLE_TYPE_FIELD' };
+
+  for (const tileId of 'ABCDEFGHIJKLMNOPQRSTUVWX'.split('')) {
+    const spots = placements[tileId] || [];
+    lines.push(`  ${tileId}: [`);
+    for (const s of spots) {
+      lines.push(`    { column: ${s.column}, row: ${s.row}, type: ${typeConst[s.type]} },`);
+    }
+    lines.push('  ],');
+  }
+  lines.push('};');
+
+  const text = lines.join('\n');
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  const btn = document.getElementById('copyBtn');
+  btn.textContent = 'Copied!';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = 'Copy TILE_MEEPLE_PLACEMENTS'; btn.classList.remove('copied'); }, 2000);
+}
+
+function resetAll() {
+  Object.assign(placements, JSON.parse(JSON.stringify(originalPlacements)));
+  buildGrid();
+}
+
+buildGrid();
+</script>
+</body>
+</html>

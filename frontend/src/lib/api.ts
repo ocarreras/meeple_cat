@@ -217,10 +217,10 @@ export async function getRoom(roomId: string): Promise<Room> {
 }
 
 export async function createRoom(
-  token: string,
   gameId: string,
   maxPlayers: number,
   config: Record<string, unknown> = {},
+  token?: string,
 ): Promise<Room> {
   return fetchJson<Room>(
     `${API_BASE_URL}/rooms`,
@@ -233,8 +233,8 @@ export async function createRoom(
 }
 
 export async function joinRoom(
-  token: string,
   roomId: string,
+  token?: string,
 ): Promise<JoinRoomResponse> {
   return fetchJson<JoinRoomResponse>(
     `${API_BASE_URL}/rooms/${roomId}/join`,
@@ -244,8 +244,8 @@ export async function joinRoom(
 }
 
 export async function leaveRoom(
-  token: string,
   roomId: string,
+  token?: string,
 ): Promise<{ ok: boolean }> {
   return fetchJson<{ ok: boolean }>(
     `${API_BASE_URL}/rooms/${roomId}/leave`,
@@ -255,8 +255,8 @@ export async function leaveRoom(
 }
 
 export async function toggleReady(
-  token: string,
   roomId: string,
+  token?: string,
 ): Promise<Room> {
   return fetchJson<Room>(
     `${API_BASE_URL}/rooms/${roomId}/ready`,
@@ -266,9 +266,9 @@ export async function toggleReady(
 }
 
 export async function addBot(
-  token: string,
   roomId: string,
   botId: string = 'random',
+  token?: string,
 ): Promise<Room> {
   return fetchJson<Room>(
     `${API_BASE_URL}/rooms/${roomId}/add-bot`,
@@ -281,8 +281,8 @@ export async function addBot(
 }
 
 export async function startRoom(
-  token: string,
   roomId: string,
+  token?: string,
 ): Promise<StartRoomResponse> {
   return fetchJson<StartRoomResponse>(
     `${API_BASE_URL}/rooms/${roomId}/start`,

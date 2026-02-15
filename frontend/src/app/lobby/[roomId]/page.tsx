@@ -75,11 +75,10 @@ export default function RoomPage() {
   const isInRoom = currentRoom?.room_id === roomId;
 
   const handleJoin = async () => {
-    if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const { room: r, seat_index } = await joinRoom(token, roomId);
+      const { room: r, seat_index } = await joinRoom(roomId, token ?? undefined);
       setRoom(r);
       setCurrentRoom(r, seat_index);
     } catch (err) {
@@ -90,10 +89,9 @@ export default function RoomPage() {
   };
 
   const handleLeave = async () => {
-    if (!token) return;
     setLoading(true);
     try {
-      await leaveRoom(token, roomId);
+      await leaveRoom(roomId, token ?? undefined);
       setCurrentRoom(null);
       router.push('/lobby');
     } catch (err) {
@@ -104,9 +102,8 @@ export default function RoomPage() {
   };
 
   const handleReady = async () => {
-    if (!token) return;
     try {
-      const r = await toggleReady(token, roomId);
+      const r = await toggleReady(roomId, token ?? undefined);
       setRoom(r);
       const mySeat = r.seats.find((s) => s.user_id === userId);
       setCurrentRoom(r, mySeat?.seat_index ?? currentSeatIndex);
@@ -116,9 +113,8 @@ export default function RoomPage() {
   };
 
   const handleAddBot = async () => {
-    if (!token) return;
     try {
-      const r = await addBot(token, roomId);
+      const r = await addBot(roomId, 'random', token ?? undefined);
       setRoom(r);
       setCurrentRoom(r, currentSeatIndex);
     } catch (err) {
@@ -127,13 +123,13 @@ export default function RoomPage() {
   };
 
   const handleStart = async () => {
-    if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const { match_id, tokens } = await startRoom(token, roomId);
+      const { match_id, tokens } = await startRoom(roomId, token ?? undefined);
       const gameToken = (userId && tokens[userId]) || token;
-      router.push(`/game/${match_id}?token=${gameToken}`);
+      const params = gameToken ? `?token=${gameToken}` : '';
+      router.push(`/game/${match_id}${params}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start');
       setLoading(false);

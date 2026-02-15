@@ -97,12 +97,11 @@ export default function LobbyPage() {
 
   const handleCreateRoom = useCallback(
     async (gameId: string, maxPlayers: number, config: Record<string, unknown>) => {
-      if (!token) return;
       setLoading(true);
       setError(null);
 
       try {
-        const room = await createRoom(token, gameId, maxPlayers, config);
+        const room = await createRoom(gameId, maxPlayers, config, token ?? undefined);
         setCurrentRoom(room, 0);
         setShowCreateModal(false);
       } catch (err) {
@@ -116,12 +115,11 @@ export default function LobbyPage() {
 
   const handleJoinRoom = useCallback(
     async (roomId: string) => {
-      if (!token) return;
       setLoading(true);
       setError(null);
 
       try {
-        const { room, seat_index } = await joinRoom(token, roomId);
+        const { room, seat_index } = await joinRoom(roomId, token ?? undefined);
         setCurrentRoom(room, seat_index);
         setViewingRoom(null);
       } catch (err) {
@@ -134,11 +132,11 @@ export default function LobbyPage() {
   );
 
   const handleLeaveRoom = useCallback(async () => {
-    if (!token || !currentRoom) return;
+    if (!currentRoom) return;
     setLoading(true);
 
     try {
-      await leaveRoom(token, currentRoom.room_id);
+      await leaveRoom(currentRoom.room_id, token ?? undefined);
       setCurrentRoom(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to leave room');
@@ -148,10 +146,10 @@ export default function LobbyPage() {
   }, [token, currentRoom, setLoading, setError, setCurrentRoom]);
 
   const handleReady = useCallback(async () => {
-    if (!token || !currentRoom) return;
+    if (!currentRoom) return;
 
     try {
-      const room = await toggleReady(token, currentRoom.room_id);
+      const room = await toggleReady(currentRoom.room_id, token ?? undefined);
       const mySeat = room.seats.find((s) => s.user_id === userId);
       setCurrentRoom(room, mySeat?.seat_index ?? currentSeatIndex);
     } catch (err) {
@@ -160,10 +158,10 @@ export default function LobbyPage() {
   }, [token, currentRoom, userId, currentSeatIndex, setError, setCurrentRoom]);
 
   const handleAddBot = useCallback(async () => {
-    if (!token || !currentRoom) return;
+    if (!currentRoom) return;
 
     try {
-      const room = await addBot(token, currentRoom.room_id);
+      const room = await addBot(currentRoom.room_id, 'random', token ?? undefined);
       setCurrentRoom(room, currentSeatIndex);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add bot');
@@ -171,14 +169,15 @@ export default function LobbyPage() {
   }, [token, currentRoom, currentSeatIndex, setError, setCurrentRoom]);
 
   const handleStart = useCallback(async () => {
-    if (!token || !currentRoom) return;
+    if (!currentRoom) return;
     setLoading(true);
     setError(null);
 
     try {
-      const { match_id, tokens } = await startRoom(token, currentRoom.room_id);
+      const { match_id, tokens } = await startRoom(currentRoom.room_id, token ?? undefined);
       const gameToken = (userId && tokens[userId]) || token;
-      router.push(`/game/${match_id}?token=${gameToken}`);
+      const params = gameToken ? `?token=${gameToken}` : '';
+      router.push(`/game/${match_id}${params}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start game');
       setLoading(false);
