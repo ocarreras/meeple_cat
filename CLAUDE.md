@@ -14,8 +14,7 @@ meeple/
 ├── frontend/             TypeScript (Next.js 16, React 19) — web client
 ├── infra/
 │   ├── terraform/        Hetzner VPS + Route 53 DNS (IaC)
-│   ├── k8s/meeple/       Helm chart (k8s manifests)
-│   └── legacy/           Old Docker Compose deploy scripts (archived)
+│   └── k8s/meeple/       Helm chart (k8s manifests)
 ├── .github/workflows/    CI (pytest, tsc, lint) + CD (build, push, helm upgrade)
 ├── docs/                 Design documents (00-08) — READ THESE FIRST
 └── docker-compose.yml    Local dev only (postgres + redis + backend + frontend)
@@ -227,7 +226,7 @@ The `docs/` directory contains comprehensive design specs. **Read these before m
 | `01-game-engine.md` | Plugin protocol, phase model, event sourcing |
 | `02-backend-api.md` | REST + WebSocket API specs |
 | `03-frontend.md` | Frontend architecture, components, state |
-| `04-infra.md` | Docker, nginx, CI/CD, monitoring, scaling |
+| `04-infra.md` | Infrastructure design (historical — actual setup is k3s/Terraform/Helm, see above) |
 | `05-auth.md` | OIDC flow, JWT, account linking |
 | `06-bot-api.md` | Bot integration (webhook + sandbox) |
 | `07-replay-rankings.md` | Event sourcing replays, Glicko-2 rankings |

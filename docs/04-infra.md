@@ -1,5 +1,11 @@
 # 04 — Infrastructure & Deployment
 
+> **Note**: This document describes the original Docker Compose design.
+> The actual production setup uses **k3s on Hetzner** with **Terraform**
+> (IaC) and a **Helm chart**, deployed via **GitHub Actions CI/CD**.
+> See `CLAUDE.md` for current infrastructure documentation, and
+> `infra/terraform/` + `infra/k8s/meeple/` for the actual configuration.
+
 Single VPS, Docker Compose, under $25/month. Designed for a hobby project
 that doesn't sacrifice maintainability.
 

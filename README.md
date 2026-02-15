@@ -119,8 +119,7 @@ meeple/
 │   └── public/
 ├── infra/
 │   ├── terraform/               # Hetzner VPS + Route 53 DNS (IaC)
-│   ├── k8s/meeple/              # Helm chart for k3s deployment
-│   └── legacy/                  # Archived Docker Compose deploy scripts
+│   └── k8s/meeple/              # Helm chart for k3s deployment
 ├── .github/workflows/           # CI + CD pipelines
 ├── docs/                        # Design documents (9 files, ~150KB)
 └── docker-compose.yml           # Local development
@@ -165,7 +164,7 @@ The `docs/` directory contains comprehensive design documents covering every sub
 | 01 | Game Engine | Plugin protocol, phase model, event sourcing |
 | 02 | Backend API | REST + WebSocket API specification |
 | 03 | Frontend | UI architecture, components, state management |
-| 04 | Infrastructure | Docker, nginx, CI/CD, monitoring, scaling |
+| 04 | Infrastructure | Infrastructure design (historical — actual setup is k3s/Terraform/Helm) |
 | 05 | Auth | OIDC flow, JWT, account linking |
 | 06 | Bot API | AI/bot integration (webhook + sandbox) |
 | 07 | Replay & Rankings | Event sourcing replays, Glicko-2 ratings |
