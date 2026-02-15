@@ -279,6 +279,7 @@ export default function EinsteinDojoRenderer({
             isMyTurn={isMyTurn}
             isDragging={isDraggingFromTray}
             playerColor={playerColor}
+            seatIndex={playerSeatIndex}
           />
 
           <ScoreBoard

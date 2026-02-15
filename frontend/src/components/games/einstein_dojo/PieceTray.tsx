@@ -4,6 +4,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hexToPixel, kitePolygon } from '@/lib/hexGeometry';
 import { ALL_ORIENTATIONS, orientationInfo } from '@/lib/einsteinPieces';
+import { usePieceImages } from '@/hooks/usePieceImages';
 
 interface PieceTrayProps {
   currentOrientation: number;
@@ -14,9 +15,17 @@ interface PieceTrayProps {
   isMyTurn: boolean;
   isDragging: boolean;
   playerColor: string;
+  seatIndex: number;
 }
 
 const PREVIEW_SIZE = 18;
+
+const PIECE_BB_WIDTH = 3.0;
+const PIECE_BB_HEIGHT = 5 * Math.sqrt(3) / 4;
+const PIECE_OFFSETS: Record<string, { x: number; y: number }> = {
+  A: { x: -0.75, y: -Math.sqrt(3) / 8 },
+  B: { x: 0.75, y: -Math.sqrt(3) / 8 },
+};
 
 export default function PieceTray({
   currentOrientation,
@@ -27,8 +36,10 @@ export default function PieceTray({
   isMyTurn,
   isDragging,
   playerColor,
+  seatIndex,
 }: PieceTrayProps) {
   const { t } = useTranslation();
+  const pieceImages = usePieceImages();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { chirality, rotation } = orientationInfo(currentOrientation);
 
@@ -75,7 +86,7 @@ export default function PieceTray({
 
     const footprint = ALL_ORIENTATIONS[currentOrientation];
 
-    // Bounding box of hex centers
+    // Bounding box of hex centers (for centering in canvas)
     const hexCenters = footprint.map(([q, r]) => hexToPixel(q, r, PREVIEW_SIZE));
     const minX = Math.min(...hexCenters.map(c => c.x)) - PREVIEW_SIZE;
     const maxX = Math.max(...hexCenters.map(c => c.x)) + PREVIEW_SIZE;
@@ -87,30 +98,64 @@ export default function PieceTray({
     const offsetX = (w - pieceW) / 2 - minX;
     const offsetY = (h - pieceH) / 2 - minY;
 
-    ctx.save();
-    ctx.translate(offsetX, offsetY);
+    const imgKey = `${seatIndex + 1}-${chirality.toLowerCase()}`;
+    const imgData = pieceImages?.[imgKey];
 
-    for (const [q, r, k] of footprint) {
-      const { x: cx, y: cy } = hexToPixel(q, r, PREVIEW_SIZE);
-      const poly = kitePolygon(cx, cy, PREVIEW_SIZE, k);
+    if (imgData) {
+      // Image-based rendering with clip
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
 
+      // Clip to kite polygon
       ctx.beginPath();
-      ctx.moveTo(poly[0].x, poly[0].y);
-      for (let i = 1; i < poly.length; i++) {
-        ctx.lineTo(poly[i].x, poly[i].y);
+      for (const [q, r, k] of footprint) {
+        const { x: cx, y: cy } = hexToPixel(q, r, PREVIEW_SIZE);
+        const poly = kitePolygon(cx, cy, PREVIEW_SIZE, k);
+        ctx.moveTo(poly[0].x, poly[0].y);
+        for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+        ctx.closePath();
       }
-      ctx.closePath();
-      ctx.fillStyle = playerColor;
-      ctx.globalAlpha = 0.7;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = playerColor;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }
+      ctx.clip();
 
-    ctx.restore();
-  }, [currentOrientation, playerColor, isDragging, t]);
+      // Draw image: rotate around anchor (0,0) which is at (offsetX, offsetY) after translate
+      ctx.rotate(rotation * Math.PI / 3);
+
+      const offset = PIECE_OFFSETS[chirality] ?? PIECE_OFFSETS.A;
+      const bbW = PIECE_BB_WIDTH * PREVIEW_SIZE;
+      const bbH = PIECE_BB_HEIGHT * PREVIEW_SIZE;
+      const { bounds } = imgData;
+
+      ctx.drawImage(
+        imgData.img,
+        bounds.left, bounds.top, bounds.width, bounds.height,
+        offset.x * PREVIEW_SIZE - bbW / 2, offset.y * PREVIEW_SIZE - bbH / 2, bbW, bbH,
+      );
+
+      ctx.restore();
+    } else {
+      // Fallback: colored kites
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+
+      for (const [q, r, k] of footprint) {
+        const { x: cx, y: cy } = hexToPixel(q, r, PREVIEW_SIZE);
+        const poly = kitePolygon(cx, cy, PREVIEW_SIZE, k);
+        ctx.beginPath();
+        ctx.moveTo(poly[0].x, poly[0].y);
+        for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+        ctx.closePath();
+        ctx.fillStyle = playerColor;
+        ctx.globalAlpha = 0.7;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = playerColor;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+  }, [currentOrientation, playerColor, isDragging, t, pieceImages, seatIndex, chirality, rotation]);
 
   // Pointer down on piece canvas — start tracking
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {

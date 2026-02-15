@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardR
 import { useTranslation } from 'react-i18next';
 import { EinsteinDojoGameData, Player } from '@/lib/types';
 import { hexToPixel, hexVertex, hexEdgeMidpoint, kitePolygon } from '@/lib/hexGeometry';
-import { getPlacedKites } from '@/lib/einsteinPieces';
+import { getPlacedKites, orientationInfo } from '@/lib/einsteinPieces';
+import { usePieceImages, type PieceImages } from '@/hooks/usePieceImages';
 
 export interface GhostPiece {
   orientation: number;
@@ -33,6 +34,15 @@ const PLAYER_COLORS = ['#3b82f6', '#f97316'];
 const PLAYER_FILL_COLORS = ['rgba(59, 130, 246, 0.6)', 'rgba(249, 115, 22, 0.6)'];
 const GHOST_VALID_COLOR = 'rgba(34, 197, 94, 0.45)';
 const GHOST_INVALID_COLOR = 'rgba(156, 163, 175, 0.25)';
+
+// Piece bounding box in HEX_SIZE units (same for both chiralities)
+const PIECE_BB_WIDTH = 3.0;
+const PIECE_BB_HEIGHT = 5 * Math.sqrt(3) / 4;
+// Offset from anchor hex center to piece BB center (per chirality, at rotation 0)
+const PIECE_OFFSETS: Record<string, { x: number; y: number }> = {
+  A: { x: -0.75, y: -Math.sqrt(3) / 8 },
+  B: { x: 0.75, y: -Math.sqrt(3) / 8 },
+};
 
 interface Camera {
   x: number;
@@ -88,6 +98,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
   ref,
 ) {
   const { t } = useTranslation();
+  const pieceImages = usePieceImages();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1.5 });
@@ -322,13 +333,22 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     // ── Placed pieces ──
     for (const piece of gameData.board.placed_pieces) {
       const seatIdx = colors[piece.player_id] ?? 0;
-      const fillColor = PLAYER_FILL_COLORS[seatIdx % PLAYER_FILL_COLORS.length];
-      const strokeColor = PLAYER_COLORS[seatIdx % PLAYER_COLORS.length];
-
       const kites = getPlacedKites(piece.orientation, piece.anchor_q, piece.anchor_r);
-      for (const [q, r, k] of kites) {
-        const { x: cx, y: cy } = hexToPixel(q, r, HEX_SIZE);
-        drawKite(ctx, cx, cy, HEX_SIZE, k, fillColor, strokeColor, 1.5);
+
+      const { chirality, rotation } = orientationInfo(piece.orientation);
+      const imgKey = `${seatIdx + 1}-${chirality.toLowerCase()}`;
+      const imgData = pieceImages?.[imgKey];
+
+      if (imgData) {
+        drawPieceImage(ctx, imgData, kites, piece.anchor_q, piece.anchor_r, chirality, rotation, HEX_SIZE);
+      } else {
+        // Fallback: colored kites while images load
+        const fillColor = PLAYER_FILL_COLORS[seatIdx % PLAYER_FILL_COLORS.length];
+        const strokeColor = PLAYER_COLORS[seatIdx % PLAYER_COLORS.length];
+        for (const [q, r, k] of kites) {
+          const { x: cx, y: cy } = hexToPixel(q, r, HEX_SIZE);
+          drawKite(ctx, cx, cy, HEX_SIZE, k, fillColor, strokeColor, 1.5);
+        }
       }
     }
 
@@ -378,7 +398,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     }
 
     ctx.restore();
-  }, [camera, canvasDims, gameData, players, ghostPiece, playerColorMap]);
+  }, [camera, canvasDims, gameData, players, ghostPiece, playerColorMap, pieceImages]);
 
   return (
     <div ref={containerRef} className="w-full h-full bg-gray-100 relative overflow-hidden">
@@ -443,6 +463,50 @@ function drawKiteDividers(ctx: CanvasRenderingContext2D, cx: number, cy: number,
     ctx.lineTo(m.x, m.y);
   }
   ctx.stroke();
+}
+
+/** Draw a placed piece using its original image, clipped to kite polygons. */
+function drawPieceImage(
+  ctx: CanvasRenderingContext2D,
+  imgData: { img: HTMLImageElement; bounds: { left: number; top: number; width: number; height: number } },
+  kites: [number, number, number][],
+  anchorQ: number,
+  anchorR: number,
+  chirality: string,
+  rotation: number,
+  hexSize: number,
+) {
+  ctx.save();
+
+  // Clip to piece shape
+  ctx.beginPath();
+  for (const [q, r, k] of kites) {
+    const { x: cx, y: cy } = hexToPixel(q, r, hexSize);
+    const poly = kitePolygon(cx, cy, hexSize, k);
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+    ctx.closePath();
+  }
+  ctx.clip();
+
+  // Position at anchor, rotate to match orientation
+  const anchor = hexToPixel(anchorQ, anchorR, hexSize);
+  ctx.translate(anchor.x, anchor.y);
+  ctx.rotate(rotation * Math.PI / 3);
+
+  // Draw image mapped from content bounds to piece bounding box
+  const offset = PIECE_OFFSETS[chirality] ?? PIECE_OFFSETS.A;
+  const bbW = PIECE_BB_WIDTH * hexSize;
+  const bbH = PIECE_BB_HEIGHT * hexSize;
+  const { bounds } = imgData;
+
+  ctx.drawImage(
+    imgData.img,
+    bounds.left, bounds.top, bounds.width, bounds.height,
+    offset.x * hexSize - bbW / 2, offset.y * hexSize - bbH / 2, bbW, bbH,
+  );
+
+  ctx.restore();
 }
 
 /** Draw a single kite quadrilateral. */
