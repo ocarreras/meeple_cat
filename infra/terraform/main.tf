@@ -122,3 +122,11 @@ resource "aws_route53_record" "meeple" {
   ttl     = 300
   records = [hcloud_server.meeple.ipv4_address]
 }
+
+resource "aws_route53_record" "meeple_bare" {
+  zone_id = var.route53_zone_id
+  name    = var.bare_domain
+  type    = "A"
+  ttl     = 300
+  records = [hcloud_server.meeple.ipv4_address]
+}

@@ -34,6 +34,12 @@ variable "domain" {
   default     = "play.meeple.cat"
 }
 
+variable "bare_domain" {
+  description = "Bare domain that redirects to the main domain"
+  type        = string
+  default     = "meeple.cat"
+}
+
 variable "route53_zone_id" {
   description = "AWS Route 53 hosted zone ID"
   type        = string

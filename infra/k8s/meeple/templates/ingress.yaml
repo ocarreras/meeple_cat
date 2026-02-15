@@ -14,6 +14,9 @@ spec:
   tls:
     - hosts:
         - {{ .Values.domain }}
+        {{- if .Values.bareDomain }}
+        - {{ .Values.bareDomain }}
+        {{- end }}
       secretName: meeple-tls
   {{- end }}
   rules:
@@ -55,4 +58,16 @@ spec:
                 name: {{ include "meeple.fullname" . }}-frontend
                 port:
                   number: 3000
+    {{- if .Values.bareDomain }}
+    - host: {{ .Values.bareDomain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "meeple.fullname" . }}-frontend
+                port:
+                  number: 3000
+    {{- end }}
 {{- end }}

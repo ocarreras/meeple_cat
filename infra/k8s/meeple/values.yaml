@@ -1,6 +1,7 @@
 namespace: meeple
 
 domain: play.meeple.cat
+bareDomain: meeple.cat
 
 backend:
   image: ghcr.io/ocarreras/meeple-backend:latest
