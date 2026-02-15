@@ -48,3 +48,36 @@ class Broadcaster:
             payload={"action_type": action_type},
         )
         await self.connection_manager.send_to_player(match_id, player_id, message)
+
+    async def send_player_disconnected(
+        self, match_id: MatchId, player_id: PlayerId, grace_period_seconds: float
+    ) -> None:
+        """Broadcast that a player disconnected."""
+        message = ServerMessage(
+            type=ServerMessageType.PLAYER_DISCONNECTED,
+            payload={
+                "player_id": player_id,
+                "grace_period_seconds": grace_period_seconds,
+            },
+        )
+        await self.connection_manager.broadcast_to_match(match_id, message)
+
+    async def send_player_reconnected(
+        self, match_id: MatchId, player_id: PlayerId
+    ) -> None:
+        """Broadcast that a player reconnected."""
+        message = ServerMessage(
+            type=ServerMessageType.PLAYER_RECONNECTED,
+            payload={"player_id": player_id},
+        )
+        await self.connection_manager.broadcast_to_match(match_id, message)
+
+    async def send_player_forfeited(
+        self, match_id: MatchId, player_id: PlayerId
+    ) -> None:
+        """Broadcast that a player was forfeited due to disconnect timeout."""
+        message = ServerMessage(
+            type=ServerMessageType.PLAYER_FORFEITED,
+            payload={"player_id": player_id},
+        )
+        await self.connection_manager.broadcast_to_match(match_id, message)

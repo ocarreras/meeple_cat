@@ -9,6 +9,7 @@ import { useGameConnection } from '@/hooks/useGameConnection';
 import CarcassonneRenderer from '@/components/games/carcassonne/CarcassonneRenderer';
 import GameHeader from '@/components/game/GameHeader';
 import ConnectionStatus from '@/components/game/ConnectionStatus';
+import DisconnectBanner from '@/components/game/DisconnectBanner';
 import type { ActionPayload } from '@/lib/types';
 
 function LoadingSpinner() {
@@ -34,7 +35,7 @@ function GamePageContent() {
   const token = urlToken || authToken || undefined;
 
   const { sendAction } = useGameConnection(matchId, token);
-  const { view, connected, error } = useGameStore();
+  const { view, connected, error, gameOver } = useGameStore();
 
   const handleAction = useCallback((actionType: string, payload: Record<string, unknown>) => {
     sendAction({ action_type: actionType, payload: payload as unknown as ActionPayload });
@@ -60,6 +61,7 @@ function GamePageContent() {
         status={view.status}
       />
       <ConnectionStatus connected={connected} error={error} />
+      <DisconnectBanner />
       <div className="flex-1 overflow-hidden">
         <CarcassonneRenderer
           view={view}

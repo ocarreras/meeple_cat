@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     base_url: str = "http://localhost:8000"
 
+    # Game engine
+    disconnect_grace_period_seconds: int = 30
+
     # Google OIDC (empty = disabled)
     google_client_id: str = ""
     google_client_secret: str = ""

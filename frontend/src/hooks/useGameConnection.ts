@@ -9,6 +9,7 @@ import {
   isErrorPayload,
   isConnectedPayload,
   isGameOverPayload,
+  isPlayerDisconnectedPayload,
 } from '@/lib/types';
 
 interface GameConnectionReturn {
@@ -26,6 +27,8 @@ export function useGameConnection(
   const setView = useGameStore((state) => state.setView);
   const setGameOver = useGameStore((state) => state.setGameOver);
   const setError = useGameStore((state) => state.setError);
+  const addDisconnectNotification = useGameStore((state) => state.addDisconnectNotification);
+  const removeDisconnectNotification = useGameStore((state) => state.removeDisconnectNotification);
   const connected = useGameStore((state) => state.connected);
   const error = useGameStore((state) => state.error);
 
@@ -80,12 +83,54 @@ export function useGameConnection(
           break;
         }
 
+        case 'player_disconnected': {
+          if (isPlayerDisconnectedPayload(message.payload)) {
+            addDisconnectNotification({
+              playerId: message.payload.player_id,
+              type: 'disconnected',
+              gracePeriod: message.payload.grace_period_seconds,
+              timestamp: Date.now(),
+            });
+          }
+          break;
+        }
+
+        case 'player_reconnected': {
+          const payload = message.payload as { player_id?: string };
+          if (payload.player_id) {
+            removeDisconnectNotification(payload.player_id);
+            addDisconnectNotification({
+              playerId: payload.player_id,
+              type: 'reconnected',
+              timestamp: Date.now(),
+            });
+            // Auto-clear reconnect notification after 3 seconds
+            setTimeout(() => {
+              removeDisconnectNotification(payload.player_id!);
+            }, 3000);
+          }
+          break;
+        }
+
+        case 'player_forfeited': {
+          const payload = message.payload as { player_id?: string };
+          if (payload.player_id) {
+            removeDisconnectNotification(payload.player_id);
+            addDisconnectNotification({
+              playerId: payload.player_id,
+              type: 'forfeited',
+              timestamp: Date.now(),
+            });
+          }
+          break;
+        }
+
         default: {
           console.warn('Unknown message type:', message.type);
         }
       }
     },
-    [setConnected, setView, setGameOver, setError]
+    [setConnected, setView, setGameOver, setError, addDisconnectNotification, removeDisconnectNotification]
   );
 
   const handleConnect = useCallback(() => {

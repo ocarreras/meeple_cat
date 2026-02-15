@@ -63,6 +63,7 @@ class CarcassonnePlugin:
             },
         },
     }
+    disconnect_policy: ClassVar[str] = "forfeit_player"
 
     # ------------------------------------------------------------------ #
     #  Lifecycle
@@ -556,9 +557,15 @@ class CarcassonnePlugin:
 
         game_data["scores"] = scores
 
-        # Advance to next player
+        # Advance to next non-forfeited player
         player_index = phase.metadata["player_index"]
-        next_player_index = (player_index + 1) % len(players)
+        forfeited = set(game_data.get("forfeited_players", []))
+        num_players = len(players)
+        next_player_index = (player_index + 1) % num_players
+        for _ in range(num_players):
+            if players[next_player_index].player_id not in forfeited:
+                break
+            next_player_index = (next_player_index + 1) % num_players
 
         next_phase = Phase(
             name="draw_tile",
@@ -688,13 +695,61 @@ class CarcassonnePlugin:
             payload=payload,
         )
 
-    def on_player_disconnect(
+    def on_player_forfeit(
         self,
         game_data: dict,
         phase: Phase,
         player_id: PlayerId,
-    ) -> dict | None:
-        return None
+        players: list[Player],
+    ) -> TransitionResult | None:
+        """Skip a forfeited player's turn in Carcassonne.
+
+        If a tile was drawn for this player, put it back in the bag.
+        Advance to the next non-forfeited player's draw_tile phase.
+        """
+        if phase.name not in ("place_tile", "place_meeple", "score_check"):
+            return None
+
+        player_index = phase.metadata.get("player_index")
+        if player_index is None:
+            return None
+
+        # Put current tile back if one was drawn
+        if game_data["current_tile"] is not None:
+            game_data["tile_bag"].insert(0, game_data["current_tile"])
+            game_data["current_tile"] = None
+
+        game_data["last_placed_position"] = None
+
+        # Find next non-forfeited player
+        forfeited = set(game_data.get("forfeited_players", []))
+        num_players = len(players)
+        next_index = (player_index + 1) % num_players
+        for _ in range(num_players):
+            if players[next_index].player_id not in forfeited:
+                break
+            next_index = (next_index + 1) % num_players
+
+        events = [
+            Event(
+                event_type="turn_skipped",
+                player_id=player_id,
+                payload={"reason": "forfeit"},
+            ),
+        ]
+
+        next_phase = Phase(
+            name="draw_tile",
+            auto_resolve=True,
+            metadata={"player_index": next_index},
+        )
+
+        return TransitionResult(
+            game_data=game_data,
+            events=events,
+            next_phase=next_phase,
+            scores=_float_scores(game_data["scores"]),
+        )
 
 
 # ------------------------------------------------------------------ #

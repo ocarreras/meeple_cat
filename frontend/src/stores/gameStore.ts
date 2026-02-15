@@ -3,6 +3,13 @@
 import { create } from 'zustand';
 import type { PlayerView, GameOverPayload } from '@/lib/types';
 
+export interface DisconnectNotification {
+  playerId: string;
+  type: 'disconnected' | 'reconnected' | 'forfeited';
+  gracePeriod?: number;
+  timestamp: number;
+}
+
 export interface GameStore {
   // Connection state
   matchId: string | null;
@@ -16,6 +23,7 @@ export interface GameStore {
 
   // UI state
   submitting: boolean;
+  disconnectNotifications: DisconnectNotification[];
 
   // Actions
   setConnected: (connected: boolean, matchId?: string, playerId?: string) => void;
@@ -23,6 +31,8 @@ export interface GameStore {
   setGameOver: (payload: GameOverPayload) => void;
   setError: (error: string | null) => void;
   setSubmitting: (submitting: boolean) => void;
+  addDisconnectNotification: (notification: DisconnectNotification) => void;
+  removeDisconnectNotification: (playerId: string) => void;
   reset: () => void;
 }
 
@@ -34,6 +44,7 @@ const initialState = {
   gameOver: null,
   error: null,
   submitting: false,
+  disconnectNotifications: [] as DisconnectNotification[],
 };
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -66,6 +77,23 @@ export const useGameStore = create<GameStore>((set) => ({
     set({
       submitting,
     }),
+
+  addDisconnectNotification: (notification) =>
+    set((state) => ({
+      disconnectNotifications: [
+        ...state.disconnectNotifications.filter(
+          (n) => !(n.playerId === notification.playerId && n.type === 'disconnected')
+        ),
+        notification,
+      ],
+    })),
+
+  removeDisconnectNotification: (playerId) =>
+    set((state) => ({
+      disconnectNotifications: state.disconnectNotifications.filter(
+        (n) => n.playerId !== playerId
+      ),
+    })),
 
   reset: () => set(initialState),
 }));

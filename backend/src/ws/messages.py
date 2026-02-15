@@ -12,6 +12,9 @@ class ServerMessageType(str, Enum):
     GAME_OVER = "game_over"
     CONNECTED = "connected"
     PONG = "pong"
+    PLAYER_DISCONNECTED = "player_disconnected"
+    PLAYER_RECONNECTED = "player_reconnected"
+    PLAYER_FORFEITED = "player_forfeited"
 
 
 class ClientMessageType(str, Enum):

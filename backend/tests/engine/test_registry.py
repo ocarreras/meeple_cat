@@ -28,6 +28,7 @@ class MockPlugin:
     max_players: ClassVar[int] = 4
     description: ClassVar[str] = "A mock game for testing"
     config_schema: ClassVar[dict] = {}
+    disconnect_policy: ClassVar[str] = "forfeit_player"
 
     def create_initial_state(
         self,
@@ -130,13 +131,14 @@ class MockPlugin:
             payload=response.get("payload", {}),
         )
 
-    def on_player_disconnect(
+    def on_player_forfeit(
         self,
         game_data: dict,
         phase: Phase,
         player_id: PlayerId,
-    ) -> dict | None:
-        """Handle player disconnection."""
+        players: list[Player],
+    ) -> TransitionResult | None:
+        """Handle player forfeit."""
         return None
 
     def get_spectator_summary(

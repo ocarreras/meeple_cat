@@ -7,9 +7,9 @@ from pydantic import ValidationError
 
 from src.auth import decode_token
 from src.auth.ws_auth import validate_ws_ticket
-from src.engine.errors import GameNotActiveError, InvalidActionError, NotYourTurnError
+from src.engine.errors import GameNotActiveError, InvalidActionError, NotYourTurnError, PlayerForfeitedError
 from src.engine.event_store import EventStore
-from src.engine.models import Action, PlayerId
+from src.engine.models import Action, GameStatus, PlayerId
 from src.ws.messages import ClientMessage, ClientMessageType, ServerMessage, ServerMessageType
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,14 @@ async def game_websocket(
         )
         await ws.send_json(connected_msg.model_dump())
 
+        # 5b. Handle reconnection (cancel grace period timer if active)
+        if player_id in session.state.disconnected_players:
+            db_session_factory = ws.app.state.db_session_factory
+            async with db_session_factory() as db_session:
+                session._event_store = EventStore(db_session)
+                await session.handle_player_reconnect(player_id)
+                await db_session.commit()
+
         # 6. Broadcast initial views
         await session._broadcast_views()
 
@@ -120,7 +128,7 @@ async def game_websocket(
                         # Commit the transaction
                         await db_session.commit()
 
-                except (InvalidActionError, NotYourTurnError, GameNotActiveError) as e:
+                except (InvalidActionError, NotYourTurnError, GameNotActiveError, PlayerForfeitedError) as e:
                     # Send ERROR message
                     error_msg = ServerMessage(
                         type=ServerMessageType.ERROR,
@@ -149,3 +157,17 @@ async def game_websocket(
         # 8. Disconnect from connection manager
         connection_manager.disconnect_player(match_id, player_id)
         logger.info(f"Player {player_id} disconnected from match {match_id}")
+
+        # 9. Notify session for grace period handling
+        if session and session.state.status == GameStatus.ACTIVE:
+            try:
+                db_session_factory = ws.app.state.db_session_factory
+                async with db_session_factory() as db_session:
+                    session._event_store = EventStore(db_session)
+                    await session.handle_player_disconnect(player_id)
+                    await db_session.commit()
+            except Exception as e:
+                logger.error(
+                    f"Error handling disconnect for {player_id} in {match_id}: {e}",
+                    exc_info=True,
+                )

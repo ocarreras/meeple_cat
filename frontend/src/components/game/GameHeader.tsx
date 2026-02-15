@@ -50,7 +50,10 @@ export default function GameHeader({
       </div>
       <div className="flex-shrink-0 ml-2">
         <span className={`px-2 md:px-3 py-1 rounded-full text-xs md:text-sm font-medium ${
-          status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+          status === 'active' ? 'bg-green-100 text-green-800'
+          : status === 'abandoned' ? 'bg-yellow-100 text-yellow-800'
+          : status === 'finished' ? 'bg-gray-100 text-gray-800'
+          : 'bg-gray-100 text-gray-800'
         }`}>
           {status.charAt(0).toUpperCase() + status.slice(1)}
         </span>

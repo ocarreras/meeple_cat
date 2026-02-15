@@ -83,12 +83,18 @@ async def lifespan(app: FastAPI):
         broadcaster=broadcaster,
         db_session_factory=async_session_factory,
         bot_runner=bot_runner,
+        grace_period_seconds=settings.disconnect_grace_period_seconds,
     )
     app.state.session_manager = session_manager
 
     # Recover sessions
     recovered = await session_manager.recover_sessions()
     logger.info(f"Recovered {recovered} active sessions")
+
+    # Clean up stale matches (no Redis state, older than 24h)
+    cleaned = await session_manager.cleanup_stale_matches()
+    if cleaned:
+        logger.info(f"Cleaned up {cleaned} stale matches")
 
     logger.info("Server startup complete")
 

@@ -95,6 +95,8 @@ export interface PlayerView {
   valid_actions: ValidAction[];
   viewer_id: PlayerId | null;
   is_spectator: boolean;
+  forfeited_players: string[];
+  disconnected_players: string[];
 }
 
 // Valid action types for Carcassonne
@@ -124,7 +126,10 @@ export type ServerMessageType =
   | "error"
   | "pong"
   | "game_over"
-  | "action_committed";
+  | "action_committed"
+  | "player_disconnected"
+  | "player_reconnected"
+  | "player_forfeited";
 
 export interface ConnectedPayload {
   match_id: MatchId;
@@ -146,9 +151,22 @@ export interface GameOverPayload {
   reason: string;
 }
 
+export interface PlayerDisconnectedPayload {
+  player_id: PlayerId;
+  grace_period_seconds: number;
+}
+
+export interface PlayerReconnectedPayload {
+  player_id: PlayerId;
+}
+
+export interface PlayerForfeitedPayload {
+  player_id: PlayerId;
+}
+
 export interface ServerMessage {
   type: ServerMessageType;
-  payload: ConnectedPayload | StateUpdatePayload | ErrorPayload | GameOverPayload | Record<string, unknown>;
+  payload: ConnectedPayload | StateUpdatePayload | ErrorPayload | GameOverPayload | PlayerDisconnectedPayload | PlayerReconnectedPayload | PlayerForfeitedPayload | Record<string, unknown>;
 }
 
 // Client to Server messages
@@ -296,6 +314,33 @@ export function isGameOverPayload(payload: unknown): payload is GameOverPayload 
     payload !== null &&
     'winners' in payload &&
     'final_scores' in payload
+  );
+}
+
+export function isPlayerDisconnectedPayload(payload: unknown): payload is PlayerDisconnectedPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'player_id' in payload &&
+    'grace_period_seconds' in payload
+  );
+}
+
+export function isPlayerReconnectedPayload(payload: unknown): payload is PlayerReconnectedPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'player_id' in payload &&
+    !('grace_period_seconds' in payload) &&
+    !('winners' in payload)
+  );
+}
+
+export function isPlayerForfeitedPayload(payload: unknown): payload is PlayerForfeitedPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'player_id' in payload
   );
 }
 

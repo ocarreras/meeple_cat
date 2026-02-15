@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
@@ -45,12 +46,14 @@ class GameSessionManager:
         broadcaster: Broadcaster,
         db_session_factory: Callable[[], AsyncSession],
         bot_runner: BotRunner | None = None,
+        grace_period_seconds: float = 30.0,
     ) -> None:
         self._registry = registry
         self._state_store = state_store
         self._broadcaster = broadcaster
         self._db_session_factory = db_session_factory
         self._bot_runner = bot_runner
+        self._grace_period_seconds = grace_period_seconds
         self._sessions: dict[str, GameSession] = {}
 
     async def create_session(
@@ -97,6 +100,8 @@ class GameSessionManager:
                 event_store=event_store,
                 state_store=self._state_store,
                 broadcaster=self._broadcaster,
+                db_session_factory=self._db_session_factory,
+                grace_period_seconds=self._grace_period_seconds,
             )
 
             # Persist initial events
@@ -168,6 +173,8 @@ class GameSessionManager:
                     event_store=None,  # Will be set per-action
                     state_store=self._state_store,
                     broadcaster=self._broadcaster,
+                    db_session_factory=self._db_session_factory,
+                    grace_period_seconds=self._grace_period_seconds,
                 )
                 # Recover sequence number from DB
                 async with self._db_session_factory() as db_session:
@@ -179,6 +186,10 @@ class GameSessionManager:
                 self._sessions[match_id] = session
                 recovered += 1
                 logger.info(f"Recovered session for match {match_id}")
+
+                # Recover disconnect timers
+                await self._recover_disconnect_timers(session)
+
                 # Trigger bot move if it was a bot's turn when server restarted
                 if self._bot_runner:
                     self._bot_runner.schedule_bot_move_if_needed(session)
@@ -187,6 +198,99 @@ class GameSessionManager:
 
         logger.info(f"Recovered {recovered} active sessions")
         return recovered
+
+    async def _recover_disconnect_timers(self, session: GameSession) -> None:
+        """Restart grace period timers for players who were disconnected before restart."""
+        if not session.state.disconnected_players:
+            return
+
+        now = datetime.now(timezone.utc).timestamp()
+
+        for player_id, disconnect_ts in list(session.state.disconnected_players.items()):
+            elapsed = now - disconnect_ts
+            remaining = self._grace_period_seconds - elapsed
+
+            if remaining <= 0:
+                # Grace period already expired during downtime
+                logger.info(
+                    f"Grace period expired during downtime for {player_id} "
+                    f"in match {session.match_id}, applying forfeit/abandon"
+                )
+                try:
+                    async with self._db_session_factory() as db_session:
+                        es = EventStore(db_session)
+                        session._event_store = es
+                        async with session._lock:
+                            if session.state.status == GameStatus.ACTIVE:
+                                await session._handle_forfeit_or_abandon(player_id)
+                        await db_session.commit()
+                except Exception as e:
+                    logger.error(
+                        f"Failed to apply post-downtime forfeit for {player_id} "
+                        f"in match {session.match_id}: {e}",
+                        exc_info=True,
+                    )
+            else:
+                # Restart timer with remaining time
+                logger.info(
+                    f"Restarting grace timer for {player_id} in match "
+                    f"{session.match_id} with {remaining:.1f}s remaining"
+                )
+                session._start_grace_timer(player_id, remaining)
+
+    async def cleanup_stale_matches(self) -> int:
+        """Mark old active matches without Redis state as abandoned.
+
+        Called once at startup after recover_sessions().
+        Returns the number of matches cleaned up.
+        """
+        try:
+            from sqlalchemy import select, update
+            from src.models.match import Match, MatchPlayer
+
+            # Get all match IDs that have active Redis state
+            active_redis_ids = set(await self._state_store.list_active_matches())
+
+            cleaned = 0
+            async with self._db_session_factory() as db_session:
+                # Find active matches older than 24 hours
+                cutoff = datetime.now(timezone.utc).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                stmt = select(Match).where(
+                    Match.status == "active",
+                    Match.started_at < cutoff,
+                )
+                result = await db_session.execute(stmt)
+                stale_matches = result.scalars().all()
+
+                for match in stale_matches:
+                    match_id_str = str(match.id)
+                    if match_id_str in active_redis_ids:
+                        continue  # Has active session, skip
+
+                    match.status = "abandoned"
+                    match.ended_at = datetime.now(timezone.utc)
+
+                    # Update all players
+                    mp_stmt = select(MatchPlayer).where(
+                        MatchPlayer.match_id == match.id
+                    )
+                    mp_result = await db_session.execute(mp_stmt)
+                    for mp in mp_result.scalars().all():
+                        mp.result = "abandoned"
+
+                    cleaned += 1
+                    logger.info(f"Cleaned up stale match {match_id_str}")
+
+                if cleaned > 0:
+                    await db_session.commit()
+                    logger.info(f"Cleaned up {cleaned} stale active matches")
+
+            return cleaned
+        except Exception as e:
+            logger.error(f"Failed to clean up stale matches: {e}", exc_info=True)
+            return 0
 
     def remove_session(self, match_id: MatchId) -> None:
         """Remove a session from memory (e.g., after game finishes)."""

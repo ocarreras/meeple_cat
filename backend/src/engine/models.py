@@ -109,6 +109,8 @@ class GameState(BaseModel):
     game_data: dict = Field(default_factory=dict)
     scores: dict[str, float] = Field(default_factory=dict)  # PlayerId -> score
     committed_actions: dict[str, Action] = Field(default_factory=dict)
+    forfeited_players: list[str] = Field(default_factory=list)
+    disconnected_players: dict[str, float] = Field(default_factory=dict)  # PlayerId -> UTC timestamp
 
 # --- Transition Result ---
 class GameResult(BaseModel):
@@ -138,3 +140,5 @@ class PlayerView(BaseModel):
     valid_actions: list[dict] = Field(default_factory=list)
     viewer_id: PlayerId | None = None
     is_spectator: bool = False
+    forfeited_players: list[str] = Field(default_factory=list)
+    disconnected_players: list[str] = Field(default_factory=list)

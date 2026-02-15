@@ -13,6 +13,10 @@ from src.engine.models import (
     TransitionResult,
 )
 
+# Disconnect policies — declared as ClassVar on each game plugin
+DISCONNECT_POLICY_ABANDON_ALL = "abandon_all"
+DISCONNECT_POLICY_FORFEIT_PLAYER = "forfeit_player"
+
 
 @runtime_checkable
 class GamePlugin(Protocol):
@@ -24,6 +28,7 @@ class GamePlugin(Protocol):
     max_players: ClassVar[int]
     description: ClassVar[str]
     config_schema: ClassVar[dict]
+    disconnect_policy: ClassVar[str]  # DISCONNECT_POLICY_ABANDON_ALL or DISCONNECT_POLICY_FORFEIT_PLAYER
 
     def create_initial_state(
         self,
@@ -95,12 +100,19 @@ class GamePlugin(Protocol):
     ) -> Action:
         ...
 
-    def on_player_disconnect(
+    def on_player_forfeit(
         self,
         game_data: dict,
         phase: Phase,
         player_id: PlayerId,
-    ) -> dict | None:
+        players: list[Player],
+    ) -> TransitionResult | None:
+        """Called when a forfeited player's turn comes up.
+
+        The plugin should advance past the forfeited player's turn.
+        Return a TransitionResult to skip their turn, or None if
+        the engine should handle it generically.
+        """
         ...
 
     def get_spectator_summary(

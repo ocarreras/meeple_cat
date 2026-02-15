@@ -27,6 +27,11 @@ class NotYourTurnError(GameEngineError):
     pass
 
 
+class PlayerForfeitedError(GameEngineError):
+    """Forfeited player tried to act."""
+    pass
+
+
 class PluginError(GameEngineError):
     """Game plugin raised an unexpected error."""
 
