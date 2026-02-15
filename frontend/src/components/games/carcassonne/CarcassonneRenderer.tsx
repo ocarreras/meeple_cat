@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PlayerView, CarcassonneGameData, TilePlacement, ValidAction, isTilePlacementAction, isMeeplePlacementAction, isSkipAction } from '@/lib/types';
 import { getValidMeepleSpots, MeepleSpotInfo } from '@/lib/meeplePlacements';
 import { useGameStore } from '@/stores/gameStore';
@@ -27,6 +28,7 @@ export default function CarcassonneRenderer({
   isMyTurn,
   phase,
 }: CarcassonneRendererProps) {
+  const { t } = useTranslation();
   const [selectedCell, setSelectedCell] = useState<{ x: number; y: number } | null>(null);
   const [rotationIndex, setRotationIndex] = useState(0);
   const [uiPhase, setUiPhase] = useState<UIPhase>('selecting_tile');
@@ -245,15 +247,15 @@ export default function CarcassonneRenderer({
 
   // Mobile compact status text
   const getMobileStatus = (): string => {
-    if (isGameOver) return 'Game Over';
-    if (!isMyTurn) return "Opponent's turn";
-    if (uiPhase === 'confirming_meeple') return 'Place or skip meeple';
-    if (uiPhase === 'waiting') return 'Waiting...';
+    if (isGameOver) return t('game.status.gameOver');
+    if (!isMyTurn) return t('game.status.opponentTurn');
+    if (uiPhase === 'confirming_meeple') return t('game.status.placeOrSkip');
+    if (uiPhase === 'waiting') return t('game.status.waiting');
     if (phase === 'place_tile') {
-      return selectedCell ? 'Tap to rotate, confirm' : 'Tap a cell to place';
+      return selectedCell ? t('game.status.tapToRotate') : t('game.status.tapToPlace');
     }
-    if (phase === 'place_meeple') return 'Place or skip meeple';
-    return 'Waiting...';
+    if (phase === 'place_meeple') return t('game.status.placeOrSkip');
+    return t('game.status.waiting');
   };
 
   // Determine status text for TilePreview
@@ -329,7 +331,7 @@ export default function CarcassonneRenderer({
               </div>
             ))}
             <span className="text-xs text-gray-400">|</span>
-            <span className="text-xs text-gray-500">{gameData.tiles_remaining} left</span>
+            <span className="text-xs text-gray-500">{t('game.tilesLeft', { count: gameData.tiles_remaining })}</span>
             <svg
               className={`w-4 h-4 text-gray-400 transition-transform ${panelExpanded ? 'rotate-180' : ''}`}
               fill="none" viewBox="0 0 24 24" stroke="currentColor"
@@ -363,7 +365,7 @@ export default function CarcassonneRenderer({
 
           <div className="bg-white rounded-lg border shadow-sm px-4 py-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-600">Tiles remaining:</span>
+              <span className="text-sm font-medium text-gray-600">{t('game.tilesRemainingLabel')}</span>
               <span className="text-lg font-bold">{gameData.tiles_remaining || 0}</span>
             </div>
           </div>
@@ -395,7 +397,7 @@ export default function CarcassonneRenderer({
               document.body.removeChild(ta);
             }}
           >
-            Copy debug state
+            {t('game.copyDebugState')}
           </button>
         </div>
       </div>

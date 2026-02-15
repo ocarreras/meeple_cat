@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { useLobbyStore } from '@/stores/lobbyStore';
 import {
@@ -18,6 +19,7 @@ import type { Room } from '@/lib/types';
 export default function RoomPage() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useTranslation();
   const roomId = params.roomId as string;
 
   const { user, token, initialized } = useAuthStore();
@@ -63,7 +65,7 @@ export default function RoomPage() {
           router.push(`/game/${r.match_id}${params}`);
         }
       } catch {
-        setError('Room not found');
+        setError(t('room.notFound'));
       }
     };
 
@@ -82,7 +84,7 @@ export default function RoomPage() {
       setRoom(r);
       setCurrentRoom(r, seat_index);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to join');
+      setError(err instanceof Error ? err.message : t('room.failedJoin'));
     } finally {
       setLoading(false);
     }
@@ -95,7 +97,7 @@ export default function RoomPage() {
       setCurrentRoom(null);
       router.push('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to leave');
+      setError(err instanceof Error ? err.message : t('room.failedLeave'));
     } finally {
       setLoading(false);
     }
@@ -108,7 +110,7 @@ export default function RoomPage() {
       const mySeat = r.seats.find((s) => s.user_id === userId);
       setCurrentRoom(r, mySeat?.seat_index ?? currentSeatIndex);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to toggle ready');
+      setError(err instanceof Error ? err.message : t('room.failedReady'));
     }
   };
 
@@ -118,7 +120,7 @@ export default function RoomPage() {
       setRoom(r);
       setCurrentRoom(r, currentSeatIndex);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add bot');
+      setError(err instanceof Error ? err.message : t('room.failedBot'));
     }
   };
 
@@ -131,7 +133,7 @@ export default function RoomPage() {
       const params = gameToken ? `?token=${gameToken}` : '';
       router.push(`/game/${match_id}${params}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start');
+      setError(err instanceof Error ? err.message : t('room.failedStart'));
       setLoading(false);
     }
   };
@@ -156,11 +158,11 @@ export default function RoomPage() {
               href="/"
               className="text-blue-600 hover:text-blue-700 underline"
             >
-              Back to lobby
+              {t('room.backToLobby')}
             </a>
           </div>
         ) : (
-          <div className="text-gray-500">Loading room...</div>
+          <div className="text-gray-500">{t('room.loadingRoom')}</div>
         )}
       </div>
     );

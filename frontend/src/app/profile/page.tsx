@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { getMatchHistory } from '@/lib/api';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import type { MatchHistoryEntry } from '@/lib/types';
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const { user, initialized } = useAuthStore();
   const [matches, setMatches] = useState<MatchHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,11 +55,12 @@ export default function ProfilePage() {
             onClick={() => router.push('/')}
             className="text-gray-500 hover:text-gray-700 transition"
           >
-            &larr; Back
+            &larr; {t('common.back')}
           </button>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-            Profile
+            {t('profile.title')}
           </h1>
+          <LanguageSwitcher />
         </div>
 
         {/* Profile card */}
@@ -78,7 +82,7 @@ export default function ProfilePage() {
                 {user.displayName}
               </h2>
               <p className="text-gray-500 text-sm">
-                {user.isGuest ? 'Guest account' : 'Signed in'}
+                {user.isGuest ? t('profile.guestAccount') : t('profile.signedIn')}
               </p>
             </div>
           </div>
@@ -87,14 +91,14 @@ export default function ProfilePage() {
         {/* Match history */}
         <div className="bg-white rounded-lg shadow-lg p-6">
           <h3 className="text-lg font-bold text-gray-800 mb-4">
-            Match History
+            {t('profile.matchHistory')}
           </h3>
 
           {loading ? (
-            <p className="text-gray-500 text-sm">Loading matches...</p>
+            <p className="text-gray-500 text-sm">{t('profile.loadingMatches')}</p>
           ) : matches.length === 0 ? (
             <p className="text-gray-500 text-sm">
-              No matches yet. Play a game to see your history here.
+              {t('profile.noMatches')}
             </p>
           ) : (
             <div className="space-y-3">
@@ -122,14 +126,14 @@ export default function ProfilePage() {
                     </div>
                     {match.score !== null && (
                       <span className="text-sm font-medium text-gray-600">
-                        Score: {match.score}
+                        {t('profile.score', { score: match.score })}
                       </span>
                     )}
                   </div>
 
                   <div className="text-sm text-gray-500">
                     <span>
-                      Players:{' '}
+                      {t('profile.playersLabel')}{' '}
                       {match.players
                         .map((p) => p.display_name)
                         .join(', ')}
@@ -138,7 +142,7 @@ export default function ProfilePage() {
 
                   {match.started_at && (
                     <div className="text-xs text-gray-400 mt-1">
-                      {new Date(match.started_at).toLocaleDateString(undefined, {
+                      {new Date(match.started_at).toLocaleDateString(i18n.language, {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',

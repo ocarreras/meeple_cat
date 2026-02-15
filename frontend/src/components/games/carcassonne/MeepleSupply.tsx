@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
 import { Player } from '@/lib/types';
 
 interface MeepleSupplyProps {
@@ -10,11 +11,12 @@ interface MeepleSupplyProps {
 const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
 
 export default function MeepleSupply({ meepleSupply, players }: MeepleSupplyProps) {
+  const { t } = useTranslation();
   const sortedPlayers = [...players].sort((a, b) => a.seat_index - b.seat_index);
 
   return (
     <div className="bg-white rounded-lg border shadow-sm">
-      <div className="px-4 py-2 border-b font-semibold">Meeples</div>
+      <div className="px-4 py-2 border-b font-semibold">{t('game.meeples')}</div>
       <div className="p-3 space-y-2">
         {sortedPlayers.map((player) => {
           const playerColor = PLAYER_COLORS[player.seat_index % PLAYER_COLORS.length];

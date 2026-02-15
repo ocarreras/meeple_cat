@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { useGameStore } from '@/stores/gameStore';
 import { useGameConnection } from '@/hooks/useGameConnection';
@@ -11,11 +12,12 @@ import ConnectionStatus from '@/components/game/ConnectionStatus';
 import type { ActionPayload } from '@/lib/types';
 
 function LoadingSpinner() {
+  const { t } = useTranslation();
   return (
     <div className="h-dvh flex items-center justify-center bg-gray-100">
       <div className="text-center">
         <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600"></div>
-        <p className="mt-4 text-gray-600 text-lg">Loading game...</p>
+        <p className="mt-4 text-gray-600 text-lg">{t('game.loadingGame')}</p>
       </div>
     </div>
   );

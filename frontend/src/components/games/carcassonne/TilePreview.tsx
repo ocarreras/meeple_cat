@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { preloadTileImages } from '@/lib/tileImages';
 
 interface TilePreviewProps {
@@ -19,6 +20,7 @@ export default function TilePreview({
   hasSelection,
 }: TilePreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { t } = useTranslation();
   const [tileImages, setTileImages] = useState<Map<string, HTMLImageElement> | null>(null);
 
   useEffect(() => {
@@ -47,21 +49,21 @@ export default function TilePreview({
   }, [currentTile, selectedRotation, tileImages]);
 
   const getStatusText = () => {
-    if (!currentTile) return 'Drawing tile...';
-    if (!isMyTurn) return 'Waiting for opponent...';
+    if (!currentTile) return t('game.status.drawingTile');
+    if (!isMyTurn) return t('game.status.waitingOpponent');
     if (phase === 'place_tile') {
-      if (hasSelection) return 'Click cell to rotate, then confirm with checkmark.';
-      return 'Click a highlighted cell to place';
+      if (hasSelection) return t('game.status.clickToRotate');
+      return t('game.status.clickToPlace');
     }
-    if (phase === 'confirming_meeple') return 'Select a meeple spot on the tile, or skip.';
-    if (phase === 'waiting') return 'Waiting for server...';
-    if (phase === 'place_meeple') return 'Select a meeple spot on the tile, or skip.';
+    if (phase === 'confirming_meeple') return t('game.status.selectMeeple');
+    if (phase === 'waiting') return t('game.status.waitingServer');
+    if (phase === 'place_meeple') return t('game.status.selectMeeple');
     return '';
   };
 
   return (
     <div className="bg-white rounded-lg border shadow-sm">
-      <div className="px-4 py-2 border-b font-semibold">Current Tile</div>
+      <div className="px-4 py-2 border-b font-semibold">{t('game.currentTile')}</div>
       <div className="p-4">
         <div className="flex flex-col items-center gap-3">
           {currentTile ? (
@@ -73,7 +75,7 @@ export default function TilePreview({
             />
           ) : (
             <div className="w-[120px] h-[120px] border rounded bg-gray-100 flex items-center justify-center">
-              <span className="text-gray-400 text-sm">No tile</span>
+              <span className="text-gray-400 text-sm">{t('game.noTile')}</span>
             </div>
           )}
           <p className="text-sm text-center text-gray-600 font-medium">

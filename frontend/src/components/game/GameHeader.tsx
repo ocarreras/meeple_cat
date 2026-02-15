@@ -1,21 +1,13 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
+
 interface GameHeaderProps {
   phase: string;
   tilesRemaining: number;
   currentPlayerName: string;
   isMyTurn: boolean;
   status: string;
-}
-
-function formatPhase(phase: string): string {
-  const phaseMap: Record<string, string> = {
-    'draw_tile': 'Drawing Tile',
-    'place_tile': 'Place Tile',
-    'place_meeple': 'Place Meeple',
-    'game_over': 'Game Over',
-  };
-  return phaseMap[phase] || phase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 export default function GameHeader({
@@ -25,22 +17,34 @@ export default function GameHeader({
   isMyTurn,
   status
 }: GameHeaderProps) {
+  const { t } = useTranslation();
+
+  const formatPhase = (phase: string): string => {
+    const phaseMap: Record<string, string> = {
+      'draw_tile': t('game.phase.drawTile'),
+      'place_tile': t('game.phase.placeTile'),
+      'place_meeple': t('game.phase.placeMeeple'),
+      'game_over': t('game.phase.gameOver'),
+    };
+    return phaseMap[phase] || phase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  };
+
   return (
     <div className="bg-white border-b shadow-sm px-3 md:px-6 py-2 md:py-3 flex items-center justify-between">
       <div className="flex items-center gap-2 md:gap-6 flex-wrap min-w-0">
         <div className="hidden md:block">
-          <span className="text-sm text-gray-500">Phase:</span>
+          <span className="text-sm text-gray-500">{t('game.phase')}</span>
           <span className="ml-2 font-semibold">{formatPhase(phase)}</span>
         </div>
         <div className="hidden md:block">
-          <span className="text-sm text-gray-500">Tiles Remaining:</span>
+          <span className="text-sm text-gray-500">{t('game.tilesRemaining')}</span>
           <span className="ml-2 font-semibold">{tilesRemaining}</span>
         </div>
         <div>
-          <span className="hidden md:inline text-sm text-gray-500">Current Turn:</span>
+          <span className="hidden md:inline text-sm text-gray-500">{t('game.currentTurn')}</span>
           <span className="ml-0 md:ml-2 font-semibold text-sm md:text-base">
             {currentPlayerName}
-            {isMyTurn && <span className="text-blue-600 ml-1">(You)</span>}
+            {isMyTurn && <span className="text-blue-600 ml-1">{t('common.you')}</span>}
           </span>
         </div>
       </div>

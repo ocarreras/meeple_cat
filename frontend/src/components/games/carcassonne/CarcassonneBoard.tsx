@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CarcassonneGameData, TilePlacement, Player } from '@/lib/types';
 import { preloadTileImages } from '@/lib/tileImages';
 import { MeepleSpotInfo, getMeepleSpotsForTile, MEEPLE_TYPE_MONASTERY, MEEPLE_TYPE_CITY, MEEPLE_TYPE_ROAD, MEEPLE_TYPE_FIELD } from '@/lib/meeplePlacements';
@@ -41,13 +42,6 @@ const SPOT_COLORS: Record<number, string> = {
   [MEEPLE_TYPE_FIELD]: '#28A745',
 };
 
-const MEEPLE_TYPE_NAMES: Record<number, string> = {
-  [MEEPLE_TYPE_MONASTERY]: 'Monastery',
-  [MEEPLE_TYPE_CITY]: 'City',
-  [MEEPLE_TYPE_ROAD]: 'Road',
-  [MEEPLE_TYPE_FIELD]: 'Field',
-};
-
 const BUTTON_SIZE = 48;
 
 interface Camera {
@@ -84,6 +78,7 @@ export default function CarcassonneBoard({
   playerSeatIndex,
   confirmedTile,
 }: CarcassonneBoardProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tileImages, setTileImages] = useState<Map<string, HTMLImageElement> | null>(null);
@@ -499,7 +494,7 @@ export default function CarcassonneBoard({
                 background: 'none',
                 padding: 0,
               }}
-              title="Confirm tile placement"
+              title={t('game.confirmTile')}
             >
               <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
             </button>
@@ -514,7 +509,16 @@ export default function CarcassonneBoard({
                 const spotX = (spotInfo.column / 100) * tileSizePx + tileSizePx / 2;
                 const spotY = (spotInfo.row / 100) * tileSizePx + tileSizePx / 2;
                 const spotSize = Math.max(24, tileSizePx * 0.22);
-                const typeName = MEEPLE_TYPE_NAMES[spotInfo.type] || 'Unknown';
+                const getMeepleTypeName = (type: number): string => {
+                  const keyMap: Record<number, string> = {
+                    [MEEPLE_TYPE_MONASTERY]: 'meepleType.monastery',
+                    [MEEPLE_TYPE_CITY]: 'meepleType.city',
+                    [MEEPLE_TYPE_ROAD]: 'meepleType.road',
+                    [MEEPLE_TYPE_FIELD]: 'meepleType.field',
+                  };
+                  return t(keyMap[type] || 'meepleType.field');
+                };
+                const typeName = getMeepleTypeName(spotInfo.type);
 
                 return (
                   <button
@@ -572,7 +576,7 @@ export default function CarcassonneBoard({
                   background: 'none',
                   padding: 0,
                 }}
-                title="Confirm meeple placement"
+                title={t('game.confirmMeeple')}
               >
                 <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
               </button>
@@ -592,7 +596,7 @@ export default function CarcassonneBoard({
                   background: 'none',
                   padding: 0,
                 }}
-                title="Skip meeple"
+                title={t('game.skipMeeple')}
               >
                 <img src="/icon-reject-48.png" alt="Skip" style={{ width: '100%', height: '100%' }} />
               </button>
@@ -618,10 +622,20 @@ export default function CarcassonneBoard({
           let screenY: number;
           let typeName = feature.feature_type;
 
+          const getMeepleTypeName = (type: number): string => {
+            const keyMap: Record<number, string> = {
+              [MEEPLE_TYPE_MONASTERY]: 'meepleType.monastery',
+              [MEEPLE_TYPE_CITY]: 'meepleType.city',
+              [MEEPLE_TYPE_ROAD]: 'meepleType.road',
+              [MEEPLE_TYPE_FIELD]: 'meepleType.field',
+            };
+            return t(keyMap[type] || 'meepleType.field');
+          };
+
           if (spotInfo) {
             screenX = tilePos.x + (spotInfo.column / 100) * tileSizePx + tileSizePx / 2;
             screenY = tilePos.y + (spotInfo.row / 100) * tileSizePx + tileSizePx / 2;
-            typeName = MEEPLE_TYPE_NAMES[spotInfo.type] || feature.feature_type;
+            typeName = getMeepleTypeName(spotInfo.type);
           } else {
             screenX = tilePos.x + tileSizePx / 2;
             screenY = tilePos.y + tileSizePx / 2;
@@ -665,9 +679,9 @@ export default function CarcassonneBoard({
       `}</style>
 
       <div className="absolute bottom-2 left-2 md:bottom-4 md:left-4 bg-white/80 px-2 py-1 md:px-3 md:py-2 rounded shadow text-xs md:text-sm">
-        <div>Zoom: {(camera.zoom * 100).toFixed(0)}%</div>
+        <div>{t('game.zoom', { level: (camera.zoom * 100).toFixed(0) })}</div>
         <div className="text-xs text-gray-500">
-          {isTouchDevice ? 'Pinch to zoom, drag to pan' : 'Scroll to zoom, drag to pan'}
+          {isTouchDevice ? t('game.controlsTouch') : t('game.controlsMouse')}
         </div>
       </div>
     </div>

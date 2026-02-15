@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
 import { Player } from '@/lib/types';
 
 interface ScoreBoardProps {
@@ -12,11 +13,12 @@ interface ScoreBoardProps {
 const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
 
 export default function ScoreBoard({ players, scores, currentPlayerId, viewerId }: ScoreBoardProps) {
+  const { t } = useTranslation();
   const sortedPlayers = [...players].sort((a, b) => a.seat_index - b.seat_index);
 
   return (
     <div className="bg-white rounded-lg border shadow-sm">
-      <div className="px-4 py-2 border-b font-semibold">Scores</div>
+      <div className="px-4 py-2 border-b font-semibold">{t('game.scores')}</div>
       <div className="divide-y">
         {sortedPlayers.map((player) => {
           const isCurrentPlayer = player.player_id === currentPlayerId;
@@ -37,7 +39,7 @@ export default function ScoreBoard({ players, scores, currentPlayerId, viewerId 
                 />
                 <span className="font-medium">
                   {player.display_name}
-                  {isViewer && <span className="text-gray-500 text-sm ml-1">(You)</span>}
+                  {isViewer && <span className="text-gray-500 text-sm ml-1">{t('common.you')}</span>}
                 </span>
               </div>
               <div className="font-semibold text-lg">

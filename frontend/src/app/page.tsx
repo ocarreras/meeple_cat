@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { useLobbyStore } from '@/stores/lobbyStore';
 import {
@@ -19,12 +20,14 @@ import {
 import RoomCard from '@/components/lobby/RoomCard';
 import RoomDetail from '@/components/lobby/RoomDetail';
 import CreateRoomModal from '@/components/lobby/CreateRoomModal';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import type { Room } from '@/lib/types';
 
 const MAX_TILES = 71;
 
 export default function LobbyPage() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   // Auth state from authStore
   const { user, token: authToken, initialized, logout: authLogout, setUser, setToken } = useAuthStore();
@@ -116,7 +119,7 @@ export default function LobbyPage() {
         setCurrentRoom(room, 0);
         setShowCreateModal(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to create room');
+        setError(err instanceof Error ? err.message : t('lobby.failedCreate'));
       } finally {
         setLoading(false);
       }
@@ -134,7 +137,7 @@ export default function LobbyPage() {
         setCurrentRoom(room, seat_index);
         setViewingRoom(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to join room');
+        setError(err instanceof Error ? err.message : t('lobby.failedJoin'));
       } finally {
         setLoading(false);
       }
@@ -150,7 +153,7 @@ export default function LobbyPage() {
       await leaveRoom(currentRoom.room_id, token ?? undefined);
       setCurrentRoom(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to leave room');
+      setError(err instanceof Error ? err.message : t('lobby.failedLeave'));
     } finally {
       setLoading(false);
     }
@@ -164,7 +167,7 @@ export default function LobbyPage() {
       const mySeat = room.seats.find((s) => s.user_id === userId);
       setCurrentRoom(room, mySeat?.seat_index ?? currentSeatIndex);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to toggle ready');
+      setError(err instanceof Error ? err.message : t('lobby.failedReady'));
     }
   }, [token, currentRoom, userId, currentSeatIndex, setError, setCurrentRoom]);
 
@@ -175,7 +178,7 @@ export default function LobbyPage() {
       const room = await addBot(currentRoom.room_id, 'random', token ?? undefined);
       setCurrentRoom(room, currentSeatIndex);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add bot');
+      setError(err instanceof Error ? err.message : t('lobby.failedBot'));
     }
   }, [token, currentRoom, currentSeatIndex, setError, setCurrentRoom]);
 
@@ -190,7 +193,7 @@ export default function LobbyPage() {
       const params = gameToken ? `?token=${gameToken}` : '';
       router.push(`/game/${match_id}${params}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start game');
+      setError(err instanceof Error ? err.message : t('lobby.failedStart'));
       setLoading(false);
     }
   }, [token, currentRoom, userId, setLoading, setError, router]);
@@ -246,7 +249,7 @@ export default function LobbyPage() {
 
       router.push(`/game/${match_id}?token=${qpToken}`);
     } catch (err) {
-      setQuickPlayError(err instanceof Error ? err.message : 'Failed to start game');
+      setQuickPlayError(err instanceof Error ? err.message : t('quickPlay.failed'));
       setQuickPlayLoading(false);
     }
   };
@@ -272,15 +275,15 @@ export default function LobbyPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-              Game Lobby
+              {t('lobby.title')}
             </h1>
             <p className="text-gray-500 text-sm">
-              Playing as{' '}
+              {t('lobby.playingAs')}{' '}
               <span className="font-medium text-gray-700">
                 {displayName}
               </span>
               {user.isGuest && (
-                <span className="text-gray-400 ml-1">(guest)</span>
+                <span className="text-gray-400 ml-1">{t('common.guest')}</span>
               )}
             </p>
           </div>
@@ -289,27 +292,28 @@ export default function LobbyPage() {
               onClick={() => router.push('/profile')}
               className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition text-sm border border-gray-300"
             >
-              Profile
+              {t('lobby.profile')}
             </button>
             <button
               onClick={() => setShowQuickPlay(true)}
               className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition text-sm border border-gray-300"
             >
-              Quick Play
+              {t('lobby.quickPlay')}
             </button>
             <button
               onClick={() => setShowCreateModal(true)}
               disabled={!!currentRoom}
               className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition text-sm"
             >
-              Create Room
+              {t('lobby.createRoom')}
             </button>
             <button
               onClick={handleLogout}
               className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-500 font-medium rounded-lg transition text-sm border border-gray-300"
             >
-              Sign Out
+              {t('common.signOut')}
             </button>
+            <LanguageSwitcher />
           </div>
         </div>
 
@@ -332,16 +336,15 @@ export default function LobbyPage() {
             className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4 text-sm cursor-pointer hover:bg-blue-100 transition"
             onClick={() => setViewingRoom(null)}
           >
-            You are in a room ({currentRoom.creator_name}&apos;s{' '}
-            {currentRoom.game_id}). Click here or the room below to manage it.
+            {t('lobby.youAreInRoom', { creator: currentRoom.creator_name, game: currentRoom.game_id })}
           </div>
         )}
 
         {/* Room grid */}
         {rooms.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
-            <p className="text-lg mb-2">No open rooms</p>
-            <p className="text-sm">Create one to get started!</p>
+            <p className="text-lg mb-2">{t('lobby.noRooms')}</p>
+            <p className="text-sm">{t('lobby.noRoomsHint')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -396,7 +399,7 @@ export default function LobbyPage() {
           <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-gray-800">
-                Quick Play — Carcassonne
+                {t('quickPlay.title')}
               </h2>
               <button
                 onClick={() => setShowQuickPlay(false)}
@@ -408,13 +411,13 @@ export default function LobbyPage() {
 
             <form onSubmit={handleQuickPlay} className="space-y-6">
               <p className="text-gray-600">
-                Playing as <span className="font-medium">{user.displayName}</span>
+                {t('quickPlay.playingAs', { name: user.displayName })}
               </p>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    Tiles
+                    {t('quickPlay.tiles')}
                   </label>
                   <span className="text-sm text-gray-500">
                     {tileCount} / {MAX_TILES}
@@ -430,7 +433,7 @@ export default function LobbyPage() {
                 />
                 <div className="flex justify-between text-xs text-gray-400 mt-1">
                   <span>4</span>
-                  <span>Full game ({MAX_TILES})</span>
+                  <span>{t('quickPlay.fullGame', { count: MAX_TILES })}</span>
                 </div>
               </div>
 
@@ -445,7 +448,7 @@ export default function LobbyPage() {
                 disabled={quickPlayLoading}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-4 rounded-lg transition"
               >
-                {quickPlayLoading ? 'Starting...' : 'Play vs Bot'}
+                {quickPlayLoading ? t('quickPlay.starting') : t('quickPlay.playVsBot')}
               </button>
             </form>
           </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import type { Room, RoomSeat } from '@/lib/types';
+import { useTranslation } from 'react-i18next';
 
 interface RoomDetailProps {
   room: Room;
@@ -28,6 +29,7 @@ function SeatRow({
   seat: RoomSeat;
   isCurrentUser: boolean;
 }) {
+  const { t } = useTranslation();
   const isEmpty = !seat.user_id && !seat.is_bot;
 
   return (
@@ -55,13 +57,13 @@ function SeatRow({
         <div>
           <div className="font-medium text-gray-800">
             {isEmpty
-              ? 'Empty seat'
+              ? t('room.emptySeat')
               : seat.is_bot
                 ? `Bot (${seat.bot_id})`
                 : seat.display_name}
           </div>
           {isCurrentUser && (
-            <div className="text-xs text-blue-600">You</div>
+            <div className="text-xs text-blue-600">{t('common.you')}</div>
           )}
         </div>
       </div>
@@ -73,7 +75,7 @@ function SeatRow({
               : 'bg-yellow-100 text-yellow-700'
           }`}
         >
-          {seat.is_ready ? 'Ready' : 'Not ready'}
+          {seat.is_ready ? t('common.ready') : t('common.notReady')}
         </div>
       )}
     </div>
@@ -93,6 +95,7 @@ export default function RoomDetail({
   onJoin,
   onClose,
 }: RoomDetailProps) {
+  const { t } = useTranslation();
   const isCreator = userId === room.created_by;
   const occupied = room.seats.filter((s) => s.user_id || s.is_bot);
   const allReady = occupied.every((s) => s.is_ready);
@@ -113,7 +116,7 @@ export default function RoomDetail({
                 {GAME_NAMES[room.game_id] ?? room.game_id}
               </h2>
               <p className="text-sm text-gray-500">
-                Hosted by {room.creator_name}
+                {t('room.hostedBy', { name: room.creator_name })}
               </p>
             </div>
             <button
@@ -127,7 +130,7 @@ export default function RoomDetail({
           {/* Config info */}
           {room.config.tile_count != null && (
             <div className="text-sm text-gray-500 mb-4">
-              Tiles: {Number(room.config.tile_count)} / 71
+              {t('room.tiles', { count: Number(room.config.tile_count), max: 71 })}
             </div>
           )}
 
@@ -153,7 +156,7 @@ export default function RoomDetail({
                     disabled={loading}
                     className="w-full px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
                   >
-                    Add Bot
+                    {t('room.addBot')}
                   </button>
                 )}
 
@@ -168,7 +171,7 @@ export default function RoomDetail({
                         : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
-                    {mySeat.is_ready ? 'Unready' : 'Ready'}
+                    {mySeat.is_ready ? t('room.unready') : t('common.ready')}
                   </button>
                 )}
 
@@ -180,12 +183,12 @@ export default function RoomDetail({
                     className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition"
                   >
                     {loading
-                      ? 'Starting...'
+                      ? t('room.starting')
                       : canStart
-                        ? 'Start Game'
+                        ? t('room.startGame')
                         : occupied.length < 2
-                          ? 'Need at least 2 players'
-                          : 'Waiting for everyone to ready up'}
+                          ? t('room.needPlayers')
+                          : t('room.waitingReady')}
                   </button>
                 )}
 
@@ -195,7 +198,7 @@ export default function RoomDetail({
                   disabled={loading}
                   className="w-full px-4 py-2.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-medium transition text-sm"
                 >
-                  {isCreator ? 'Close Room' : 'Leave Room'}
+                  {isCreator ? t('room.closeRoom') : t('room.leaveRoom')}
                 </button>
               </>
             ) : (
@@ -205,7 +208,7 @@ export default function RoomDetail({
                 disabled={isFull || loading}
                 className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition"
               >
-                {isFull ? 'Room is full' : 'Join Room'}
+                {isFull ? t('room.roomFull') : t('room.joinRoom')}
               </button>
             )}
           </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
 import { Player, GameOverPayload, PlayerId } from '@/lib/types';
 
 interface GameOverSummaryProps {
@@ -11,12 +12,6 @@ interface GameOverSummaryProps {
 
 const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
 const CATEGORIES = ['fields', 'cities', 'roads', 'monasteries'] as const;
-const CATEGORY_LABELS: Record<string, string> = {
-  fields: 'Fields',
-  cities: 'Cities',
-  roads: 'Roads',
-  monasteries: 'Monasteries',
-};
 
 export default function GameOverSummary({
   players,
@@ -24,6 +19,14 @@ export default function GameOverSummary({
   winners,
   breakdown,
 }: GameOverSummaryProps) {
+  const { t } = useTranslation();
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    fields: t('gameOver.fields'),
+    cities: t('gameOver.cities'),
+    roads: t('gameOver.roads'),
+    monasteries: t('gameOver.monasteries'),
+  };
   const sortedPlayers = [...players].sort(
     (a, b) => (finalScores[b.player_id] || 0) - (finalScores[a.player_id] || 0)
   );
@@ -35,12 +38,12 @@ export default function GameOverSummary({
   return (
     <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-2xl p-4 md:p-6 max-w-lg w-full mx-4">
-        <h2 className="text-2xl font-bold text-center mb-1">Game Over</h2>
+        <h2 className="text-2xl font-bold text-center mb-1">{t('gameOver.title')}</h2>
         <p className="text-center text-lg mb-4">
           {winners.length === 1 ? (
-            <><span className="font-semibold">{winnerNames}</span> wins!</>
+            t('gameOver.wins', { name: winnerNames })
           ) : (
-            <>Tie: <span className="font-semibold">{winnerNames}</span></>
+            t('gameOver.tie', { names: winnerNames })
           )}
         </p>
 
@@ -48,12 +51,12 @@ export default function GameOverSummary({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b-2">
-              <th className="text-left py-2 pr-2">Player</th>
+              <th className="text-left py-2 pr-2">{t('gameOver.player')}</th>
               {breakdown && CATEGORIES.map(cat => (
                 <th key={cat} className="text-right py-2 px-1">{CATEGORY_LABELS[cat]}</th>
               ))}
-              {breakdown && <th className="text-right py-2 px-1">End-Game</th>}
-              <th className="text-right py-2 pl-2">Total</th>
+              {breakdown && <th className="text-right py-2 px-1">{t('gameOver.endGame')}</th>}
+              <th className="text-right py-2 pl-2">{t('gameOver.total')}</th>
             </tr>
           </thead>
           <tbody>

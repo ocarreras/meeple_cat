@@ -1,6 +1,7 @@
 'use client';
 
 import type { Room } from '@/lib/types';
+import { useTranslation } from 'react-i18next';
 
 interface RoomCardProps {
   room: Room;
@@ -14,6 +15,7 @@ const GAME_NAMES: Record<string, string> = {
 };
 
 export default function RoomCard({ room, onJoin, onView, isCurrentUser }: RoomCardProps) {
+  const { t } = useTranslation();
   const occupiedSeats = room.seats.filter(
     (s) => s.user_id || s.is_bot
   ).length;
@@ -30,13 +32,13 @@ export default function RoomCard({ room, onJoin, onView, isCurrentUser }: RoomCa
           <h3 className="font-semibold text-lg text-gray-800">
             {GAME_NAMES[room.game_id] ?? room.game_id}
           </h3>
-          <p className="text-sm text-gray-500">Host: {room.creator_name}</p>
+          <p className="text-sm text-gray-500">{t('room.host', { name: room.creator_name })}</p>
         </div>
         <div className="text-right">
           <div className="text-sm font-medium text-gray-700">
             {occupiedSeats} / {room.max_players}
           </div>
-          <div className="text-xs text-gray-500">players</div>
+          <div className="text-xs text-gray-500">{t('common.players')}</div>
         </div>
       </div>
 
@@ -54,10 +56,10 @@ export default function RoomCard({ room, onJoin, onView, isCurrentUser }: RoomCa
             }`}
             title={
               seat.user_id
-                ? `${seat.display_name}${seat.is_ready ? ' (ready)' : ''}`
+                ? `${seat.display_name}${seat.is_ready ? ` (${t('common.ready')})` : ''}`
                 : seat.is_bot
                   ? `Bot (${seat.bot_id})`
-                  : 'Empty'
+                  : t('room.empty')
             }
           />
         ))}
@@ -68,7 +70,7 @@ export default function RoomCard({ room, onJoin, onView, isCurrentUser }: RoomCa
           onClick={() => onView(room)}
           className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition"
         >
-          View
+          {t('common.view')}
         </button>
         {!isCurrentUser && (
           <button
@@ -76,7 +78,7 @@ export default function RoomCard({ room, onJoin, onView, isCurrentUser }: RoomCa
             disabled={isFull}
             className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition"
           >
-            {isFull ? 'Full' : 'Join'}
+            {isFull ? t('common.full') : t('common.join')}
           </button>
         )}
       </div>
