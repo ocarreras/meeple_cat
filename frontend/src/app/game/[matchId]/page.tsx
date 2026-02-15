@@ -7,10 +7,11 @@ import { useAuthStore } from '@/stores/authStore';
 import { useGameStore } from '@/stores/gameStore';
 import { useGameConnection } from '@/hooks/useGameConnection';
 import CarcassonneRenderer from '@/components/games/carcassonne/CarcassonneRenderer';
+import EinsteinDojoRenderer from '@/components/games/einstein_dojo/EinsteinDojoRenderer';
 import GameHeader from '@/components/game/GameHeader';
 import ConnectionStatus from '@/components/game/ConnectionStatus';
 import DisconnectBanner from '@/components/game/DisconnectBanner';
-import type { ActionPayload } from '@/lib/types';
+import type { ActionPayload, CarcassonneGameData, EinsteinDojoGameData } from '@/lib/types';
 
 function LoadingSpinner() {
   const { t } = useTranslation();
@@ -25,6 +26,7 @@ function LoadingSpinner() {
 }
 
 function GamePageContent() {
+  const { t } = useTranslation();
   const params = useParams();
   const searchParams = useSearchParams();
   const matchId = params.matchId as string;
@@ -51,11 +53,49 @@ function GamePageContent() {
     p => p.player_id === currentPhase.expected_actions?.[0]?.player_id
   );
 
+  // Build status text based on game type
+  const getStatusText = (): string | undefined => {
+    if (view.game_id === 'carcassonne') {
+      const gameData = view.game_data as CarcassonneGameData;
+      return `${t('game.tilesRemaining')}: ${gameData.tiles_remaining}`;
+    }
+    if (view.game_id === 'einstein_dojo') {
+      const gameData = view.game_data as EinsteinDojoGameData;
+      const viewerId = view.viewer_id;
+      const myTiles = viewerId ? gameData.tiles_remaining[viewerId] ?? 0 : 0;
+      return `${t('game.tilesRemaining')}: ${myTiles}`;
+    }
+    return undefined;
+  };
+
+  // Render the appropriate game component
+  const renderGame = () => {
+    if (view.game_id === 'einstein_dojo') {
+      return (
+        <EinsteinDojoRenderer
+          view={view}
+          onAction={handleAction}
+          isMyTurn={isMyTurn}
+          phase={currentPhase.name}
+        />
+      );
+    }
+    // Default: Carcassonne
+    return (
+      <CarcassonneRenderer
+        view={view}
+        onAction={handleAction}
+        isMyTurn={isMyTurn}
+        phase={currentPhase.name}
+      />
+    );
+  };
+
   return (
     <div className="h-dvh flex flex-col bg-gray-100">
       <GameHeader
         phase={currentPhase.name}
-        tilesRemaining={view.game_data.tiles_remaining}
+        statusText={getStatusText()}
         currentPlayerName={currentPlayer?.display_name ?? ''}
         isMyTurn={isMyTurn}
         status={view.status}
@@ -63,12 +103,7 @@ function GamePageContent() {
       <ConnectionStatus connected={connected} error={error} />
       <DisconnectBanner />
       <div className="flex-1 overflow-hidden">
-        <CarcassonneRenderer
-          view={view}
-          onAction={handleAction}
-          isMyTurn={isMyTurn}
-          phase={currentPhase.name}
-        />
+        {renderGame()}
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ interface RoomDetailProps {
 
 const GAME_NAMES: Record<string, string> = {
   carcassonne: 'Carcassonne',
+  einstein_dojo: 'Ein Stein Dojo',
 };
 
 function SeatRow({

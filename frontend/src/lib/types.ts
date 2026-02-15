@@ -81,6 +81,36 @@ export interface CarcassonneGameData {
   end_game_breakdown?: Record<PlayerId, Record<string, number>>; // per-player per-category end-game points
 }
 
+// Ein Stein Dojo types
+
+export interface EinsteinDojoBoard {
+  kite_owners: Record<string, string>;  // "q,r:k" -> player_id
+  hex_states: Record<string, string>;   // "q,r" -> HexState
+  placed_pieces: {
+    player_id: string;
+    orientation: number;
+    anchor_q: number;
+    anchor_r: number;
+  }[];
+}
+
+export interface EinsteinDojoGameData {
+  board: EinsteinDojoBoard;
+  tiles_remaining: Record<PlayerId, number>;
+  scores: Record<PlayerId, number>;
+  current_player_index: number;
+}
+
+// Ein Stein Dojo action types
+export type EinsteinPlaceTileAction = {
+  anchor_q: number;
+  anchor_r: number;
+  orientation: number;
+};
+
+// Union of all game data types
+export type GameData = CarcassonneGameData | EinsteinDojoGameData;
+
 // Main PlayerView model
 export interface PlayerView {
   match_id: MatchId;
@@ -91,7 +121,7 @@ export interface PlayerView {
   turn_number: number;
   scores: Record<string, number>;
   player_timers: Record<string, number>;
-  game_data: CarcassonneGameData;
+  game_data: GameData;
   valid_actions: ValidAction[];
   viewer_id: PlayerId | null;
   is_spectator: boolean;
@@ -186,7 +216,7 @@ export interface SkipMeeplePayload {
   skip: true;
 }
 
-export type ActionPayload = PlaceTilePayload | PlaceMeeplePayload | SkipMeeplePayload;
+export type ActionPayload = PlaceTilePayload | PlaceMeeplePayload | SkipMeeplePayload | EinsteinPlaceTileAction;
 
 export interface ActionMessage {
   action_type: string;

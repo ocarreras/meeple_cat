@@ -12,6 +12,7 @@ interface RoomCardProps {
 
 const GAME_NAMES: Record<string, string> = {
   carcassonne: 'Carcassonne',
+  einstein_dojo: 'Ein Stein Dojo',
 };
 
 export default function RoomCard({ room, onJoin, onView, isCurrentUser }: RoomCardProps) {

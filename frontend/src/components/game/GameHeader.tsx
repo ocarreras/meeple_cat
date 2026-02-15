@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 interface GameHeaderProps {
   phase: string;
-  tilesRemaining: number;
+  statusText?: string;
   currentPlayerName: string;
   isMyTurn: boolean;
   status: string;
@@ -12,7 +12,7 @@ interface GameHeaderProps {
 
 export default function GameHeader({
   phase,
-  tilesRemaining,
+  statusText,
   currentPlayerName,
   isMyTurn,
   status
@@ -24,6 +24,7 @@ export default function GameHeader({
       'draw_tile': t('game.phase.drawTile'),
       'place_tile': t('game.phase.placeTile'),
       'place_meeple': t('game.phase.placeMeeple'),
+      'score_check': t('game.phase.placeTile'),
       'game_over': t('game.phase.gameOver'),
     };
     return phaseMap[phase] || phase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -36,10 +37,11 @@ export default function GameHeader({
           <span className="text-sm text-gray-500">{t('game.phase')}</span>
           <span className="ml-2 font-semibold">{formatPhase(phase)}</span>
         </div>
-        <div className="hidden md:block">
-          <span className="text-sm text-gray-500">{t('game.tilesRemaining')}</span>
-          <span className="ml-2 font-semibold">{tilesRemaining}</span>
-        </div>
+        {statusText && (
+          <div className="hidden md:block">
+            <span className="text-sm text-gray-500">{statusText}</span>
+          </div>
+        )}
         <div>
           <span className="hidden md:inline text-sm text-gray-500">{t('game.currentTurn')}</span>
           <span className="ml-0 md:ml-2 font-semibold text-sm md:text-base">

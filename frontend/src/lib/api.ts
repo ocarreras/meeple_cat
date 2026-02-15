@@ -155,6 +155,22 @@ export async function getWsTicket(token?: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Games API
+// ---------------------------------------------------------------------------
+
+export interface GameInfo {
+  game_id: string;
+  display_name: string;
+  min_players: number;
+  max_players: number;
+  description: string;
+}
+
+export async function getGames(): Promise<GameInfo[]> {
+  return fetchJson<GameInfo[]>(`${API_BASE_URL}/games`);
+}
+
+// ---------------------------------------------------------------------------
 // Match API
 // ---------------------------------------------------------------------------
 
