@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub type PlayerId = String;
-pub type MatchId = String;
-pub type GameId = String;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
@@ -76,26 +74,6 @@ pub struct Event {
     pub player_id: Option<PlayerId>,
     #[serde(default)]
     pub payload: serde_json::Value,
-}
-
-impl Event {
-    pub fn new(event_type: &str) -> Self {
-        Self {
-            event_type: event_type.to_string(),
-            player_id: None,
-            payload: serde_json::Value::Object(Default::default()),
-        }
-    }
-
-    pub fn with_player(mut self, player_id: &str) -> Self {
-        self.player_id = Some(player_id.to_string());
-        self
-    }
-
-    pub fn with_payload(mut self, payload: serde_json::Value) -> Self {
-        self.payload = payload;
-        self
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -424,11 +424,6 @@ pub fn build_tile_bag(_expansions: Option<&[String]>) -> Vec<String> {
     bag
 }
 
-/// Total number of tiles in the base game.
-pub fn get_tile_total() -> u32 {
-    TILE_CATALOG.iter().map(|t| t.count).sum()
-}
-
 /// Get the features of a tile with rotation applied.
 pub fn get_rotated_features(tile_type_id: &str, rotation: u32) -> Vec<TileFeature> {
     let tile_def = &TILE_LOOKUP[tile_type_id];
@@ -473,7 +468,8 @@ mod tests {
 
     #[test]
     fn test_total_tiles() {
-        assert_eq!(get_tile_total(), 72);
+        let total: u32 = TILE_CATALOG.iter().map(|t| t.count).sum();
+        assert_eq!(total, 72);
     }
 
     #[test]

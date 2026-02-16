@@ -3,11 +3,16 @@
 
 use std::collections::HashMap;
 
-use uuid::Uuid;
-
 use crate::engine::models::Event;
 use super::tiles::get_rotated_features;
 use super::types::*;
+
+/// Generate a sequential feature ID and increment the counter.
+fn next_feature_id(state: &mut CarcassonneState) -> String {
+    let id = state.next_feature_id;
+    state.next_feature_id += 1;
+    format!("f{}", id)
+}
 
 /// Get the opposite edge identifier. Handles compound edges like "E:N" → "W:N".
 fn opposite_edge(edge: &str) -> String {
@@ -28,6 +33,7 @@ pub fn initialize_features_from_tile(
     tile_type_id: &str,
     position_key: &str,
     rotation: u32,
+    feature_id_counter: &mut u64,
 ) -> (HashMap<String, Feature>, HashMap<String, HashMap<String, String>>) {
     let mut features: HashMap<String, Feature> = HashMap::new();
     let mut tile_feature_map: HashMap<String, HashMap<String, String>> = HashMap::new();
@@ -36,7 +42,11 @@ pub fn initialize_features_from_tile(
     let rotated_features = get_rotated_features(tile_type_id, rotation);
 
     for tile_feat in &rotated_features {
-        let feature_id = Uuid::new_v4().to_string();
+        let feature_id = {
+            let id = *feature_id_counter;
+            *feature_id_counter += 1;
+            format!("f{}", id)
+        };
 
         let open_edges: Vec<[String; 2]> = tile_feat
             .edges
@@ -87,7 +97,7 @@ pub fn create_and_merge_features(
 
     // Step 1: Create features for the new tile
     for tile_feat in &rotated_features {
-        let feature_id = Uuid::new_v4().to_string();
+        let feature_id = next_feature_id(state);
 
         let open_edges: Vec<[String; 2]> = tile_feat
             .edges
@@ -189,15 +199,15 @@ pub fn create_and_merge_features(
 }
 
 /// Resolve a feature ID that may have been merged into another.
+/// Uses the redirect table for O(1) lookup instead of O(n*m) linear scan.
 fn resolve_feature_id(state: &CarcassonneState, feature_id: &str) -> String {
     if state.features.contains_key(feature_id) {
         return feature_id.to_string();
     }
-    // Search for which feature absorbed this one
-    for (fid, feat) in &state.features {
-        if feat.merged_from.iter().any(|id| id == feature_id) {
-            return fid.clone();
-        }
+    // Check redirect table (populated during merges)
+    if let Some(redirect) = state.feature_redirects.get(feature_id) {
+        // Follow chain in case of transitive merges
+        return resolve_feature_id(state, redirect);
     }
     feature_id.to_string()
 }
@@ -232,6 +242,13 @@ fn merge_features(
         Some(f) => f,
         None => return feature_a_id.to_string(),
     };
+
+    // Populate redirect table: feature_b → feature_a
+    state.feature_redirects.insert(feature_b_id.to_string(), feature_a_id.to_string());
+    // Also redirect any IDs that previously pointed to feature_b
+    for old_id in &b.merged_from {
+        state.feature_redirects.insert(old_id.clone(), feature_a_id.to_string());
+    }
 
     if let Some(a) = state.features.get_mut(feature_a_id) {
         // Combine tiles (deduplicate)

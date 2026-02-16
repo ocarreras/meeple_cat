@@ -8,6 +8,7 @@ mod engine;
 mod games;
 mod server;
 
+use engine::plugin::JsonAdapter;
 use games::carcassonne::plugin::CarcassonnePlugin;
 use games::GameRegistry;
 use server::proto::game_engine_service_server::GameEngineServiceServer;
@@ -30,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     let mut registry = GameRegistry::new();
-    registry.register(Box::new(CarcassonnePlugin));
+    registry.register(Box::new(JsonAdapter(CarcassonnePlugin)));
     tracing::info!(
         games = ?registry.list_game_ids(),
         "registered game plugins"

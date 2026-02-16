@@ -4,15 +4,12 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use rand::seq::SliceRandom;
+use rayon::prelude::*;
 
-use crate::engine::evaluator::default_eval_fn;
+use crate::engine::evaluator::default_eval;
 use crate::engine::models::*;
-use crate::engine::plugin::{GamePlugin, TypedGamePlugin};
-use crate::engine::simulator::{
-    apply_action_and_resolve, apply_action_and_resolve_typed,
-    SimulationState, TypedSimulationState,
-};
+use crate::engine::plugin::TypedGamePlugin;
+use crate::engine::simulator::{apply_action_and_resolve, SimulationState};
 
 /// MCTS search parameters.
 pub struct MctsParams {
@@ -116,7 +113,7 @@ impl MctsNode {
 
         let q_uct = self.total_value / self.visit_count as f64;
 
-        let (amaf_n, amaf_q) = if let Some(p) = parent {
+        let (_amaf_n, amaf_q) = if let Some(p) = parent {
             let n = p.amaf_visits.get(action_k.as_str()).copied().unwrap_or(0);
             if n > 0 {
                 (n, p.amaf_values.get(action_k.as_str()).copied().unwrap_or(0.0) / n as f64)
@@ -126,8 +123,9 @@ impl MctsNode {
         } else {
             (0, 0.5)
         };
-        let _ = amaf_n; // used in beta calculation below
-
+        // β uses parent_visits (not amaf_n) — simplified RAVE schedule
+        // matching the Python implementation. As parent gets more visits,
+        // β shrinks and we rely more on UCT than AMAF.
         let beta = (rave_k / (3.0 * parent_visits as f64 + rave_k)).sqrt();
         let blended = (1.0 - beta) * q_uct + beta * amaf_q;
         let explore = c * ((parent_visits as f64).ln() / self.visit_count as f64).sqrt();
@@ -183,100 +181,123 @@ impl NodeArena {
             .unwrap()
     }
 
-    fn most_visited_child(&self, node_idx: usize) -> usize {
-        let node = &self.nodes[node_idx];
-        *node.children.iter()
-            .max_by_key(|&&idx| self.nodes[idx].visit_count)
-            .unwrap()
-    }
 }
 
-/// Run MCTS and return the best action payload.
-pub fn mcts_search(
-    game_data: &serde_json::Value,
+/// Per-determinization results, collected and aggregated after parallel execution.
+struct DetResult {
+    visits: HashMap<String, u32>,
+    values: HashMap<String, f64>,
+    actions: HashMap<String, serde_json::Value>,
+    iterations: usize,
+}
+
+/// Run MCTS on typed state and return the best action payload and total iterations run.
+/// Determinizations run in parallel via rayon for ~linear speedup with core count.
+pub fn mcts_search<P: TypedGamePlugin>(
+    state: &P::State,
     phase: &Phase,
     player_id: &str,
-    plugin: &dyn GamePlugin,
+    plugin: &P,
     players: &[Player],
     params: &MctsParams,
-    eval_fn: Option<&dyn Fn(&serde_json::Value, &Phase, &str, &[Player], &dyn GamePlugin) -> f64>,
-) -> serde_json::Value {
-    let valid_actions = plugin.get_valid_actions(game_data, phase, player_id);
+    eval_fn: Option<&(dyn Fn(&P::State, &Phase, &str, &[Player]) -> f64 + Sync)>,
+) -> (serde_json::Value, usize) {
+    let valid_actions = plugin.get_valid_actions(state, phase, player_id);
     if valid_actions.len() <= 1 {
-        return valid_actions.into_iter().next().unwrap_or(serde_json::json!({}));
+        return (valid_actions.into_iter().next().unwrap_or(serde_json::json!({})), 0);
     }
-
-    let eval: &dyn Fn(&serde_json::Value, &Phase, &str, &[Player], &dyn GamePlugin) -> f64 =
-        eval_fn.unwrap_or(&default_eval_fn);
-
-    // Aggregate visit counts across determinizations
-    let mut action_visits: HashMap<String, u32> = HashMap::new();
-    let mut action_values: HashMap<String, f64> = HashMap::new();
-    let mut action_map: HashMap<String, serde_json::Value> = HashMap::new();
 
     let sims_per_det = (params.num_simulations / params.num_determinizations).max(1);
     let total_deadline = Instant::now() + std::time::Duration::from_millis(params.time_limit_ms as u64);
-    let time_per_det = std::time::Duration::from_millis((params.time_limit_ms / params.num_determinizations as f64) as u64);
+    let base_scores = plugin.get_scores(state);
 
-    let mut rng = rand::thread_rng();
-
-    for _det_idx in 0..params.num_determinizations {
-        let det_deadline = std::cmp::min(Instant::now() + time_per_det, total_deadline);
-        if Instant::now() >= total_deadline {
-            break;
-        }
-
-        // Create a determinized copy — shuffle the tile bag
-        let mut det_game_data = game_data.clone();
-        if let Some(bag) = det_game_data.get_mut("tile_bag").and_then(|v| v.as_array_mut()) {
-            bag.shuffle(&mut rng);
-        }
-
-        let root_state = SimulationState {
-            game_data: det_game_data,
-            phase: phase.clone(),
-            players: players.to_vec(),
-            scores: game_data.get("scores")
-                .and_then(|v| v.as_object())
-                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.as_f64().unwrap_or(0.0))).collect())
-                .unwrap_or_default(),
-            game_over: None,
-        };
-
-        let mut arena = NodeArena::new();
-        let root_idx = arena.alloc(MctsNode::new(None, None));
-
-        for _sim_i in 0..sims_per_det {
-            if Instant::now() >= det_deadline {
-                break;
+    // Run determinizations in parallel
+    let det_results: Vec<DetResult> = (0..params.num_determinizations)
+        .into_par_iter()
+        .map(|_det_idx| {
+            if Instant::now() >= total_deadline {
+                return DetResult {
+                    visits: HashMap::new(),
+                    values: HashMap::new(),
+                    actions: HashMap::new(),
+                    iterations: 0,
+                };
             }
-            run_one_iteration(
-                &mut arena,
-                root_idx,
-                &root_state,
-                player_id,
-                players,
-                plugin,
-                params,
-                eval,
-            );
-        }
 
-        // Collect visit counts
-        let root = arena.get(root_idx);
-        for &child_idx in &root.children {
-            let child = arena.get(child_idx);
-            if let Some(ref action) = child.action_taken {
-                let key = action_key(action);
-                action_map.entry(key.clone()).or_insert_with(|| action.clone());
-                *action_visits.entry(key.clone()).or_insert(0) += child.visit_count;
-                *action_values.entry(key).or_insert(0.0) += child.total_value;
+            let mut det_state = state.clone();
+            plugin.determinize(&mut det_state);
+
+            let root_state = SimulationState {
+                state: det_state,
+                phase: phase.clone(),
+                players: players.to_vec(),
+                scores: base_scores.clone(),
+                game_over: None,
+            };
+
+            let mut arena = NodeArena::new();
+            let root_idx = arena.alloc(MctsNode::new(None, None));
+            let mut iterations = 0;
+
+            for _sim_i in 0..sims_per_det {
+                if Instant::now() >= total_deadline {
+                    break;
+                }
+                iterations += 1;
+                run_one_iteration(
+                    &mut arena,
+                    root_idx,
+                    &root_state,
+                    player_id,
+                    players,
+                    plugin,
+                    params,
+                    eval_fn,
+                );
             }
+
+            let mut visits = HashMap::new();
+            let mut values = HashMap::new();
+            let mut actions = HashMap::new();
+
+            let root = arena.get(root_idx);
+            for &child_idx in &root.children {
+                let child = arena.get(child_idx);
+                if let Some(ref action) = child.action_taken {
+                    let key = action_key(action);
+                    actions.entry(key.clone()).or_insert_with(|| action.clone());
+                    *visits.entry(key.clone()).or_insert(0) += child.visit_count;
+                    *values.entry(key).or_insert(0.0) += child.total_value;
+                }
+            }
+
+            DetResult { visits, values, actions, iterations }
+        })
+        .collect();
+
+    // Aggregate results from all determinizations
+    let mut action_visits: HashMap<String, u32> = HashMap::new();
+    let mut action_values: HashMap<String, f64> = HashMap::new();
+    let mut action_map: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut total_iterations: usize = 0;
+
+    for det in det_results {
+        total_iterations += det.iterations;
+        for (key, count) in &det.visits {
+            *action_visits.entry(key.clone()).or_insert(0) += count;
+            if !action_map.contains_key(key) {
+                if let Some(action) = det.actions.get(key) {
+                    action_map.insert(key.clone(), action.clone());
+                }
+            }
+        }
+        for (key, value) in &det.values {
+            *action_values.entry(key.clone()).or_insert(0.0) += value;
         }
     }
 
     if action_visits.is_empty() {
-        return valid_actions.into_iter().next().unwrap_or(serde_json::json!({}));
+        return (valid_actions.into_iter().next().unwrap_or(serde_json::json!({})), total_iterations);
     }
 
     let best_key = action_visits.iter()
@@ -284,19 +305,19 @@ pub fn mcts_search(
         .map(|(k, _)| k.clone())
         .unwrap();
 
-    action_map.remove(&best_key).unwrap_or(serde_json::json!({}))
+    (action_map.remove(&best_key).unwrap_or(serde_json::json!({})), total_iterations)
 }
 
-/// One MCTS iteration: select → expand → evaluate → backpropagate.
-fn run_one_iteration(
+/// One MCTS iteration: select -> expand -> evaluate -> backpropagate.
+fn run_one_iteration<P: TypedGamePlugin>(
     arena: &mut NodeArena,
     root_idx: usize,
-    root_state: &SimulationState,
+    root_state: &SimulationState<P::State>,
     searching_player: &str,
     players: &[Player],
-    plugin: &dyn GamePlugin,
+    plugin: &P,
     params: &MctsParams,
-    eval_fn: &dyn Fn(&serde_json::Value, &Phase, &str, &[Player], &dyn GamePlugin) -> f64,
+    eval_fn: Option<&(dyn Fn(&P::State, &Phase, &str, &[Player]) -> f64 + Sync)>,
 ) {
     let mut node_idx = root_idx;
     let mut state = root_state.clone();
@@ -325,7 +346,7 @@ fn run_one_iteration(
                 action_key_from_opt(&child.action_taken)
             };
             played_actions.push((key, child.acting_player.clone()));
-            apply_node_action(&mut state, child, plugin);
+            apply_node_action(plugin, &mut state, arena.get(child_idx));
         }
     }
 
@@ -335,7 +356,7 @@ fn run_one_iteration(
         if needs_expand {
             let acting_pid = get_acting_player(&state.phase, players);
             let actions = if let Some(ref pid) = acting_pid {
-                let mut acts = plugin.get_valid_actions(&state.game_data, &state.phase, pid);
+                let mut acts = plugin.get_valid_actions(&state.state, &state.phase, pid);
                 acts.sort_by(|a, b| action_sort_key(a).cmp(&action_sort_key(b)));
                 acts
             } else {
@@ -359,7 +380,7 @@ fn run_one_iteration(
 
             let amaf_key_str = if params.use_rave {
                 if params.tile_aware_amaf {
-                    amaf_key(&action_payload, Some(&state))
+                    amaf_key(plugin, &action_payload, &state)
                 } else {
                     action_key(&action_payload)
                 }
@@ -375,24 +396,27 @@ fn run_one_iteration(
             arena.get_mut(node_idx).children.push(child_idx);
             node_idx = child_idx;
 
-            if let Some(ref pid) = acting_pid {
+            if acting_pid.is_some() {
                 let child = arena.get(child_idx);
                 let key = if !child.amaf_key.is_empty() {
                     child.amaf_key.clone()
                 } else {
                     action_key(&action_payload)
                 };
-                played_actions.push((key, Some(pid.clone())));
-                apply_node_action(&mut state, arena.get(child_idx), plugin);
+                played_actions.push((key, acting_pid));
+                apply_node_action(plugin, &mut state, arena.get(child_idx));
             }
         }
     }
 
     // 3. EVALUATE
     let value = if state.game_over.is_some() {
-        terminal_value(&state, searching_player)
+        terminal_value(&state.game_over, searching_player)
+    } else if let Some(eval) = eval_fn {
+        eval(&state.state, &state.phase, searching_player, players)
     } else {
-        eval_fn(&state.game_data, &state.phase, searching_player, players, plugin)
+        // Default: sigmoid of score differential
+        default_eval(plugin, &state.state, searching_player)
     };
 
     // 4. BACKPROPAGATE
@@ -456,17 +480,17 @@ fn at_widening_limit(node: &MctsNode, pw_c: f64, pw_alpha: f64) -> bool {
 }
 
 fn max_children(visit_count: u32, pw_c: f64, pw_alpha: f64) -> usize {
-    (pw_c * (visit_count.max(1) as f64).powf(pw_alpha)) as usize
+    (pw_c * (visit_count.max(1) as f64).powf(pw_alpha)).max(1.0) as usize
 }
 
 // ------------------------------------------------------------------ //
 //  Helpers
 // ------------------------------------------------------------------ //
 
-fn apply_node_action(
-    state: &mut SimulationState,
+fn apply_node_action<P: TypedGamePlugin>(
+    plugin: &P,
+    state: &mut SimulationState<P::State>,
     node: &MctsNode,
-    plugin: &dyn GamePlugin,
 ) {
     let action_type = if !state.phase.expected_actions.is_empty() {
         state.phase.expected_actions[0].action_type.clone()
@@ -494,8 +518,8 @@ fn get_acting_player(phase: &Phase, players: &[Player]) -> Option<String> {
     None
 }
 
-fn terminal_value(state: &SimulationState, player_id: &str) -> f64 {
-    match &state.game_over {
+fn terminal_value(game_over: &Option<GameResult>, player_id: &str) -> f64 {
+    match game_over {
         None => 0.5,
         Some(result) => {
             if result.winners.iter().any(|w| w == player_id) {
@@ -532,291 +556,10 @@ fn action_key_from_opt(action: &Option<serde_json::Value>) -> String {
     }
 }
 
-fn amaf_key(action: &serde_json::Value, state: Option<&SimulationState>) -> String {
-    if let Some(st) = state {
-        if let (Some(x), Some(y), Some(r)) = (
-            action.get("x").and_then(|v| v.as_i64()),
-            action.get("y").and_then(|v| v.as_i64()),
-            action.get("rotation").and_then(|v| v.as_u64()),
-        ) {
-            if let Some(tile) = st.game_data.get("current_tile").and_then(|v| v.as_str()) {
-                if !tile.is_empty() {
-                    return format!("{}:{},{},{}", tile, x, y, r);
-                }
-            }
-        }
-    }
-    action_key(action)
-}
-
-// ================================================================== //
-//  Typed MCTS — zero-JSON hot path
-// ================================================================== //
-
-/// Typed MCTS search. Decodes game_data once, then clones typed state per iteration.
-pub fn mcts_search_typed<P: TypedGamePlugin>(
-    game_data: &serde_json::Value,
-    phase: &Phase,
-    player_id: &str,
-    plugin: &P,
-    players: &[Player],
-    params: &MctsParams,
-    eval_fn: Option<&dyn Fn(&P::State, &Phase, &str, &[Player]) -> f64>,
-) -> serde_json::Value {
-    let base_state = plugin.decode_state(game_data);
-
-    let valid_actions = plugin.get_valid_actions_typed(&base_state, phase, player_id);
-    if valid_actions.len() <= 1 {
-        return valid_actions.into_iter().next().unwrap_or(serde_json::json!({}));
-    }
-
-    let mut action_visits: HashMap<String, u32> = HashMap::new();
-    let mut action_values: HashMap<String, f64> = HashMap::new();
-    let mut action_map: HashMap<String, serde_json::Value> = HashMap::new();
-
-    let sims_per_det = (params.num_simulations / params.num_determinizations).max(1);
-    let total_deadline = Instant::now() + std::time::Duration::from_millis(params.time_limit_ms as u64);
-    let time_per_det = std::time::Duration::from_millis((params.time_limit_ms / params.num_determinizations as f64) as u64);
-
-    let base_scores = plugin.get_scores_typed(&base_state);
-
-    for _det_idx in 0..params.num_determinizations {
-        let det_deadline = std::cmp::min(Instant::now() + time_per_det, total_deadline);
-        if Instant::now() >= total_deadline {
-            break;
-        }
-
-        // Determinize: shuffle hidden info in typed state
-        let mut det_state = base_state.clone();
-        plugin.determinize(&mut det_state);
-
-        let root_state = TypedSimulationState {
-            state: det_state,
-            phase: phase.clone(),
-            players: players.to_vec(),
-            scores: base_scores.clone(),
-            game_over: None,
-        };
-
-        let mut arena = NodeArena::new();
-        let root_idx = arena.alloc(MctsNode::new(None, None));
-
-        for _sim_i in 0..sims_per_det {
-            if Instant::now() >= det_deadline {
-                break;
-            }
-            run_one_iteration_typed(
-                &mut arena,
-                root_idx,
-                &root_state,
-                player_id,
-                players,
-                plugin,
-                params,
-                eval_fn,
-            );
-        }
-
-        let root = arena.get(root_idx);
-        for &child_idx in &root.children {
-            let child = arena.get(child_idx);
-            if let Some(ref action) = child.action_taken {
-                let key = action_key(action);
-                action_map.entry(key.clone()).or_insert_with(|| action.clone());
-                *action_visits.entry(key.clone()).or_insert(0) += child.visit_count;
-                *action_values.entry(key).or_insert(0.0) += child.total_value;
-            }
-        }
-    }
-
-    if action_visits.is_empty() {
-        return valid_actions.into_iter().next().unwrap_or(serde_json::json!({}));
-    }
-
-    let best_key = action_visits.iter()
-        .max_by_key(|(_, &v)| v)
-        .map(|(k, _)| k.clone())
-        .unwrap();
-
-    action_map.remove(&best_key).unwrap_or(serde_json::json!({}))
-}
-
-fn run_one_iteration_typed<P: TypedGamePlugin>(
-    arena: &mut NodeArena,
-    root_idx: usize,
-    root_state: &TypedSimulationState<P::State>,
-    searching_player: &str,
-    players: &[Player],
-    plugin: &P,
-    params: &MctsParams,
-    eval_fn: Option<&dyn Fn(&P::State, &Phase, &str, &[Player]) -> f64>,
-) {
-    let mut node_idx = root_idx;
-    let mut state = root_state.clone();
-    let mut played_actions: Vec<(String, Option<String>)> = Vec::new();
-
-    // 1. SELECT
-    loop {
-        let node = arena.get(node_idx);
-        if node.children.is_empty() || !at_widening_limit(node, params.pw_c, params.pw_alpha) {
-            break;
-        }
-
-        let child_idx = if params.use_rave {
-            arena.best_child_rave(node_idx, params.exploration_constant, params.rave_k, params.rave_fpu)
-        } else {
-            arena.best_child_uct(node_idx, params.exploration_constant)
-        };
-
-        node_idx = child_idx;
-        let child = arena.get(child_idx);
-
-        if child.action_taken.is_some() && child.acting_player.is_some() {
-            let key = if !child.amaf_key.is_empty() {
-                child.amaf_key.clone()
-            } else {
-                action_key_from_opt(&child.action_taken)
-            };
-            played_actions.push((key, child.acting_player.clone()));
-            apply_node_action_typed(plugin, &mut state, arena.get(child_idx));
-        }
-    }
-
-    // 2. EXPAND
-    if state.game_over.is_none() {
-        let needs_expand = arena.get(node_idx).untried_actions.is_none();
-        if needs_expand {
-            let acting_pid = get_acting_player(&state.phase, players);
-            let actions = if let Some(ref pid) = acting_pid {
-                let mut acts = plugin.get_valid_actions_typed(&state.state, &state.phase, pid);
-                acts.sort_by(|a, b| action_sort_key(a).cmp(&action_sort_key(b)));
-                acts
-            } else {
-                vec![]
-            };
-            arena.get_mut(node_idx).untried_actions = Some(actions);
-        }
-
-        let should_expand = {
-            let node = arena.get(node_idx);
-            state.game_over.is_none()
-                && node.untried_actions.as_ref().map_or(false, |u| !u.is_empty())
-                && !at_widening_limit(node, params.pw_c, params.pw_alpha)
-        };
-
-        if should_expand {
-            let acting_pid = get_acting_player(&state.phase, players);
-            let action_payload = arena.get_mut(node_idx)
-                .untried_actions.as_mut().unwrap()
-                .remove(0);
-
-            let amaf_key_str = if params.use_rave {
-                if params.tile_aware_amaf {
-                    amaf_key_typed(plugin, &action_payload, &state)
-                } else {
-                    action_key(&action_payload)
-                }
-            } else {
-                String::new()
-            };
-
-            let mut child = MctsNode::new(Some(action_payload.clone()), Some(node_idx));
-            child.acting_player = acting_pid.clone();
-            child.amaf_key = amaf_key_str;
-
-            let child_idx = arena.alloc(child);
-            arena.get_mut(node_idx).children.push(child_idx);
-            node_idx = child_idx;
-
-            if acting_pid.is_some() {
-                let child = arena.get(child_idx);
-                let key = if !child.amaf_key.is_empty() {
-                    child.amaf_key.clone()
-                } else {
-                    action_key(&action_payload)
-                };
-                played_actions.push((key, acting_pid));
-                apply_node_action_typed(plugin, &mut state, arena.get(child_idx));
-            }
-        }
-    }
-
-    // 3. EVALUATE
-    let value = if state.game_over.is_some() {
-        terminal_value_typed(&state.game_over, searching_player)
-    } else if let Some(eval) = eval_fn {
-        eval(&state.state, &state.phase, searching_player, players)
-    } else {
-        // Default: sigmoid of score differential
-        default_typed_eval(plugin, &state.state, searching_player)
-    };
-
-    // 4. BACKPROPAGATE
-    backpropagate(arena, node_idx, value, searching_player, &played_actions, params.use_rave, params.max_amaf_depth);
-}
-
-fn apply_node_action_typed<P: TypedGamePlugin>(
-    plugin: &P,
-    state: &mut TypedSimulationState<P::State>,
-    node: &MctsNode,
-) {
-    let action_type = if !state.phase.expected_actions.is_empty() {
-        state.phase.expected_actions[0].action_type.clone()
-    } else {
-        state.phase.name.clone()
-    };
-    let action = Action {
-        action_type,
-        player_id: node.acting_player.clone().unwrap_or_else(|| "system".into()),
-        payload: node.action_taken.clone().unwrap_or(serde_json::json!({})),
-    };
-    apply_action_and_resolve_typed(plugin, state, &action);
-}
-
-fn terminal_value_typed(game_over: &Option<GameResult>, player_id: &str) -> f64 {
-    match game_over {
-        None => 0.5,
-        Some(result) => {
-            if result.winners.iter().any(|w| w == player_id) {
-                if result.winners.len() == 1 { 1.0 } else { 0.8 }
-            } else {
-                0.0
-            }
-        }
-    }
-}
-
-fn default_typed_eval<P: TypedGamePlugin>(
-    plugin: &P,
-    state: &P::State,
-    player_id: &str,
-) -> f64 {
-    let scores = plugin.get_scores_typed(state);
-    let my_score = scores.get(player_id).copied().unwrap_or(0.0);
-
-    let mut max_opp = 0.0f64;
-    let mut has_opp = false;
-    for (pid, &s) in &scores {
-        if pid != player_id {
-            if !has_opp || s > max_opp {
-                max_opp = s;
-                has_opp = true;
-            }
-        }
-    }
-
-    if !has_opp {
-        return 0.5;
-    }
-
-    let diff = my_score - max_opp;
-    1.0 / (1.0 + (-diff / 20.0_f64).exp())
-}
-
-fn amaf_key_typed<P: TypedGamePlugin>(
+fn amaf_key<P: TypedGamePlugin>(
     plugin: &P,
     action: &serde_json::Value,
-    state: &TypedSimulationState<P::State>,
+    state: &SimulationState<P::State>,
 ) -> String {
     if let (Some(x), Some(y), Some(r)) = (
         action.get("x").and_then(|v| v.as_i64()),
@@ -858,6 +601,7 @@ fn action_sort_key(action: &serde_json::Value) -> (i32, i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::plugin::{GamePlugin, JsonAdapter};
     use crate::games::carcassonne::plugin::CarcassonnePlugin;
 
     fn make_players(n: u32) -> Vec<Player> {
@@ -875,23 +619,28 @@ mod tests {
     #[test]
     fn test_mcts_returns_valid_action() {
         let plugin = CarcassonnePlugin;
+        let json_plugin = JsonAdapter(CarcassonnePlugin);
         let players = make_players(2);
         let config = GameConfig {
             random_seed: Some(42),
             options: serde_json::json!({"tile_count": 5}),
         };
 
-        let (game_data, phase, _) = plugin.create_initial_state(&players, &config);
+        // Use JsonAdapter for initial state + draw action (returns JSON for apply_action)
+        let (game_data, phase, _) = json_plugin.create_initial_state(&players, &config);
 
-        // Advance to place_tile phase
+        // Advance to place_tile phase via JSON boundary
         let draw_action = Action {
             action_type: "draw_tile".into(),
             player_id: "p1".into(),
             payload: serde_json::json!({}),
         };
-        let result = plugin.apply_action(&game_data, &phase, &draw_action, &players);
+        let result = json_plugin.apply_action(&game_data, &phase, &draw_action, &players);
         let game_data = result.game_data;
         let phase = result.next_phase;
+
+        // Decode to typed state for MCTS
+        let state = plugin.decode_state(&game_data);
 
         let params = MctsParams {
             num_simulations: 20,
@@ -900,12 +649,13 @@ mod tests {
             ..Default::default()
         };
 
-        let best = mcts_search(&game_data, &phase, "p1", &plugin, &players, &params, None);
+        let (best, iterations) = mcts_search(&state, &phase, "p1", &plugin, &players, &params, None);
 
         // Should have x, y, rotation (tile placement)
         assert!(best.get("x").is_some(), "MCTS should return an action with x");
         assert!(best.get("y").is_some(), "MCTS should return an action with y");
         assert!(best.get("rotation").is_some(), "MCTS should return an action with rotation");
+        assert!(iterations > 0, "Should have run at least one iteration");
     }
 
     #[test]
@@ -918,44 +668,9 @@ mod tests {
             options: serde_json::json!({}),
         };
 
-        let (game_data, phase, _) = plugin.create_initial_state(&players, &config);
+        let (state, phase, _) = plugin.create_initial_state(&players, &config);
 
         let params = MctsParams::default();
-        let _ = mcts_search(&game_data, &phase, "p1", &plugin, &players, &params, None);
-    }
-
-    #[test]
-    fn test_mcts_typed_returns_valid_action() {
-        let plugin = CarcassonnePlugin;
-        let players = make_players(2);
-        let config = GameConfig {
-            random_seed: Some(42),
-            options: serde_json::json!({"tile_count": 5}),
-        };
-
-        let (game_data, phase, _) = plugin.create_initial_state(&players, &config);
-
-        // Advance to place_tile phase
-        let draw_action = Action {
-            action_type: "draw_tile".into(),
-            player_id: "p1".into(),
-            payload: serde_json::json!({}),
-        };
-        let result = plugin.apply_action(&game_data, &phase, &draw_action, &players);
-        let game_data = result.game_data;
-        let phase = result.next_phase;
-
-        let params = MctsParams {
-            num_simulations: 20,
-            time_limit_ms: 500.0,
-            num_determinizations: 2,
-            ..Default::default()
-        };
-
-        let best = mcts_search_typed(&game_data, &phase, "p1", &plugin, &players, &params, None);
-
-        assert!(best.get("x").is_some(), "Typed MCTS should return an action with x");
-        assert!(best.get("y").is_some(), "Typed MCTS should return an action with y");
-        assert!(best.get("rotation").is_some(), "Typed MCTS should return an action with rotation");
+        let (_action, _iters) = mcts_search(&state, &phase, "p1", &plugin, &players, &params, None);
     }
 }

@@ -4,71 +4,11 @@
 use std::collections::HashMap;
 
 use crate::engine::models::*;
-use crate::engine::plugin::{GamePlugin, TypedGamePlugin};
+use crate::engine::plugin::TypedGamePlugin;
 
-/// Mutable game state for synchronous simulation.
+/// Mutable game state for synchronous simulation (typed, no JSON).
 #[derive(Clone)]
-pub struct SimulationState {
-    pub game_data: serde_json::Value,
-    pub phase: Phase,
-    pub players: Vec<Player>,
-    pub scores: HashMap<String, f64>,
-    pub game_over: Option<GameResult>,
-}
-
-/// Apply an action and auto-resolve all subsequent auto-resolve phases.
-/// Mutates `state` in place.
-pub fn apply_action_and_resolve(
-    plugin: &dyn GamePlugin,
-    state: &mut SimulationState,
-    action: &Action,
-) {
-    let result = plugin.apply_action(&state.game_data, &state.phase, action, &state.players);
-    state.game_data = result.game_data;
-    state.phase = result.next_phase;
-    if !result.scores.is_empty() {
-        state.scores = result.scores;
-    }
-    state.game_over = result.game_over;
-
-    if state.game_over.is_some() {
-        return;
-    }
-
-    // Auto-resolve loop
-    let mut max_auto = 50;
-    while state.phase.auto_resolve && state.game_over.is_none() && max_auto > 0 {
-        max_auto -= 1;
-
-        let pid = phase_player_id(&state.phase, &state.players);
-        let synthetic = Action {
-            action_type: state.phase.name.clone(),
-            player_id: pid,
-            payload: serde_json::json!({}),
-        };
-
-        let result = plugin.apply_action(
-            &state.game_data,
-            &state.phase,
-            &synthetic,
-            &state.players,
-        );
-        state.game_data = result.game_data;
-        state.phase = result.next_phase;
-        if !result.scores.is_empty() {
-            state.scores = result.scores;
-        }
-        state.game_over = result.game_over;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Typed simulation state — zero-JSON hot path for MCTS / Arena
-// ---------------------------------------------------------------------------
-
-/// Mutable game state for typed simulation (avoids serde_json::Value).
-#[derive(Clone)]
-pub struct TypedSimulationState<S: Clone> {
+pub struct SimulationState<S: Clone> {
     pub state: S,
     pub phase: Phase,
     pub players: Vec<Player>,
@@ -76,13 +16,14 @@ pub struct TypedSimulationState<S: Clone> {
     pub game_over: Option<GameResult>,
 }
 
-/// Apply an action and auto-resolve on typed state. Mutates `sim` in place.
-pub fn apply_action_and_resolve_typed<P: TypedGamePlugin>(
+/// Apply an action and auto-resolve all subsequent auto-resolve phases.
+/// Mutates `sim` in place.
+pub fn apply_action_and_resolve<P: TypedGamePlugin>(
     plugin: &P,
-    sim: &mut TypedSimulationState<P::State>,
+    sim: &mut SimulationState<P::State>,
     action: &Action,
 ) {
-    let result = plugin.apply_action_typed(&sim.state, &sim.phase, action, &sim.players);
+    let result = plugin.apply_action(&sim.state, &sim.phase, action, &sim.players);
     sim.state = result.state;
     sim.phase = result.next_phase;
     if !result.scores.is_empty() {
@@ -105,7 +46,7 @@ pub fn apply_action_and_resolve_typed<P: TypedGamePlugin>(
             payload: serde_json::json!({}),
         };
 
-        let result = plugin.apply_action_typed(&sim.state, &sim.phase, &synthetic, &sim.players);
+        let result = plugin.apply_action(&sim.state, &sim.phase, &synthetic, &sim.players);
         sim.state = result.state;
         sim.phase = result.next_phase;
         if !result.scores.is_empty() {

@@ -162,18 +162,20 @@ pub struct CarcassonneState {
     pub scores: HashMap<String, i64>,
     pub current_player_index: usize,
     #[serde(default)]
-    pub rng_state: Option<u64>,
+    pub rng_state: serde_json::Value,
     #[serde(default)]
     pub forfeited_players: Vec<String>,
     #[serde(default)]
     pub end_game_breakdown: Option<serde_json::Value>,
+    /// Sequential counter for generating feature IDs (avoids UUID overhead in MCTS).
+    #[serde(default)]
+    pub next_feature_id: u64,
+    /// Redirect table for merged feature IDs: old_id -> surviving_id.
+    #[serde(default)]
+    pub feature_redirects: HashMap<String, String>,
 }
 
 impl CarcassonneState {
-    pub fn from_json(value: &serde_json::Value) -> Result<Self, serde_json::Error> {
-        serde_json::from_value(value.clone())
-    }
-
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(self).expect("CarcassonneState serialization should not fail")
     }
