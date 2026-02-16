@@ -4,6 +4,13 @@ Uses determinization (Information Set MCTS) to handle stochastic elements
 such as random tile draws.  Leaf nodes are scored by a heuristic evaluation
 function rather than random rollouts, which is both faster and more accurate
 for games where random play is far from competent play.
+
+Supports **progressive widening** to focus search on the most promising
+actions when the branching factor is large (e.g. 50+ tile placements).
+
+Supports **RAVE/AMAF** (Rapid Action Value Estimation / All-Moves-As-First)
+to share action-value statistics across sibling branches, speeding up
+convergence when visit counts are low.
 """
 
 from __future__ import annotations
@@ -45,6 +52,14 @@ class MCTSNode:
     visit_count: int = 0
     total_value: float = 0.0
 
+    # AMAF / RAVE statistics (populated only when use_rave=True)
+    # Keyed by action_key (or amaf_key) string → count and total value
+    amaf_visits: dict[str, int] = field(default_factory=dict)
+    amaf_values: dict[str, float] = field(default_factory=dict)
+
+    # Tile-aware AMAF key (set when tile_aware_amaf=True)
+    amaf_key: str = ""
+
     @property
     def q_value(self) -> float:
         if self.visit_count == 0:
@@ -58,11 +73,112 @@ class MCTSNode:
         explore = c * math.sqrt(math.log(parent_visits) / self.visit_count)
         return exploit + explore
 
+    def rave_value(
+        self, parent_visits: int, c: float, rave_k: float,
+        rave_fpu: bool = False,
+    ) -> float:
+        """UCT + RAVE blended value for child selection.
+
+        Combines standard UCT exploitation with AMAF statistics from the
+        parent node.  The blend weight β decreases as the parent gets more
+        visits, eventually converging to pure UCT.
+
+        When *rave_fpu* is True and the child is unvisited, uses AMAF data
+        as a first-play urgency prior instead of returning infinity.
+        """
+        action_k = self.amaf_key or _action_key(self.action_taken)
+
+        if self.visit_count == 0:
+            if rave_fpu and self.parent is not None:
+                amaf_n = self.parent.amaf_visits.get(action_k, 0)
+                if amaf_n > 0:
+                    amaf_q = self.parent.amaf_values.get(action_k, 0.0) / amaf_n
+                    # Range [1.0, 2.0] — still explore, but prefer promising
+                    return 1.0 + amaf_q
+            return float("inf")
+
+        q_uct = self.total_value / self.visit_count
+
+        # Look up AMAF stats in parent for this child's action
+        amaf_n = 0
+        amaf_q = 0.5  # prior when no AMAF data
+        if self.parent is not None:
+            amaf_n = self.parent.amaf_visits.get(action_k, 0)
+            if amaf_n > 0:
+                amaf_q = self.parent.amaf_values.get(action_k, 0.0) / amaf_n
+
+        # β ∈ [0, 1]: high when parent_visits is low, approaches 0 as visits grow
+        beta = math.sqrt(rave_k / (3.0 * parent_visits + rave_k))
+        blended = (1.0 - beta) * q_uct + beta * amaf_q
+
+        explore = c * math.sqrt(math.log(parent_visits) / self.visit_count)
+        return blended + explore
+
     def best_child_uct(self, c: float) -> MCTSNode:
         return max(self.children, key=lambda ch: ch.uct_value(self.visit_count, c))
 
+    def best_child_rave(
+        self, c: float, rave_k: float, rave_fpu: bool = False,
+    ) -> MCTSNode:
+        return max(
+            self.children,
+            key=lambda ch: ch.rave_value(self.visit_count, c, rave_k, rave_fpu),
+        )
+
     def most_visited_child(self) -> MCTSNode:
         return max(self.children, key=lambda ch: ch.visit_count)
+
+
+# ------------------------------------------------------------------
+# Progressive widening helpers
+# ------------------------------------------------------------------
+
+
+def _max_children(visit_count: int, pw_c: float, pw_alpha: float) -> int:
+    """Maximum number of children allowed by progressive widening."""
+    return max(1, int(pw_c * max(1, visit_count) ** pw_alpha))
+
+
+_MEEPLE_SPOT_PRIORITY: dict[str, int] = {
+    "city": 0,
+    "monastery": 1,
+    "road": 2,
+    "field": 3,
+}
+
+
+def _action_sort_key(action: dict) -> tuple:
+    """Sort key for action ordering (lower = higher priority).
+
+    For tile placements: prefer positions adjacent to more tiles (heuristic:
+    positions closer to the origin tend to be more connected).
+    For meeple placements: city > monastery > road > field > skip.
+    """
+    if action.get("skip"):
+        return (10,)
+    if "meeple_spot" in action:
+        spot = action["meeple_spot"]
+        # Spot format: "city_N", "road_S", "field_NE_NW", "monastery"
+        prefix = spot.split("_")[0] if "_" in spot else spot
+        return (1, _MEEPLE_SPOT_PRIORITY.get(prefix, 5))
+    if "x" in action and "y" in action:
+        # Prefer positions closer to origin (likely more connected)
+        return (0, abs(action["x"]) + abs(action["y"]))
+    return (5,)
+
+
+# ------------------------------------------------------------------
+# RAVE β computation (exported for testing)
+# ------------------------------------------------------------------
+
+
+def rave_beta(parent_visits: int, rave_k: float) -> float:
+    """Compute the RAVE blending weight β.
+
+    β = sqrt(rave_k / (3 * parent_visits + rave_k))
+    β ≈ 1 when parent_visits is small, β → 0 as parent_visits grows.
+    """
+    return math.sqrt(rave_k / (3.0 * parent_visits + rave_k))
 
 
 # ------------------------------------------------------------------
@@ -82,6 +198,13 @@ def mcts_search(
     exploration_constant: float = 1.41,
     num_determinizations: int = 5,
     eval_fn: EvalFn | None = None,
+    pw_c: float = 2.0,
+    pw_alpha: float = 0.5,
+    use_rave: bool = False,
+    rave_k: float = 100.0,
+    max_amaf_depth: int = 4,
+    rave_fpu: bool = True,
+    tile_aware_amaf: bool = False,
 ) -> dict:
     """Run MCTS and return the best action payload for *player_id*.
 
@@ -105,6 +228,26 @@ def mcts_search(
     eval_fn:
         Heuristic leaf evaluator.  Falls back to a score-differential
         sigmoid if not provided.
+    pw_c:
+        Progressive widening constant.  A node may have at most
+        ``pw_c * visits^pw_alpha`` children.  Set ``pw_alpha=0`` to
+        disable widening (every action expanded immediately).
+    pw_alpha:
+        Progressive widening exponent (0 = disabled, 0.5 = sqrt).
+    use_rave:
+        Enable RAVE/AMAF statistics for faster convergence.
+    rave_k:
+        RAVE equivalence parameter.  Higher values trust AMAF longer
+        before falling back to pure UCT.
+    max_amaf_depth:
+        Maximum number of plies below a node to propagate AMAF stats.
+        0 = unlimited (original behaviour).  Default 4 = 2 full turns.
+    rave_fpu:
+        When True, use AMAF as a first-play urgency prior for unvisited
+        children instead of infinity.
+    tile_aware_amaf:
+        When True, include tile type in AMAF keys to prevent conflation
+        of different tiles at the same board position.
     """
     if players is None:
         score_keys = list(game_data.get("scores", {}).keys())
@@ -156,7 +299,9 @@ def mcts_search(
                 break
             _run_one_iteration(
                 root, root_state, player_id, players, plugin,
-                exploration_constant, eval_fn,
+                exploration_constant, eval_fn, pw_c, pw_alpha,
+                use_rave, rave_k, max_amaf_depth, rave_fpu,
+                tile_aware_amaf,
             )
 
         # Collect visit counts from this determinization's tree
@@ -187,46 +332,78 @@ def _run_one_iteration(
     plugin: GamePlugin,
     c: float,
     eval_fn: EvalFn,
+    pw_c: float,
+    pw_alpha: float,
+    use_rave: bool,
+    rave_k: float,
+    max_amaf_depth: int = 4,
+    rave_fpu: bool = True,
+    tile_aware_amaf: bool = False,
 ) -> None:
     """One MCTS iteration: select → expand → evaluate → backpropagate."""
     node = root
     state = clone_state(root_state)
 
-    # 1. SELECT — walk down using UCT
-    while (
-        node.untried_actions is not None
-        and len(node.untried_actions) == 0
-        and node.children
-    ):
-        node = node.best_child_uct(c)
+    # Track actions played in this iteration for AMAF updates
+    played_actions: list[tuple[str, PlayerId | None]] = []
+
+    # Helper to build the appropriate AMAF key
+    def _make_key(action: dict) -> str:
+        if tile_aware_amaf:
+            return _amaf_key(action, state)
+        return _action_key(action)
+
+    # 1. SELECT — walk down using UCT (or UCT+RAVE) while node is "fully widened"
+    while node.children and _at_widening_limit(node, pw_c, pw_alpha):
+        if use_rave:
+            node = node.best_child_rave(c, rave_k, rave_fpu)
+        else:
+            node = node.best_child_uct(c)
         if node.action_taken is not None and node.acting_player is not None:
+            # Set amaf_key on first traversal if tile-aware mode
+            if tile_aware_amaf and not node.amaf_key:
+                node.amaf_key = _amaf_key(node.action_taken, state)
+            played_actions.append(
+                (node.amaf_key or _action_key(node.action_taken), node.acting_player)
+            )
             _apply_node_action(state, node, plugin)
 
     # 2. EXPAND — if this node hasn't been expanded yet, discover actions
     if state.game_over is None and node.untried_actions is None:
         acting_pid = _get_acting_player(state.phase, players)
         if acting_pid:
-            node.untried_actions = plugin.get_valid_actions(
+            actions = plugin.get_valid_actions(
                 state.game_data, state.phase, acting_pid
             )
+            # Sort by heuristic priority so best actions are expanded first
+            actions.sort(key=_action_sort_key)
+            node.untried_actions = actions
         else:
             node.untried_actions = []
 
-    # Pick one untried action and create a child node
-    if state.game_over is None and node.untried_actions:
-        idx = random.randrange(len(node.untried_actions))
-        action_payload = node.untried_actions.pop(idx)
+    # Pick one untried action if below widening limit
+    should_expand = (
+        state.game_over is None
+        and node.untried_actions
+        and not _at_widening_limit(node, pw_c, pw_alpha)
+    )
+
+    if should_expand:
+        # Take the first untried action (list is priority-sorted)
+        action_payload = node.untried_actions.pop(0)
         acting_pid = _get_acting_player(state.phase, players)
 
         child = MCTSNode(
             action_taken=action_payload,
             parent=node,
             acting_player=acting_pid,
+            amaf_key=_make_key(action_payload) if use_rave else "",
         )
         node.children.append(child)
         node = child
 
         if acting_pid:
+            played_actions.append((child.amaf_key or _action_key(action_payload), acting_pid))
             _apply_node_action(state, node, plugin)
 
     # 3. EVALUATE
@@ -238,6 +415,26 @@ def _run_one_iteration(
         )
 
     # 4. BACKPROPAGATE
+    _backpropagate(node, value, searching_player, played_actions, use_rave,
+                   max_amaf_depth)
+
+
+def _backpropagate(
+    leaf: MCTSNode,
+    value: float,
+    searching_player: PlayerId,
+    played_actions: list[tuple[str, PlayerId | None]],
+    use_rave: bool,
+    max_amaf_depth: int = 0,
+) -> None:
+    """Walk back to root, updating visit counts and optionally AMAF stats.
+
+    When *max_amaf_depth* > 0, only actions within that many plies below
+    a node contribute to its AMAF statistics.  0 = unlimited.
+    """
+    node = leaf
+    depth = len(played_actions)
+
     while node is not None:
         node.visit_count += 1
         # Value is always from searching_player's perspective.
@@ -246,7 +443,34 @@ def _run_one_iteration(
             node.total_value += value
         else:
             node.total_value += 1.0 - value
+
+        # AMAF update: for each action played BELOW this node, update AMAF stats
+        if use_rave and depth < len(played_actions):
+            # Depth-limited AMAF: only consider nearby actions
+            if max_amaf_depth > 0:
+                end_i = min(len(played_actions), depth + max_amaf_depth)
+            else:
+                end_i = len(played_actions)
+            for i in range(depth, end_i):
+                ak, player = played_actions[i]
+                # Update AMAF from searching_player's perspective
+                node.amaf_visits[ak] = node.amaf_visits.get(ak, 0) + 1
+                if player is None or player == searching_player:
+                    node.amaf_values[ak] = node.amaf_values.get(ak, 0.0) + value
+                else:
+                    node.amaf_values[ak] = node.amaf_values.get(ak, 0.0) + (1.0 - value)
+
+        depth -= 1
         node = node.parent
+
+
+def _at_widening_limit(node: MCTSNode, pw_c: float, pw_alpha: float) -> bool:
+    """Check if a node has reached its progressive widening child limit."""
+    if not node.untried_actions:
+        # No more actions to expand — always at limit
+        return True
+    limit = _max_children(node.visit_count, pw_c, pw_alpha)
+    return len(node.children) >= limit
 
 
 # ------------------------------------------------------------------
@@ -304,6 +528,27 @@ def _action_key(action: dict | None) -> str:
     if "meeple_spot" in action:
         return f"meeple:{action['meeple_spot']}"
     return json.dumps(action, sort_keys=True)
+
+
+def _amaf_key(action: dict | None, state: SimulationState | None = None) -> str:
+    """AMAF key that optionally includes tile context.
+
+    When *state* is provided and the action is a tile placement, prepends
+    the current tile type to prevent conflating different tiles at the same
+    position across different tree depths.
+    """
+    if action is None:
+        return ""
+    if (
+        state is not None
+        and "x" in action
+        and "y" in action
+        and "rotation" in action
+    ):
+        tile = state.game_data.get("current_tile", "")
+        if tile:
+            return f"{tile}:{action['x']},{action['y']},{action['rotation']}"
+    return _action_key(action)
 
 
 def _default_eval_fn(

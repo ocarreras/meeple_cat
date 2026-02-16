@@ -7,16 +7,27 @@
 | Bot | bot_id | Strength | Description |
 |-----|--------|----------|-------------|
 | Random | `"random"` | Baseline | Picks uniformly from valid actions |
-| MCTS + Heuristic | `"mcts"` | Strong amateur | Monte Carlo Tree Search with heuristic leaf evaluation |
+| MCTS + Heuristic | `"mcts"` | Strong amateur | Monte Carlo Tree Search with progressive widening and configurable heuristic eval |
 
-### Arena results (MCTS vs Random, 50 games)
+### Arena results (200 sims, 1s, 3 dets, pw_c=2.0, pw_alpha=0.5)
 
 ```
-MCTS:   50 wins (100%)  avg_score=55.3  [95% CI: 92.9%-100.0%]
-Random:  0 wins (  0%)  avg_score=19.5  [95% CI: 0.0%-7.1%]
+Random vs MCTS:       MCTS 20-0 (100%)  avg 80.2 vs 23.1  [20 games]
 ```
 
-MCTS scores ~3x random on average. Each game takes ~9s with 200 simulations, 1s time limit, 3 determinizations.
+MCTS scores ~3.5x random on average.
+
+**MCTS vs MCTS+RAVE optimization** (k=100, depth=4, FPU on):
+
+| Config | Games | MCTS wins | RAVE wins | MCTS avg | RAVE avg |
+|--------|-------|-----------|-----------|----------|----------|
+| Before (k=300, unlimited, no FPU) | 20 | 13 (65%) | 6 (30%) | 75.7 | 62.3 |
+| After (k=100, depth=4, FPU) | 50 | 24 (48%) | **26 (52%)** | 75.1 | 67.3 |
+
+Three key improvements turned RAVE from losing 65-30% to winning 52-48%:
+1. **Depth-limited AMAF** (max_amaf_depth=4) — prevents deep-ply AMAF pollution
+2. **First-play urgency** (rave_fpu=True) — uses AMAF as prior for unvisited children
+3. **Lower rave_k** (100 vs 300) — faster fade from AMAF to pure UCT
 
 ### Architecture
 
@@ -38,22 +49,30 @@ backend/src/games/carcassonne/
 ### MCTS implementation details
 
 - **Algorithm**: UCT with heuristic leaf evaluation (no random rollouts)
+- **Progressive widening**: Limits tree width proportional to visit count (`max_children = pw_c * visits^pw_alpha`). Actions sorted by heuristic priority (city placements > monastery > road > field > skip). Default: pw_c=2.0, pw_alpha=0.5 (at 100 visits → 20 children max)
 - **Stochasticity handling**: Determinization — shuffle the tile bag N times, run independent MCTS trees per determinization, aggregate root visit counts
 - **Two-phase turns**: `place_tile` and `place_meeple` are separate tree levels
 - **Leaf evaluation**: Heuristic function, not rollouts. Rollouts cost ~63ms and are very noisy; heuristic eval costs <0.1ms
 - **Performance**: ~1000 MCTS iterations/second at mid-game (~0.3ms deepcopy + ~1ms apply_action)
-- **Default params**: 200 sims, 1s time limit, C=1.41, 3 determinizations
+- **RAVE / AMAF**: Optional blending of UCT Q-value with AMAF statistics (`β = sqrt(k / (3N + k))`). Enabled via `use_rave=True`. Depth-limited AMAF (default 4 plies = 2 turns) + first-play urgency (AMAF as prior for unvisited children). Default rave_k=100
+- **Default params**: 200 sims, 1s time limit, C=1.41, 3 determinizations, pw_c=2.0, pw_alpha=0.5
 
 ### Heuristic evaluator (evaluator.py)
 
-Returns value in [0, 1] with four components whose weights shift during the game:
+Configurable via `EvalWeights` dataclass. Returns value in [0, 1] with four components whose weights shift during the game:
 
 | Component | Early → Late weight | What it measures |
 |-----------|-------------------|------------------|
 | Score differential | 0.35 → 0.45 | Current points vs best opponent (sigmoid) |
-| Feature potential | 0.35 → 0.20 | Expected value of incomplete features with meeples (completion probability based on open_edges vs tiles_remaining) |
-| Meeple economy | 0.20 → 0.15 | Available meeples vs opponents, penalises hoarding |
-| Field potential | 0.10 → 0.20 | Estimated end-game field scoring (3pts per adjacent completed city) |
+| Feature potential | 0.35 → 0.20 | Expected value of incomplete features with meeples. Includes **contested feature penalty** (wasted meeples on opponent-controlled features) |
+| Meeple economy | 0.20 → 0.15 | Available meeples vs opponents, penalises hoarding. **Scarcity awareness** — strong penalty when at 0 meeples mid-game |
+| Field potential | 0.10 → 0.20 | Estimated end-game field scoring (3pts per adjacent completed city). **Nearly-complete city awareness** — also values fields adjacent to cities likely to complete |
+
+Named weight presets for arena experimentation:
+- `default` — balanced play
+- `aggressive` — higher score weight, lower meeple conservation
+- `field_heavy` — emphasises field scoring potential
+- `conservative` — prioritises meeple economy
 
 ### Arena CLI usage
 
@@ -61,8 +80,23 @@ Returns value in [0, 1] with four components whose weights shift during the game
 # Random vs random baseline (~6s for 100 games)
 uv run python -m src.engine.arena_cli --p1 random --p2 random --games 100
 
-# MCTS vs random (~9s/game)
+# MCTS vs random
 uv run python -m src.engine.arena_cli --p1 random --p2 mcts --games 50
+
+# Compare evaluator profiles
+uv run python -m src.engine.arena_cli --p1 mcts --p1-eval default \
+    --p2 mcts --p2-eval aggressive --games 100
+
+# Control progressive widening
+uv run python -m src.engine.arena_cli --p1 random --p2 mcts \
+    --pw-c 2.0 --pw-alpha 0.5 --games 50
+
+# MCTS vs MCTS+RAVE
+uv run python -m src.engine.arena_cli --p1 mcts --p2 mcts --p2-rave --games 50
+
+# MCTS+RAVE with custom rave_k
+uv run python -m src.engine.arena_cli --p1 mcts --p1-rave --p2 mcts --p2-rave \
+    --rave-k 50 --games 50
 
 # Tune MCTS parameters
 uv run python -m src.engine.arena_cli --p1 mcts --p2 mcts --games 50 \
@@ -95,10 +129,10 @@ uv run python -m src.engine.arena_cli --p1 mcts --p2 mcts --games 50 \
 
 **Estimated effort**: 1-2 weeks per item, $0 compute
 
-- [ ] **Tune heuristic weights** — use arena to A/B test weight variations
-- [ ] **Progressive widening** — limit branching in early expansion (Carcassonne has 20-80 actions per node)
-- [ ] **RAVE / AMAF** — All-Moves-As-First heuristic to speed up convergence (proven for Carcassonne in [arXiv:2009.12974](https://arxiv.org/abs/2009.12974))
-- [ ] **Better meeple heuristics** — field placement strategy, feature stealing (place meeple on opponent's feature to share/steal scoring)
+- [x] **Configurable evaluator weights** — `EvalWeights` dataclass with named presets (default, aggressive, field_heavy, conservative) + `make_carcassonne_eval()` factory
+- [x] **Progressive widening** — limits branching proportional to visit count (`pw_c * visits^pw_alpha`), with heuristic action ordering
+- [x] **Better meeple heuristics** — contested feature penalty, meeple scarcity awareness, nearly-complete city field valuation
+- [x] **RAVE / AMAF** — All-Moves-As-First heuristic with depth-limited AMAF + first-play urgency. Wins 52-48% vs baseline MCTS (k=100, depth=4, FPU). Enabled via `--p1-rave`/`--p2-rave` flags
 - [ ] **Opening book** — pre-compute good first few moves
 - [ ] **Endgame solver** — exact evaluation when few tiles remain
 

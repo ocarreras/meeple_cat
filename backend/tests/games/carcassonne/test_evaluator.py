@@ -6,9 +6,14 @@ from src.engine.game_simulator import (
 )
 from src.engine.models import Action, GameConfig, Player, PlayerId
 from src.games.carcassonne.evaluator import (
+    DEFAULT_WEIGHTS,
+    WEIGHT_PRESETS,
+    EvalWeights,
     _completion_probability,
+    _meeple_counts,
     _sigmoid,
     carcassonne_eval,
+    make_carcassonne_eval,
 )
 from src.games.carcassonne.plugin import CarcassonnePlugin
 
@@ -121,3 +126,150 @@ def test_sigmoid_properties():
     assert abs(_sigmoid(0) - 0.5) < 1e-9
     assert _sigmoid(100) > 0.99
     assert _sigmoid(-100) < 0.01
+
+
+# ------------------------------------------------------------------
+# EvalWeights and make_carcassonne_eval tests
+# ------------------------------------------------------------------
+
+
+def test_eval_weights_defaults():
+    """EvalWeights defaults should match the documented values."""
+    w = EvalWeights()
+    assert w.score_base == 0.35
+    assert w.score_delta == 0.10
+    assert w.meeple_hoard_threshold == 6
+    assert w.field_scale == 10.0
+
+
+def test_weight_presets_exist():
+    """All named presets should be available."""
+    assert "default" in WEIGHT_PRESETS
+    assert "aggressive" in WEIGHT_PRESETS
+    assert "field_heavy" in WEIGHT_PRESETS
+    assert "conservative" in WEIGHT_PRESETS
+    assert WEIGHT_PRESETS["default"] is DEFAULT_WEIGHTS
+
+
+def test_make_carcassonne_eval_default():
+    """make_carcassonne_eval() should produce same result as carcassonne_eval."""
+    plugin, state = _make_state()
+    default_fn = make_carcassonne_eval()
+    v_default = default_fn(
+        state.game_data, state.phase, PlayerId("p0"), state.players, plugin
+    )
+    v_direct = carcassonne_eval(
+        state.game_data, state.phase, PlayerId("p0"), state.players, plugin
+    )
+    assert abs(v_default - v_direct) < 1e-9
+
+
+def test_make_carcassonne_eval_custom_weights():
+    """Custom weights should produce different evaluations than defaults."""
+    plugin, state = _make_state()
+
+    default_fn = make_carcassonne_eval(DEFAULT_WEIGHTS)
+    aggressive_fn = make_carcassonne_eval(WEIGHT_PRESETS["aggressive"])
+
+    v_default = default_fn(
+        state.game_data, state.phase, PlayerId("p0"), state.players, plugin
+    )
+    v_aggressive = aggressive_fn(
+        state.game_data, state.phase, PlayerId("p0"), state.players, plugin
+    )
+
+    # Different weight profiles should produce different evaluations
+    # (they have different base weights so will differ numerically)
+    assert isinstance(v_default, float)
+    assert isinstance(v_aggressive, float)
+    assert 0.0 <= v_default <= 1.0
+    assert 0.0 <= v_aggressive <= 1.0
+    # At minimum, verify both produce valid different-parameterized results
+    # The exact direction depends on all component interactions
+    assert v_default != v_aggressive
+
+
+# ------------------------------------------------------------------
+# Contested features and meeple counts
+# ------------------------------------------------------------------
+
+
+def test_meeple_counts():
+    """_meeple_counts should separate player vs opponent counts."""
+    meeples = [
+        {"player_id": "p0"},
+        {"player_id": "p1"},
+        {"player_id": "p1"},
+    ]
+    my, max_opp, total_opp = _meeple_counts(meeples, PlayerId("p0"))
+    assert my == 1
+    assert max_opp == 2
+    assert total_opp == 2
+
+
+def test_meeple_counts_no_opponents():
+    meeples = [{"player_id": "p0"}, {"player_id": "p0"}]
+    my, max_opp, total_opp = _meeple_counts(meeples, PlayerId("p0"))
+    assert my == 2
+    assert max_opp == 0
+    assert total_opp == 0
+
+
+def test_contested_feature_penalty():
+    """Features where we have meeples but don't control should lower eval."""
+    plugin, state = _make_state()
+
+    # Create a contested city feature — opponent has more meeples
+    state.game_data["features"]["test_city"] = {
+        "feature_type": "city",
+        "is_complete": False,
+        "tiles": ["0,0", "1,0", "2,0"],
+        "open_edges": ["2,0_E"],
+        "pennants": 0,
+        "meeples": [
+            {"player_id": "p0"},
+            {"player_id": "p1"},
+            {"player_id": "p1"},
+        ],
+    }
+
+    # p0 has meeples on a feature they don't control — should lower eval
+    v_contested = carcassonne_eval(
+        state.game_data, state.phase, PlayerId("p0"), state.players, plugin
+    )
+
+    # Remove our wasted meeple
+    state.game_data["features"]["test_city"]["meeples"] = [
+        {"player_id": "p1"},
+        {"player_id": "p1"},
+    ]
+    v_no_waste = carcassonne_eval(
+        state.game_data, state.phase, PlayerId("p0"), state.players, plugin
+    )
+
+    # Having wasted meeples should produce a lower eval than not
+    assert v_contested < v_no_waste
+
+
+def test_meeple_scarcity_penalty():
+    """0 meeples mid-game should produce lower eval."""
+    plugin, state = _make_state()
+
+    # Set up mid-game scenario with scores equal
+    state.game_data["scores"]["p0"] = 20
+    state.game_data["scores"]["p1"] = 20
+
+    # With normal meeple supply
+    state.game_data["meeple_supply"]["p0"] = 4
+    state.game_data["meeple_supply"]["p1"] = 4
+    v_normal = carcassonne_eval(
+        state.game_data, state.phase, PlayerId("p0"), state.players, plugin
+    )
+
+    # With 0 meeples for p0
+    state.game_data["meeple_supply"]["p0"] = 0
+    v_scarce = carcassonne_eval(
+        state.game_data, state.phase, PlayerId("p0"), state.players, plugin
+    )
+
+    assert v_scarce < v_normal

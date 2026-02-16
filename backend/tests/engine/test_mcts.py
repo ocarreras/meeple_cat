@@ -4,7 +4,14 @@ from src.engine.game_simulator import (
     SimulationState,
     apply_action_and_resolve,
 )
-from src.engine.mcts import MCTSNode, _action_key, mcts_search
+from src.engine.mcts import (
+    MCTSNode,
+    _action_key,
+    _action_sort_key,
+    _max_children,
+    mcts_search,
+    rave_beta,
+)
 from src.engine.models import Action, GameConfig, Player, PlayerId
 from src.games.carcassonne.evaluator import carcassonne_eval
 from src.games.carcassonne.plugin import CarcassonnePlugin
@@ -192,3 +199,301 @@ def test_mcts_node_uct():
     # Unvisited child should have infinite UCT
     child_c = MCTSNode(action_taken={"x": 2}, parent=parent)
     assert child_c.uct_value(100, 1.41) == float("inf")
+
+
+# ------------------------------------------------------------------
+# Progressive widening tests
+# ------------------------------------------------------------------
+
+
+def test_max_children_formula():
+    """_max_children should grow with visit count."""
+    # pw_c=2.0, pw_alpha=0.5 → max(1, int(2 * sqrt(visits)))
+    assert _max_children(1, 2.0, 0.5) == 2  # 2 * 1^0.5 = 2
+    assert _max_children(4, 2.0, 0.5) == 4  # 2 * 4^0.5 = 4
+    assert _max_children(16, 2.0, 0.5) == 8  # 2 * 16^0.5 = 8
+    assert _max_children(100, 2.0, 0.5) == 20  # 2 * 100^0.5 = 20
+
+    # alpha=0 means every visit allows a new child (effectively no widening)
+    # pw_c * 1^0 = pw_c always
+    assert _max_children(1, 2.0, 0.0) == 2
+    assert _max_children(100, 2.0, 0.0) == 2  # Always 2
+
+
+def test_max_children_minimum():
+    """Should always allow at least 1 child."""
+    assert _max_children(0, 0.1, 0.5) >= 1
+    assert _max_children(1, 0.1, 0.5) >= 1
+
+
+def test_action_sort_key_tile_placement():
+    """Tile placements closer to origin should have lower sort key."""
+    near = _action_sort_key({"x": 0, "y": 1, "rotation": 0})
+    far = _action_sort_key({"x": 5, "y": 5, "rotation": 90})
+    assert near < far
+
+
+def test_action_sort_key_meeple_priority():
+    """Meeple spots should be prioritised: city > monastery > road > field > skip."""
+    city = _action_sort_key({"meeple_spot": "city_N"})
+    monastery = _action_sort_key({"meeple_spot": "monastery"})
+    road = _action_sort_key({"meeple_spot": "road_S"})
+    field = _action_sort_key({"meeple_spot": "field_NE_NW"})
+    skip = _action_sort_key({"skip": True})
+
+    assert city < monastery < road < field < skip
+
+
+def test_mcts_with_progressive_widening():
+    """MCTS with progressive widening should still return a valid action."""
+    plugin, state = _make_place_tile_state()
+
+    chosen = mcts_search(
+        game_data=state.game_data,
+        phase=state.phase,
+        player_id=PlayerId("p0"),
+        plugin=plugin,
+        players=state.players,
+        num_simulations=50,
+        time_limit_ms=500,
+        num_determinizations=2,
+        eval_fn=carcassonne_eval,
+        pw_c=2.0,
+        pw_alpha=0.5,
+    )
+
+    valid = plugin.get_valid_actions(
+        state.game_data, state.phase, PlayerId("p0")
+    )
+    valid_keys = {_action_key(a) for a in valid}
+    assert _action_key(chosen) in valid_keys
+
+
+def test_mcts_no_widening():
+    """MCTS with pw_alpha=0 should still work (disables widening)."""
+    plugin, state = _make_place_tile_state()
+
+    chosen = mcts_search(
+        game_data=state.game_data,
+        phase=state.phase,
+        player_id=PlayerId("p0"),
+        plugin=plugin,
+        players=state.players,
+        num_simulations=30,
+        time_limit_ms=500,
+        num_determinizations=1,
+        pw_c=100.0,  # Very high → effectively no widening
+        pw_alpha=0.0,
+    )
+
+    valid = plugin.get_valid_actions(
+        state.game_data, state.phase, PlayerId("p0")
+    )
+    valid_keys = {_action_key(a) for a in valid}
+    assert _action_key(chosen) in valid_keys
+
+
+# ------------------------------------------------------------------
+# RAVE / AMAF tests
+# ------------------------------------------------------------------
+
+
+def test_mcts_with_rave():
+    """MCTS with RAVE enabled should return a valid action."""
+    plugin, state = _make_place_tile_state()
+
+    chosen = mcts_search(
+        game_data=state.game_data,
+        phase=state.phase,
+        player_id=PlayerId("p0"),
+        plugin=plugin,
+        players=state.players,
+        num_simulations=50,
+        time_limit_ms=500,
+        num_determinizations=2,
+        eval_fn=carcassonne_eval,
+        use_rave=True,
+        rave_k=100.0,
+    )
+
+    valid = plugin.get_valid_actions(
+        state.game_data, state.phase, PlayerId("p0")
+    )
+    valid_keys = {_action_key(a) for a in valid}
+    assert _action_key(chosen) in valid_keys
+
+
+def test_rave_value_blending():
+    """β should be ~1 at low parent visits and approach 0 at high visits."""
+    # β = sqrt(k / (3 * N + k))
+    # At N=0: β = sqrt(300/300) = 1.0
+    assert rave_beta(0, 300.0) == 1.0
+
+    # At N=100: β = sqrt(300/600) ≈ 0.707
+    beta_100 = rave_beta(100, 300.0)
+    assert 0.70 < beta_100 < 0.72
+
+    # At N=10000: β = sqrt(300/30300) ≈ 0.099
+    beta_10k = rave_beta(10000, 300.0)
+    assert beta_10k < 0.11
+
+    # Higher rave_k → slower decay (trust AMAF longer)
+    beta_low_k = rave_beta(100, 100.0)
+    beta_high_k = rave_beta(100, 1000.0)
+    assert beta_low_k < beta_high_k
+
+
+def test_rave_amaf_stats_populated():
+    """After MCTS+RAVE, the root node should have AMAF entries."""
+    plugin, state = _make_place_tile_state()
+
+    import copy
+    root_state = SimulationState(
+        game_data=copy.deepcopy(state.game_data),
+        phase=state.phase.model_copy(deep=True),
+        players=state.players,
+        scores={p.player_id: 0.0 for p in state.players},
+    )
+
+    from src.engine.mcts import _run_one_iteration
+
+    root = MCTSNode(action_taken=None, parent=None)
+    for _ in range(20):
+        _run_one_iteration(
+            root, root_state, PlayerId("p0"), state.players, plugin,
+            1.41, carcassonne_eval, 2.0, 0.5,
+            use_rave=True, rave_k=100.0, max_amaf_depth=4,
+        )
+
+    # Root should have accumulated AMAF statistics
+    assert root.visit_count == 20
+    assert len(root.amaf_visits) > 0
+    assert len(root.amaf_values) > 0
+
+    for key, count in root.amaf_visits.items():
+        assert count > 0
+        assert key in root.amaf_values
+
+
+def test_rave_disabled_by_default():
+    """With use_rave=False, AMAF dicts should remain empty."""
+    plugin, state = _make_place_tile_state()
+
+    import copy
+    root_state = SimulationState(
+        game_data=copy.deepcopy(state.game_data),
+        phase=state.phase.model_copy(deep=True),
+        players=state.players,
+        scores={p.player_id: 0.0 for p in state.players},
+    )
+
+    from src.engine.mcts import _run_one_iteration
+
+    root = MCTSNode(action_taken=None, parent=None)
+    for _ in range(20):
+        _run_one_iteration(
+            root, root_state, PlayerId("p0"), state.players, plugin,
+            1.41, carcassonne_eval, 2.0, 0.5,
+            use_rave=False, rave_k=100.0, max_amaf_depth=4,
+        )
+
+    assert root.visit_count == 20
+    assert len(root.amaf_visits) == 0
+    assert len(root.amaf_values) == 0
+
+
+def test_depth_limited_amaf():
+    """Depth-limited AMAF should have fewer entries than unlimited."""
+    plugin, state = _make_place_tile_state()
+
+    import copy
+    from src.engine.mcts import _run_one_iteration
+
+    # Run with depth limit = 2
+    root_limited = MCTSNode(action_taken=None, parent=None)
+    limited_state = SimulationState(
+        game_data=copy.deepcopy(state.game_data),
+        phase=state.phase.model_copy(deep=True),
+        players=state.players,
+        scores={p.player_id: 0.0 for p in state.players},
+    )
+    for _ in range(30):
+        _run_one_iteration(
+            root_limited, limited_state, PlayerId("p0"), state.players, plugin,
+            1.41, carcassonne_eval, 2.0, 0.5,
+            use_rave=True, rave_k=100.0, max_amaf_depth=2,
+        )
+
+    # Run with unlimited depth
+    root_unlimited = MCTSNode(action_taken=None, parent=None)
+    unlimited_state = SimulationState(
+        game_data=copy.deepcopy(state.game_data),
+        phase=state.phase.model_copy(deep=True),
+        players=state.players,
+        scores={p.player_id: 0.0 for p in state.players},
+    )
+    for _ in range(30):
+        _run_one_iteration(
+            root_unlimited, unlimited_state, PlayerId("p0"), state.players, plugin,
+            1.41, carcassonne_eval, 2.0, 0.5,
+            use_rave=True, rave_k=100.0, max_amaf_depth=0,
+        )
+
+    # Depth-limited root should have <= entries than unlimited
+    assert len(root_limited.amaf_visits) <= len(root_unlimited.amaf_visits)
+    # Both should have at least some AMAF data
+    assert len(root_limited.amaf_visits) > 0
+    assert len(root_unlimited.amaf_visits) > 0
+
+
+def test_rave_fpu_prefers_amaf_children():
+    """Unvisited children with AMAF data should get an AMAF-based score."""
+    parent = MCTSNode(action_taken=None, parent=None)
+    parent.visit_count = 10
+    parent.amaf_visits["1,0,90"] = 5
+    parent.amaf_values["1,0,90"] = 4.0  # amaf_q = 0.8
+
+    child_with_amaf = MCTSNode(
+        action_taken={"x": 1, "y": 0, "rotation": 90}, parent=parent
+    )
+    child_no_amaf = MCTSNode(
+        action_taken={"x": 2, "y": 0, "rotation": 0}, parent=parent
+    )
+
+    # With FPU, child with AMAF gets 1.0 + amaf_q = 1.8
+    val_with = child_with_amaf.rave_value(10, 1.41, 100.0, rave_fpu=True)
+    assert val_with == 1.8
+
+    # Child without AMAF still gets inf
+    val_without = child_no_amaf.rave_value(10, 1.41, 100.0, rave_fpu=True)
+    assert val_without == float("inf")
+
+    # Without FPU, both get inf
+    assert child_with_amaf.rave_value(10, 1.41, 100.0, rave_fpu=False) == float("inf")
+
+
+def test_mcts_rave_optimized():
+    """MCTS+RAVE with all optimizations returns a valid action."""
+    plugin, state = _make_place_tile_state()
+
+    chosen = mcts_search(
+        game_data=state.game_data,
+        phase=state.phase,
+        player_id=PlayerId("p0"),
+        plugin=plugin,
+        players=state.players,
+        num_simulations=50,
+        time_limit_ms=500,
+        num_determinizations=2,
+        eval_fn=carcassonne_eval,
+        use_rave=True,
+        rave_k=100.0,
+        max_amaf_depth=4,
+        rave_fpu=True,
+    )
+
+    valid = plugin.get_valid_actions(
+        state.game_data, state.phase, PlayerId("p0")
+    )
+    valid_keys = {_action_key(a) for a in valid}
+    assert _action_key(chosen) in valid_keys

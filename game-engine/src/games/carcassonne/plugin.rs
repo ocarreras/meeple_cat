@@ -1048,6 +1048,345 @@ mod tests {
         );
     }
 
+    /// Validate state invariants. Returns a list of violation messages (empty = pass).
+    fn check_state_invariants(
+        state: &CarcassonneState,
+        players: &[Player],
+        context: &str,
+    ) -> Vec<String> {
+        let mut violations = Vec::new();
+
+        // INV1: All feature IDs in tile_feature_map exist in state.features
+        for (pos, spots) in &state.tile_feature_map {
+            for (spot, fid) in spots {
+                if !state.features.contains_key(fid) {
+                    violations.push(format!(
+                        "INV1 [{}]: tile_feature_map[{}][{}] -> feature '{}' not in features",
+                        context, pos, spot, fid
+                    ));
+                }
+            }
+        }
+
+        // INV2: All features' tiles are on the board
+        for (fid, feat) in &state.features {
+            for tile_pos in &feat.tiles {
+                if !state.board.tiles.contains_key(tile_pos) {
+                    violations.push(format!(
+                        "INV2 [{}]: feature '{}' ({:?}) references tile '{}' not on board",
+                        context, fid, feat.feature_type, tile_pos
+                    ));
+                }
+            }
+        }
+
+        // INV3: Meeple count consistency
+        // Total meeples = placed on features + in supply for each player
+        let mut placed_meeples: HashMap<String, i32> = HashMap::new();
+        for feat in state.features.values() {
+            for m in &feat.meeples {
+                *placed_meeples.entry(m.player_id.clone()).or_insert(0) += 1;
+            }
+        }
+        for p in players {
+            let supply = state.meeple_supply.get(&p.player_id).copied().unwrap_or(0);
+            let placed = placed_meeples.get(&p.player_id).copied().unwrap_or(0);
+            if supply + placed != 7 {
+                violations.push(format!(
+                    "INV3 [{}]: player '{}' meeple count: supply={} + placed={} = {} (expected 7)",
+                    context, p.player_id, supply, placed, supply + placed
+                ));
+            }
+        }
+
+        // INV4: Completed features should have no meeples (they get returned)
+        for (fid, feat) in &state.features {
+            if feat.is_complete && !feat.meeples.is_empty() {
+                violations.push(format!(
+                    "INV4 [{}]: completed feature '{}' ({:?}) still has {} meeples",
+                    context, fid, feat.feature_type, feat.meeples.len()
+                ));
+            }
+        }
+
+        // INV5: Open edges should reference positions in the feature's tiles
+        for (fid, feat) in &state.features {
+            for oe in &feat.open_edges {
+                if !feat.tiles.contains(&oe[0]) {
+                    violations.push(format!(
+                        "INV5 [{}]: feature '{}' open_edge [{}, {}] references tile not in feature.tiles",
+                        context, fid, oe[0], oe[1]
+                    ));
+                }
+            }
+        }
+
+        // INV6: Non-complete city/road features with open edges - the neighbor
+        // position in that direction should NOT be on the board
+        for (fid, feat) in &state.features {
+            if feat.is_complete {
+                continue;
+            }
+            if !matches!(feat.feature_type, FeatureType::City | FeatureType::Road) {
+                continue;
+            }
+            for oe in &feat.open_edges {
+                let pos = Position::from_key(&oe[0]);
+                let dir = oe[1].split(':').next().unwrap_or(&oe[1]);
+                let neighbor = pos.neighbor(dir);
+                let neighbor_key = neighbor.to_key();
+                if state.board.tiles.contains_key(&neighbor_key) {
+                    violations.push(format!(
+                        "INV6 [{}]: feature '{}' ({:?}) has open_edge [{}, {}] but neighbor '{}' IS on board",
+                        context, fid, feat.feature_type, oe[0], oe[1], neighbor_key
+                    ));
+                }
+            }
+        }
+
+        // INV7: All tile positions on board should have entries in tile_feature_map
+        for pos_key in state.board.tiles.keys() {
+            if !state.tile_feature_map.contains_key(pos_key) {
+                violations.push(format!(
+                    "INV7 [{}]: board tile at '{}' has no tile_feature_map entry",
+                    context, pos_key
+                ));
+            }
+        }
+
+        // INV8: Scores should never be negative
+        for (pid, &score) in &state.scores {
+            if score < 0 {
+                violations.push(format!(
+                    "INV8 [{}]: player '{}' has negative score: {}",
+                    context, pid, score
+                ));
+            }
+        }
+
+        violations
+    }
+
+    #[test]
+    fn test_full_game_with_invariants() {
+        // Play multiple full games with all 71 tiles, checking invariants after every step.
+        let plugin = CarcassonnePlugin;
+        let players = make_players(2);
+
+        for seed in [42u64, 123, 999, 7, 2025] {
+            let config = GameConfig {
+                random_seed: Some(seed),
+                options: serde_json::json!({}),
+            };
+
+            let (mut state, mut phase, _) = plugin.create_initial_state(&players, &config);
+            let context_prefix = format!("seed={}", seed);
+
+            // Check initial state
+            let vs = check_state_invariants(&state, &players, &format!("{} init", context_prefix));
+            assert!(vs.is_empty(), "Initial state violations:\n{}", vs.join("\n"));
+
+            let mut turns = 0;
+            let max_turns = 500;
+
+            while phase.name != "game_over" && turns < max_turns {
+                turns += 1;
+
+                if phase.auto_resolve {
+                    let pid_idx = phase.metadata.get("player_index")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as usize;
+                    let pid = if pid_idx < players.len() {
+                        players[pid_idx].player_id.clone()
+                    } else {
+                        "system".into()
+                    };
+                    let action = Action {
+                        action_type: phase.name.clone(),
+                        player_id: pid,
+                        payload: serde_json::json!({}),
+                    };
+                    let result = plugin.apply_action(&state, &phase, &action, &players);
+                    state = result.state;
+                    phase = result.next_phase;
+
+                    // Check invariants after auto-resolve steps
+                    if phase.name == "place_tile" || phase.name == "game_over" || phase.name == "place_meeple" {
+                        let vs = check_state_invariants(
+                            &state,
+                            &players,
+                            &format!("{} turn={} after-{}", context_prefix, turns, action.action_type),
+                        );
+                        assert!(vs.is_empty(), "Invariant violations:\n{}", vs.join("\n"));
+                    }
+                    continue;
+                }
+
+                let player_id = if !phase.expected_actions.is_empty() {
+                    phase.expected_actions[0].player_id.clone()
+                } else {
+                    "p1".into()
+                };
+
+                let valid = plugin.get_valid_actions(&state, &phase, &player_id);
+                assert!(!valid.is_empty(), "No valid actions at {} turn {}", context_prefix, turns);
+
+                let action = Action {
+                    action_type: phase.expected_actions[0].action_type.clone(),
+                    player_id: player_id.clone(),
+                    payload: valid[0].clone(),
+                };
+                let result = plugin.apply_action(&state, &phase, &action, &players);
+                state = result.state;
+                phase = result.next_phase;
+
+                // Check invariants after player actions
+                let vs = check_state_invariants(
+                    &state,
+                    &players,
+                    &format!("{} turn={} after-{}", context_prefix, turns, action.action_type),
+                );
+                assert!(vs.is_empty(), "Invariant violations:\n{}", vs.join("\n"));
+
+                if result.game_over.is_some() {
+                    break;
+                }
+            }
+
+            assert!(
+                phase.name == "game_over",
+                "Game seed={} should complete (stopped at phase '{}')",
+                seed, phase.name
+            );
+
+            let p1 = state.scores.get("p1").copied().unwrap_or(0);
+            let p2 = state.scores.get("p2").copied().unwrap_or(0);
+            eprintln!(
+                "  seed={}: {} tiles placed, scores p1={} p2={} total={}",
+                seed,
+                state.board.tiles.len(),
+                p1, p2, p1 + p2
+            );
+        }
+    }
+
+    #[test]
+    fn test_mcts_simulation_invariants() {
+        // Simulate what MCTS does: clone a mid-game state, determinize,
+        // then play several moves with "first valid action". Check invariants.
+        use crate::engine::simulator::{apply_action_and_resolve, SimulationState};
+
+        let plugin = CarcassonnePlugin;
+        let players = make_players(2);
+        let config = GameConfig {
+            random_seed: Some(42),
+            options: serde_json::json!({}),
+        };
+
+        // Create initial state and advance to mid-game
+        let (mut state, mut phase, _) = plugin.create_initial_state(&players, &config);
+        let mut step = 0;
+        // Play 20 half-turns to get to a mid-game state
+        while phase.name != "game_over" && step < 20 {
+            if phase.auto_resolve {
+                let pid_idx = phase.metadata.get("player_index")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize;
+                let pid = if pid_idx < players.len() {
+                    players[pid_idx].player_id.clone()
+                } else {
+                    "system".into()
+                };
+                let action = Action {
+                    action_type: phase.name.clone(),
+                    player_id: pid,
+                    payload: serde_json::json!({}),
+                };
+                let result = plugin.apply_action(&state, &phase, &action, &players);
+                state = result.state;
+                phase = result.next_phase;
+                continue;
+            }
+            step += 1;
+            let pid = phase.expected_actions[0].player_id.clone();
+            let valid = plugin.get_valid_actions(&state, &phase, &pid);
+            if valid.is_empty() { break; }
+            let action = Action {
+                action_type: phase.expected_actions[0].action_type.clone(),
+                player_id: pid,
+                payload: valid[0].clone(),
+            };
+            let result = plugin.apply_action(&state, &phase, &action, &players);
+            state = result.state;
+            phase = result.next_phase;
+        }
+
+        if phase.name == "game_over" {
+            return; // Game ended early, nothing to test
+        }
+
+        // Now simulate what MCTS does: clone, determinize, and play forward
+        for det_idx in 0..10 {
+            let mut det_state = state.clone();
+            plugin.determinize(&mut det_state);
+
+            let base_scores = plugin.get_scores(&det_state);
+            let mut sim = SimulationState {
+                state: det_state,
+                phase: phase.clone(),
+                players: players.to_vec(),
+                scores: base_scores,
+                game_over: None,
+            };
+
+            // Play forward 30 half-turns
+            let mut sim_step = 0;
+            while sim.game_over.is_none() && sim_step < 30 {
+                if sim.phase.auto_resolve {
+                    let pid_idx = sim.phase.metadata.get("player_index")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as usize;
+                    let pid = if pid_idx < players.len() {
+                        players[pid_idx].player_id.clone()
+                    } else {
+                        "system".into()
+                    };
+                    let action = Action {
+                        action_type: sim.phase.name.clone(),
+                        player_id: pid,
+                        payload: serde_json::json!({}),
+                    };
+                    apply_action_and_resolve(&plugin, &mut sim, &action);
+                    continue;
+                }
+
+                sim_step += 1;
+                let pid = sim.phase.expected_actions[0].player_id.clone();
+                let valid = plugin.get_valid_actions(&sim.state, &sim.phase, &pid);
+                if valid.is_empty() { break; }
+
+                let action = Action {
+                    action_type: sim.phase.expected_actions[0].action_type.clone(),
+                    player_id: pid.clone(),
+                    payload: valid[0].clone(),
+                };
+                apply_action_and_resolve(&plugin, &mut sim, &action);
+
+                // Check invariants after every player action in simulation
+                let vs = check_state_invariants(
+                    &sim.state,
+                    &players,
+                    &format!("det={} sim_step={}", det_idx, sim_step),
+                );
+                assert!(
+                    vs.is_empty(),
+                    "MCTS simulation invariant violations:\n{}",
+                    vs.join("\n")
+                );
+            }
+        }
+    }
+
     #[test]
     fn test_json_roundtrip() {
         let plugin = CarcassonnePlugin;

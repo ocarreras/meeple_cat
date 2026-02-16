@@ -112,7 +112,7 @@ pub fn score_end_game(
 }
 
 /// Find all completed cities that border a field feature.
-fn get_adjacent_completed_cities(
+pub(crate) fn get_adjacent_completed_cities(
     state: &CarcassonneState,
     field_feature: &Feature,
     field_feature_id: &str,
