@@ -4,7 +4,7 @@
 
 use crate::engine::models::*;
 use crate::engine::plugin::GamePlugin;
-use crate::games::carcassonne::types::Position;
+use crate::games::carcassonne::types::{CarcassonneState, FeatureType, PlacedMeeple, Position};
 
 /// Tunable parameters for the Carcassonne heuristic evaluator.
 pub struct EvalWeights {
@@ -357,10 +357,6 @@ fn estimate_field_value(game_data: &serde_json::Value, player_id: &str, _tiles_r
             continue;
         }
 
-        // Count adjacent completed cities
-        // Simplified: just count features that are cities and complete
-        // A proper implementation would use tile_feature_map adjacency
-        // For now, use a simplified heuristic
         let field_tiles = feat.get("tiles").and_then(|v| v.as_array());
         if let Some(tiles) = field_tiles {
             let tile_feature_map = &game_data["tile_feature_map"];
@@ -387,6 +383,232 @@ fn estimate_field_value(game_data: &serde_json::Value, player_id: &str, _tiles_r
                                 seen_cities.insert(city_fid.to_string());
                                 total += 3.0;
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    total
+}
+
+// ================================================================== //
+//  Typed evaluation — direct struct access, no JSON navigation
+// ================================================================== //
+
+/// Create a typed eval function parameterised by `weights`.
+pub fn make_carcassonne_eval_typed(
+    weights: &'static EvalWeights,
+) -> Box<dyn Fn(&CarcassonneState, &Phase, &str, &[Player]) -> f64 + Send + Sync> {
+    Box::new(move |state, phase, player_id, players| {
+        evaluate_typed(state, phase, player_id, players, weights)
+    })
+}
+
+/// Typed eval using default weights.
+pub fn carcassonne_eval_typed(
+    state: &CarcassonneState,
+    phase: &Phase,
+    player_id: &str,
+    players: &[Player],
+) -> f64 {
+    let w = EvalWeights::default();
+    evaluate_typed(state, phase, player_id, players, &w)
+}
+
+fn evaluate_typed(
+    state: &CarcassonneState,
+    _phase: &Phase,
+    player_id: &str,
+    players: &[Player],
+    w: &EvalWeights,
+) -> f64 {
+    let tiles_remaining = state.tile_bag.len() as i64;
+    let board_size = state.board.tiles.len() as i64;
+    let total_tiles = board_size + tiles_remaining;
+    let game_progress = 1.0 - (tiles_remaining as f64 / total_tiles.max(1) as f64);
+
+    // 1. Score differential
+    let my_score = state.scores.get(player_id).copied().unwrap_or(0) as f64;
+    let mut max_opp = 0.0_f64;
+    for (pid, &s) in &state.scores {
+        if pid != player_id {
+            let sf = s as f64;
+            if sf > max_opp {
+                max_opp = sf;
+            }
+        }
+    }
+    let score_diff = my_score - max_opp;
+    let score_component = sigmoid(score_diff, w.score_scale);
+
+    // 2. Incomplete feature potential
+    let mut my_potential = 0.0_f64;
+    let mut opp_potential = 0.0_f64;
+    let mut wasted_meeple_penalty = 0.0_f64;
+
+    for (_fid, feat) in &state.features {
+        if feat.is_complete {
+            continue;
+        }
+        if feat.feature_type == FeatureType::Field {
+            continue;
+        }
+        if feat.meeples.is_empty() {
+            continue;
+        }
+
+        let potential = raw_feature_potential_typed(
+            feat.feature_type,
+            feat.tiles.len(),
+            feat.open_edges.len(),
+            feat.pennants as i64,
+            tiles_remaining,
+            state,
+            &feat.tiles,
+        );
+
+        let (my_count, max_count, _) = meeple_counts_typed(&feat.meeples, player_id);
+
+        if my_count == 0 {
+            opp_potential += potential;
+        } else if my_count >= max_count {
+            my_potential += potential;
+        } else {
+            opp_potential += potential;
+            wasted_meeple_penalty += my_count as f64 * 1.5;
+        }
+    }
+
+    let potential_diff = my_potential - opp_potential - wasted_meeple_penalty;
+    let potential_component = sigmoid(potential_diff, w.potential_scale);
+
+    // 3. Meeple economy
+    let my_meeples = state.meeple_supply.get(player_id).copied().unwrap_or(0) as i64;
+    let mut opp_meeple_sum = 0i64;
+    let mut opp_count = 0;
+    for p in players {
+        if p.player_id != player_id {
+            opp_meeple_sum += state.meeple_supply.get(&p.player_id).copied().unwrap_or(0) as i64;
+            opp_count += 1;
+        }
+    }
+    let avg_opp_meeples = opp_meeple_sum as f64 / opp_count.max(1) as f64;
+
+    let mut meeple_value = (my_meeples as f64 / 7.0).min(1.0);
+
+    if my_meeples >= w.meeple_hoard_threshold && game_progress > w.meeple_hoard_progress_gate {
+        meeple_value *= w.meeple_hoard_penalty;
+    }
+    if my_meeples == 0 && game_progress < 0.85 {
+        meeple_value *= 0.3;
+    } else if my_meeples <= 1 && game_progress < 0.7 {
+        meeple_value *= 0.6;
+    }
+
+    let relative = sigmoid((my_meeples as f64 - avg_opp_meeples) * 0.5, 3.0);
+    let meeple_component = 0.5 * relative + 0.5 * meeple_value;
+
+    // 4. Field scoring potential
+    let my_field = estimate_field_value_typed(state, player_id);
+    let mut max_opp_field = 0.0_f64;
+    for p in players {
+        if p.player_id != player_id {
+            let f = estimate_field_value_typed(state, &p.player_id);
+            if f > max_opp_field {
+                max_opp_field = f;
+            }
+        }
+    }
+    let field_diff = my_field - max_opp_field;
+    let field_component = sigmoid(field_diff, w.field_scale);
+
+    // Weighted combination
+    let score_weight = w.score_base + w.score_delta * game_progress;
+    let potential_weight = w.potential_base + w.potential_delta * game_progress;
+    let meeple_weight = w.meeple_base + w.meeple_delta * game_progress;
+    let field_weight = w.field_base + w.field_delta * game_progress;
+
+    let value = score_weight * score_component
+        + potential_weight * potential_component
+        + meeple_weight * meeple_component
+        + field_weight * field_component;
+
+    value.clamp(0.0, 1.0)
+}
+
+fn meeple_counts_typed(meeples: &[PlacedMeeple], player_id: &str) -> (i64, i64, i64) {
+    let mut counts: std::collections::HashMap<&str, i64> = std::collections::HashMap::new();
+    for m in meeples {
+        *counts.entry(m.player_id.as_str()).or_insert(0) += 1;
+    }
+    let my_count = counts.remove(player_id).unwrap_or(0);
+    let max_opp = counts.values().copied().max().unwrap_or(0);
+    let total_opp: i64 = counts.values().sum();
+    (my_count, max_opp, total_opp)
+}
+
+fn raw_feature_potential_typed(
+    feature_type: FeatureType,
+    tile_count: usize,
+    open_edge_count: usize,
+    pennants: i64,
+    tiles_remaining: i64,
+    state: &CarcassonneState,
+    tiles: &[String],
+) -> f64 {
+    match feature_type {
+        FeatureType::City => {
+            let cp = completion_probability(open_edge_count, tiles_remaining);
+            cp * (tile_count as f64 * 2.0 + pennants as f64 * 2.0)
+                + (1.0 - cp) * (tile_count as f64 + pennants as f64)
+        }
+        FeatureType::Road => tile_count as f64,
+        FeatureType::Monastery => {
+            if tiles.is_empty() {
+                return 0.0;
+            }
+            let pos = Position::from_key(&tiles[0]);
+            let neighbors: usize = pos
+                .all_surrounding()
+                .iter()
+                .filter(|p| state.board.tiles.contains_key(&p.to_key()))
+                .count();
+            let cp = completion_probability(8 - neighbors, tiles_remaining);
+            cp * 9.0 + (1.0 - cp) * (1.0 + neighbors as f64)
+        }
+        _ => 0.0,
+    }
+}
+
+fn estimate_field_value_typed(state: &CarcassonneState, player_id: &str) -> f64 {
+    let mut total = 0.0_f64;
+
+    for (_fid, feat) in &state.features {
+        if feat.feature_type != FeatureType::Field {
+            continue;
+        }
+        if feat.meeples.is_empty() {
+            continue;
+        }
+
+        let (my_count, max_count, _) = meeple_counts_typed(&feat.meeples, player_id);
+        if my_count == 0 || my_count < max_count {
+            continue;
+        }
+
+        let mut seen_cities: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for tile_pos in &feat.tiles {
+            if let Some(spots) = state.tile_feature_map.get(tile_pos.as_str()) {
+                for (_spot, city_fid) in spots {
+                    if seen_cities.contains(city_fid.as_str()) {
+                        continue;
+                    }
+                    if let Some(city_feat) = state.features.get(city_fid.as_str()) {
+                        if city_feat.feature_type == FeatureType::City && city_feat.is_complete {
+                            seen_cities.insert(city_fid.as_str());
+                            total += 3.0;
                         }
                     }
                 }

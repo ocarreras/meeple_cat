@@ -2,6 +2,7 @@
 //! Mirrors backend/src/engine/protocol.py.
 
 use crate::engine::models::*;
+use std::collections::HashMap;
 
 pub const DISCONNECT_POLICY_ABANDON_ALL: &str = "abandon_all";
 pub const DISCONNECT_POLICY_FORFEIT_PLAYER: &str = "forfeit_player";
@@ -90,4 +91,62 @@ pub trait GamePlugin: Send + Sync {
         player_id: &str,
         players: &[Player],
     ) -> Option<TransitionResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Typed game plugin — high-performance path for MCTS / Arena
+// ---------------------------------------------------------------------------
+
+/// Transition result with typed game state (avoids serde_json::Value).
+pub struct TypedTransitionResult<S> {
+    pub state: S,
+    pub events: Vec<Event>,
+    pub next_phase: Phase,
+    pub scores: HashMap<String, f64>,
+    pub game_over: Option<GameResult>,
+}
+
+/// High-performance typed plugin trait.
+///
+/// Games that implement this get fast `Clone`-based simulation in MCTS and Arena
+/// instead of cloning `serde_json::Value` trees. The base `GamePlugin` trait is
+/// still used for gRPC boundary calls where JSON ser/deser overhead is acceptable.
+pub trait TypedGamePlugin: GamePlugin {
+    type State: Clone + Send + Sync;
+
+    /// Deserialize JSON game_data into strongly-typed game state.
+    fn decode_state(&self, game_data: &serde_json::Value) -> Self::State;
+
+    /// Serialize strongly-typed game state back to JSON.
+    fn encode_state(&self, state: &Self::State) -> serde_json::Value;
+
+    /// Get valid actions from typed state.
+    fn get_valid_actions_typed(
+        &self,
+        state: &Self::State,
+        phase: &Phase,
+        player_id: &str,
+    ) -> Vec<serde_json::Value>;
+
+    /// Apply action on typed state — the hot path for MCTS.
+    fn apply_action_typed(
+        &self,
+        state: &Self::State,
+        phase: &Phase,
+        action: &Action,
+        players: &[Player],
+    ) -> TypedTransitionResult<Self::State>;
+
+    /// Extract scores from typed state (used by default MCTS eval).
+    fn get_scores_typed(&self, state: &Self::State) -> HashMap<String, f64>;
+
+    /// Randomize hidden information for MCTS determinization.
+    /// Default: no-op (games with no hidden info).
+    fn determinize(&self, _state: &mut Self::State) {}
+
+    /// Return context for AMAF key generation (e.g., current tile type).
+    /// Default: empty (action-only AMAF keys).
+    fn amaf_context(&self, _state: &Self::State) -> String {
+        String::new()
+    }
 }

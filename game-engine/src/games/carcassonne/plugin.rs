@@ -1,10 +1,10 @@
-//! CarcassonnePlugin — implements GamePlugin trait.
+//! CarcassonnePlugin — implements GamePlugin and TypedGamePlugin traits.
 //! Mirrors backend/src/games/carcassonne/plugin.py.
 
 use std::collections::HashMap;
 
 use crate::engine::models::*;
-use crate::engine::plugin::GamePlugin;
+use crate::engine::plugin::{GamePlugin, TypedGamePlugin, TypedTransitionResult};
 use super::board::{can_place_tile, recalculate_open_positions, tile_has_valid_placement};
 use super::features::{
     check_monastery_completion, create_and_merge_features,
@@ -13,34 +13,90 @@ use super::features::{
 use super::meeples::{can_place_meeple, return_meeples};
 use super::scoring::{score_completed_feature, score_end_game};
 use super::tiles::{STARTING_TILE_ID, build_tile_bag, get_rotated_features};
-use super::types::PlacedTile;
+use super::types::*;
 
 pub struct CarcassonnePlugin;
 
+// ================================================================== //
+//  TypedGamePlugin implementation (fast path for MCTS / Arena)
+// ================================================================== //
+
+impl TypedGamePlugin for CarcassonnePlugin {
+    type State = CarcassonneState;
+
+    fn decode_state(&self, game_data: &serde_json::Value) -> CarcassonneState {
+        serde_json::from_value(game_data.clone()).expect("Failed to decode CarcassonneState")
+    }
+
+    fn encode_state(&self, state: &CarcassonneState) -> serde_json::Value {
+        state.to_json()
+    }
+
+    fn get_valid_actions_typed(
+        &self,
+        state: &CarcassonneState,
+        phase: &Phase,
+        player_id: &str,
+    ) -> Vec<serde_json::Value> {
+        match phase.name.as_str() {
+            "place_tile" => get_valid_tile_placements_typed(state, player_id),
+            "place_meeple" => get_valid_meeple_placements_typed(state, player_id),
+            _ => vec![],
+        }
+    }
+
+    fn apply_action_typed(
+        &self,
+        state: &CarcassonneState,
+        phase: &Phase,
+        action: &Action,
+        players: &[Player],
+    ) -> TypedTransitionResult<CarcassonneState> {
+        let mut s = state.clone();
+        match phase.name.as_str() {
+            "draw_tile" => apply_draw_tile_typed(&mut s, phase, players),
+            "place_tile" => apply_place_tile_typed(&mut s, phase, action, players),
+            "place_meeple" => apply_place_meeple_typed(&mut s, phase, action, players),
+            "score_check" => apply_score_check_typed(&mut s, phase, players),
+            "end_game_scoring" => apply_end_game_scoring_typed(&mut s, phase, players),
+            _ => TypedTransitionResult {
+                state: s,
+                events: vec![],
+                next_phase: phase.clone(),
+                scores: HashMap::new(),
+                game_over: None,
+            },
+        }
+    }
+
+    fn get_scores_typed(&self, state: &CarcassonneState) -> HashMap<String, f64> {
+        state.float_scores()
+    }
+
+    fn determinize(&self, state: &mut CarcassonneState) {
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        state.tile_bag.shuffle(&mut rng);
+    }
+
+    fn amaf_context(&self, state: &CarcassonneState) -> String {
+        state.current_tile.clone().unwrap_or_default()
+    }
+}
+
+// ================================================================== //
+//  GamePlugin implementation (JSON boundary for gRPC)
+// ================================================================== //
+
 impl GamePlugin for CarcassonnePlugin {
-    fn game_id(&self) -> &str {
-        "carcassonne"
-    }
-
-    fn display_name(&self) -> &str {
-        "Carcassonne"
-    }
-
-    fn min_players(&self) -> u32 {
-        2
-    }
-
-    fn max_players(&self) -> u32 {
-        5
-    }
-
+    fn game_id(&self) -> &str { "carcassonne" }
+    fn display_name(&self) -> &str { "Carcassonne" }
+    fn min_players(&self) -> u32 { 2 }
+    fn max_players(&self) -> u32 { 5 }
     fn description(&self) -> &str {
         "Build a medieval landscape by placing tiles and claiming features with meeples."
     }
-
-    fn disconnect_policy(&self) -> &str {
-        "forfeit_player"
-    }
+    fn disconnect_policy(&self) -> &str { "forfeit_player" }
 
     fn create_initial_state(
         &self,
@@ -49,14 +105,12 @@ impl GamePlugin for CarcassonnePlugin {
     ) -> (serde_json::Value, Phase, Vec<Event>) {
         let mut tile_bag = build_tile_bag(None);
 
-        // Shuffle with seed
         use rand::seq::SliceRandom;
         use rand::SeedableRng;
         let seed = config.random_seed.unwrap_or(0);
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         tile_bag.shuffle(&mut rng);
 
-        // Optional tile_count limit
         if let Some(tile_count) = config.options.get("tile_count").and_then(|v| v.as_u64()) {
             let tc = tile_count as usize;
             if tc < tile_bag.len() {
@@ -64,21 +118,17 @@ impl GamePlugin for CarcassonnePlugin {
             }
         }
 
-        // Place starting tile at (0,0)
         let mut board_tiles: HashMap<String, PlacedTile> = HashMap::new();
-        board_tiles.insert(
-            "0,0".into(),
-            PlacedTile {
-                tile_type_id: STARTING_TILE_ID.into(),
-                rotation: 0,
-            },
-        );
+        board_tiles.insert("0,0".into(), PlacedTile {
+            tile_type_id: STARTING_TILE_ID.into(),
+            rotation: 0,
+        });
         let open_positions = recalculate_open_positions(&board_tiles);
 
         let (features, tile_feature_map) =
             initialize_features_from_tile(STARTING_TILE_ID, "0,0", 0);
 
-        let meeple_supply: HashMap<String, i64> = players
+        let meeple_supply: HashMap<String, i32> = players
             .iter()
             .map(|p| (p.player_id.clone(), 7))
             .collect();
@@ -87,25 +137,20 @@ impl GamePlugin for CarcassonnePlugin {
             .map(|p| (p.player_id.clone(), 0))
             .collect();
 
-        let game_data = serde_json::json!({
-            "board": {
-                "tiles": {
-                    "0,0": {
-                        "tile_type_id": STARTING_TILE_ID,
-                        "rotation": 0,
-                    }
-                },
-                "open_positions": open_positions,
-            },
-            "tile_bag": tile_bag,
-            "current_tile": null,
-            "last_placed_position": null,
-            "features": features,
-            "tile_feature_map": tile_feature_map,
-            "meeple_supply": meeple_supply,
-            "scores": scores,
-            "current_player_index": 0,
-        });
+        let state = CarcassonneState {
+            board: Board { tiles: board_tiles, open_positions },
+            tile_bag,
+            current_tile: None,
+            last_placed_position: None,
+            features,
+            tile_feature_map,
+            meeple_supply,
+            scores,
+            current_player_index: 0,
+            rng_state: None,
+            forfeited_players: vec![],
+            end_game_breakdown: None,
+        };
 
         let first_phase = Phase {
             name: "draw_tile".into(),
@@ -133,7 +178,7 @@ impl GamePlugin for CarcassonnePlugin {
             },
         ];
 
-        (game_data, first_phase, events)
+        (state.to_json(), first_phase, events)
     }
 
     fn get_valid_actions(
@@ -142,11 +187,8 @@ impl GamePlugin for CarcassonnePlugin {
         phase: &Phase,
         player_id: &str,
     ) -> Vec<serde_json::Value> {
-        match phase.name.as_str() {
-            "place_tile" => get_valid_tile_placements(game_data, player_id),
-            "place_meeple" => get_valid_meeple_placements(game_data, player_id),
-            _ => vec![],
-        }
+        let state = self.decode_state(game_data);
+        self.get_valid_actions_typed(&state, phase, player_id)
     }
 
     fn validate_action(
@@ -155,9 +197,10 @@ impl GamePlugin for CarcassonnePlugin {
         phase: &Phase,
         action: &Action,
     ) -> Option<String> {
+        let state = self.decode_state(game_data);
         match phase.name.as_str() {
-            "place_tile" => validate_place_tile(game_data, action),
-            "place_meeple" => validate_place_meeple(game_data, action),
+            "place_tile" => validate_place_tile_typed(&state, action),
+            "place_meeple" => validate_place_meeple_typed(&state, action),
             _ => None,
         }
     }
@@ -169,20 +212,14 @@ impl GamePlugin for CarcassonnePlugin {
         action: &Action,
         players: &[Player],
     ) -> TransitionResult {
-        let mut gd = game_data.clone();
-        match phase.name.as_str() {
-            "draw_tile" => apply_draw_tile(&mut gd, phase, players),
-            "place_tile" => apply_place_tile(&mut gd, phase, action, players),
-            "place_meeple" => apply_place_meeple(&mut gd, phase, action, players),
-            "score_check" => apply_score_check(&mut gd, phase, players),
-            "end_game_scoring" => apply_end_game_scoring(&mut gd, phase, players),
-            _ => TransitionResult {
-                game_data: gd,
-                events: vec![],
-                next_phase: phase.clone(),
-                scores: HashMap::new(),
-                game_over: None,
-            },
+        let state = self.decode_state(game_data);
+        let typed = self.apply_action_typed(&state, phase, action, players);
+        TransitionResult {
+            game_data: self.encode_state(&typed.state),
+            events: typed.events,
+            next_phase: typed.next_phase,
+            scores: typed.scores,
+            game_over: typed.game_over,
         }
     }
 
@@ -193,18 +230,19 @@ impl GamePlugin for CarcassonnePlugin {
         _player_id: Option<&str>,
         _players: &[Player],
     ) -> serde_json::Value {
+        let state: CarcassonneState = self.decode_state(game_data);
         let mut view = serde_json::json!({
-            "board": game_data["board"],
-            "features": game_data["features"],
-            "tile_feature_map": game_data["tile_feature_map"],
-            "current_tile": game_data["current_tile"],
-            "tiles_remaining": game_data["tile_bag"].as_array().map(|a| a.len()).unwrap_or(0),
-            "meeple_supply": game_data["meeple_supply"],
-            "scores": game_data["scores"],
-            "last_placed_position": game_data["last_placed_position"],
+            "board": state.board,
+            "features": state.features,
+            "tile_feature_map": state.tile_feature_map,
+            "current_tile": state.current_tile,
+            "tiles_remaining": state.tile_bag.len(),
+            "meeple_supply": state.meeple_supply,
+            "scores": state.scores,
+            "last_placed_position": state.last_placed_position,
         });
-        if game_data.get("end_game_breakdown").is_some() {
-            view["end_game_breakdown"] = game_data["end_game_breakdown"].clone();
+        if let Some(ref breakdown) = state.end_game_breakdown {
+            view["end_game_breakdown"] = breakdown.clone();
         }
         view
     }
@@ -225,13 +263,13 @@ impl GamePlugin for CarcassonnePlugin {
         player_id: &str,
         players: &[Player],
     ) -> serde_json::Value {
+        let state = self.decode_state(game_data);
         let mut view = self.get_player_view(game_data, phase, Some(player_id), players);
-        let valid = self.get_valid_actions(game_data, phase, player_id);
+        let valid = self.get_valid_actions_typed(&state, phase, player_id);
         view["valid_actions"] = serde_json::json!(valid);
-        view["my_meeples"] = game_data["meeple_supply"]
-            .get(player_id)
-            .cloned()
-            .unwrap_or(serde_json::json!(0));
+        view["my_meeples"] = serde_json::json!(
+            state.meeple_supply.get(player_id).copied().unwrap_or(0)
+        );
         view
     }
 
@@ -270,19 +308,15 @@ impl GamePlugin for CarcassonnePlugin {
         }
 
         let player_index = phase.metadata.get("player_index")?.as_u64()? as usize;
-        let mut gd = game_data.clone();
+        let mut state = self.decode_state(game_data);
 
         // Put current tile back if one was drawn
-        if !gd["current_tile"].is_null() {
-            let tile = gd["current_tile"].as_str().unwrap_or("").to_string();
-            if let Some(bag) = gd["tile_bag"].as_array_mut() {
-                bag.insert(0, serde_json::json!(tile));
-            }
-            gd["current_tile"] = serde_json::json!(null);
+        if let Some(tile) = state.current_tile.take() {
+            state.tile_bag.insert(0, tile);
         }
-        gd["last_placed_position"] = serde_json::json!(null);
+        state.last_placed_position = None;
 
-        let next_index = find_next_player(&gd, players, player_index);
+        let next_index = find_next_player_typed(&state, players, player_index);
 
         let events = vec![Event {
             event_type: "turn_skipped".into(),
@@ -299,29 +333,27 @@ impl GamePlugin for CarcassonnePlugin {
         };
 
         Some(TransitionResult {
-            game_data: gd.clone(),
+            game_data: state.to_json(),
             events,
             next_phase,
-            scores: float_scores(&gd["scores"]),
+            scores: state.float_scores(),
             game_over: None,
         })
     }
 }
 
-// ------------------------------------------------------------------ //
-//  Phase handlers
-// ------------------------------------------------------------------ //
+// ================================================================== //
+//  Typed phase handlers
+// ================================================================== //
 
-fn apply_draw_tile(
-    game_data: &mut serde_json::Value,
+fn apply_draw_tile_typed(
+    state: &mut CarcassonneState,
     phase: &Phase,
     players: &[Player],
-) -> TransitionResult {
-    let tile_bag = game_data["tile_bag"].as_array().cloned().unwrap_or_default();
-
-    if tile_bag.is_empty() {
-        return TransitionResult {
-            game_data: game_data.clone(),
+) -> TypedTransitionResult<CarcassonneState> {
+    if state.tile_bag.is_empty() {
+        return TypedTransitionResult {
+            state: state.clone(),
             events: vec![Event {
                 event_type: "tile_bag_empty".into(),
                 player_id: None,
@@ -334,7 +366,7 @@ fn apply_draw_tile(
                 expected_actions: vec![],
                 metadata: serde_json::json!({}),
             },
-            scores: float_scores(&game_data["scores"]),
+            scores: state.float_scores(),
             game_over: None,
         };
     }
@@ -342,29 +374,13 @@ fn apply_draw_tile(
     let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
     let player = &players[player_index];
 
-    // Draw first tile
-    let mut bag: Vec<String> = tile_bag
-        .iter()
-        .filter_map(|v| v.as_str().map(String::from))
-        .collect();
-
-    let mut drawn_tile = bag.remove(0);
+    let mut drawn_tile = state.tile_bag.remove(0);
 
     // Skip unplaceable tiles
-    let board_tiles_val = &game_data["board"]["tiles"];
-    let open_positions: Vec<String> = game_data["board"]["open_positions"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .unwrap_or_default();
-
-    // Build typed board_tiles for placement checks
-    let board_tiles = parse_board_tiles(board_tiles_val);
-
-    while !tile_has_valid_placement(&board_tiles, &open_positions, &drawn_tile) {
-        if bag.is_empty() {
-            game_data["tile_bag"] = serde_json::json!([]);
-            return TransitionResult {
-                game_data: game_data.clone(),
+    while !tile_has_valid_placement(&state.board.tiles, &state.board.open_positions, &drawn_tile) {
+        if state.tile_bag.is_empty() {
+            return TypedTransitionResult {
+                state: state.clone(),
                 events: vec![
                     Event {
                         event_type: "tile_discarded".into(),
@@ -387,22 +403,21 @@ fn apply_draw_tile(
                     expected_actions: vec![],
                     metadata: serde_json::json!({}),
                 },
-                scores: float_scores(&game_data["scores"]),
+                scores: state.float_scores(),
                 game_over: None,
             };
         }
-        drawn_tile = bag.remove(0);
+        drawn_tile = state.tile_bag.remove(0);
     }
 
-    game_data["current_tile"] = serde_json::json!(drawn_tile);
-    game_data["tile_bag"] = serde_json::json!(bag);
+    state.current_tile = Some(drawn_tile.clone());
 
     let events = vec![Event {
         event_type: "tile_drawn".into(),
         player_id: Some(player.player_id.clone()),
         payload: serde_json::json!({
             "tile": drawn_tile,
-            "tiles_remaining": game_data["tile_bag"].as_array().map(|a| a.len()).unwrap_or(0),
+            "tiles_remaining": state.tile_bag.len(),
         }),
     }];
 
@@ -419,48 +434,43 @@ fn apply_draw_tile(
         metadata: serde_json::json!({"player_index": player_index}),
     };
 
-    TransitionResult {
-        game_data: game_data.clone(),
+    TypedTransitionResult {
+        state: state.clone(),
         events,
         next_phase,
-        scores: float_scores(&game_data["scores"]),
+        scores: state.float_scores(),
         game_over: None,
     }
 }
 
-fn apply_place_tile(
-    game_data: &mut serde_json::Value,
+fn apply_place_tile_typed(
+    state: &mut CarcassonneState,
     phase: &Phase,
     action: &Action,
     players: &[Player],
-) -> TransitionResult {
+) -> TypedTransitionResult<CarcassonneState> {
     let x = action.payload["x"].as_i64().unwrap_or(0);
     let y = action.payload["y"].as_i64().unwrap_or(0);
     let rotation = action.payload["rotation"].as_u64().unwrap_or(0) as u32;
     let pos_key = format!("{},{}", x, y);
-    let tile_type_id = game_data["current_tile"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let tile_type_id = state.current_tile.clone().unwrap_or_default();
     let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
     let player = &players[player_index];
 
     // Place tile on board
-    game_data["board"]["tiles"][&pos_key] = serde_json::json!({
-        "tile_type_id": tile_type_id,
-        "rotation": rotation,
+    state.board.tiles.insert(pos_key.clone(), PlacedTile {
+        tile_type_id: tile_type_id.clone(),
+        rotation,
     });
 
     // Recalculate open positions
-    let board_tiles = parse_board_tiles(&game_data["board"]["tiles"]);
-    let open_positions = recalculate_open_positions(&board_tiles);
-    game_data["board"]["open_positions"] = serde_json::json!(open_positions);
+    state.board.open_positions = recalculate_open_positions(&state.board.tiles);
 
-    game_data["last_placed_position"] = serde_json::json!(pos_key);
-    game_data["current_tile"] = serde_json::json!(null);
+    state.last_placed_position = Some(pos_key.clone());
+    state.current_tile = None;
 
     // Create features and merge with adjacent
-    let merge_events = create_and_merge_features(game_data, &tile_type_id, &pos_key, rotation);
+    let merge_events = create_and_merge_features(state, &tile_type_id, &pos_key, rotation);
 
     let mut events = vec![Event {
         event_type: "tile_placed".into(),
@@ -487,21 +497,21 @@ fn apply_place_tile(
         metadata: serde_json::json!({"player_index": player_index}),
     };
 
-    TransitionResult {
-        game_data: game_data.clone(),
+    TypedTransitionResult {
+        state: state.clone(),
         events,
         next_phase,
-        scores: float_scores(&game_data["scores"]),
+        scores: state.float_scores(),
         game_over: None,
     }
 }
 
-fn apply_place_meeple(
-    game_data: &mut serde_json::Value,
+fn apply_place_meeple_typed(
+    state: &mut CarcassonneState,
     phase: &Phase,
     action: &Action,
     players: &[Player],
-) -> TransitionResult {
+) -> TypedTransitionResult<CarcassonneState> {
     let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
     let player = &players[player_index];
     let mut events: Vec<Event> = Vec::new();
@@ -509,31 +519,27 @@ fn apply_place_meeple(
     let skip = action.payload.get("skip").and_then(|v| v.as_bool()).unwrap_or(false);
 
     if !skip {
-        let spot = action.payload["meeple_spot"].as_str().unwrap_or("");
-        let pos = game_data["last_placed_position"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-        let feature_id = game_data["tile_feature_map"][&pos][spot]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let spot = action.payload["meeple_spot"].as_str().unwrap_or("").to_string();
+        let pos = state.last_placed_position.clone().unwrap_or_default();
+
+        let feature_id = state.tile_feature_map
+            .get(&pos)
+            .and_then(|spots| spots.get(&spot))
+            .cloned()
+            .unwrap_or_default();
 
         // Decrement meeple supply
-        let current = game_data["meeple_supply"]
-            .get(&player.player_id)
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        game_data["meeple_supply"][&player.player_id] = serde_json::json!(current - 1);
+        if let Some(supply) = state.meeple_supply.get_mut(&player.player_id) {
+            *supply -= 1;
+        }
 
         // Add meeple to feature
-        let meeple = serde_json::json!({
-            "player_id": player.player_id,
-            "position": pos,
-            "spot": spot,
-        });
-        if let Some(meeples) = game_data["features"][&feature_id]["meeples"].as_array_mut() {
-            meeples.push(meeple);
+        if let Some(feature) = state.features.get_mut(&feature_id) {
+            feature.meeples.push(PlacedMeeple {
+                player_id: player.player_id.clone(),
+                position: pos.clone(),
+                spot: spot.clone(),
+            });
         }
 
         events.push(Event {
@@ -561,51 +567,30 @@ fn apply_place_meeple(
         metadata: serde_json::json!({"player_index": player_index}),
     };
 
-    TransitionResult {
-        game_data: game_data.clone(),
+    TypedTransitionResult {
+        state: state.clone(),
         events,
         next_phase,
-        scores: float_scores(&game_data["scores"]),
+        scores: state.float_scores(),
         game_over: None,
     }
 }
 
-fn apply_score_check(
-    game_data: &mut serde_json::Value,
+fn apply_score_check_typed(
+    state: &mut CarcassonneState,
     phase: &Phase,
     players: &[Player],
-) -> TransitionResult {
+) -> TypedTransitionResult<CarcassonneState> {
     let mut events: Vec<Event> = Vec::new();
-    let mut scores: HashMap<String, i64> = HashMap::new();
 
-    // Parse current scores
-    if let Some(obj) = game_data["scores"].as_object() {
-        for (k, v) in obj {
-            scores.insert(k.clone(), v.as_i64().unwrap_or(0));
-        }
-    }
-
-    let last_pos = game_data["last_placed_position"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let last_pos = state.last_placed_position.clone().unwrap_or_default();
     let mut checked_features: std::collections::HashSet<String> =
         std::collections::HashSet::new();
 
-    // Check features on the placed tile for completion
-    let spots: Vec<(String, String)> = game_data["tile_feature_map"]
+    // Collect feature IDs from the placed tile
+    let spots: Vec<(String, String)> = state.tile_feature_map
         .get(&last_pos)
-        .and_then(|v| v.as_object())
-        .map(|obj| {
-            obj.iter()
-                .map(|(spot, fid)| {
-                    (
-                        spot.clone(),
-                        fid.as_str().unwrap_or("").to_string(),
-                    )
-                })
-                .collect()
-        })
+        .map(|m| m.iter().map(|(s, f)| (s.clone(), f.clone())).collect())
         .unwrap_or_default();
 
     for (_spot, feature_id) in spots {
@@ -614,57 +599,58 @@ fn apply_score_check(
         }
         checked_features.insert(feature_id.clone());
 
-        let feature = match game_data["features"].get(&feature_id) {
-            Some(f) => f.clone(),
-            None => continue,
-        };
-
-        if feature.get("is_complete").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let is_already_complete = state.features.get(&feature_id)
+            .map(|f| f.is_complete).unwrap_or(true);
+        if is_already_complete {
             continue;
         }
 
-        if !is_feature_complete(game_data, &feature) {
+        let complete = {
+            let Some(feature) = state.features.get(&feature_id) else { continue };
+            is_feature_complete(state, feature)
+        };
+
+        if !complete {
             continue;
         }
 
         // Mark complete
-        game_data["features"][&feature_id]["is_complete"] = serde_json::json!(true);
+        if let Some(feat) = state.features.get_mut(&feature_id) {
+            feat.is_complete = true;
+        }
 
-        let feature = &game_data["features"][&feature_id];
-        let point_awards = score_completed_feature(feature);
+        let point_awards = score_completed_feature(&state.features[&feature_id]);
+
+        let ft = state.features[&feature_id].feature_type;
+        let tiles = state.features[&feature_id].tiles.clone();
 
         for (pid, points) in &point_awards {
-            *scores.entry(pid.clone()).or_insert(0) += points;
+            *state.scores.entry(pid.clone()).or_insert(0) += points;
             events.push(Event {
                 event_type: "feature_scored".into(),
                 player_id: Some(pid.clone()),
                 payload: serde_json::json!({
                     "feature_id": feature_id,
-                    "feature_type": game_data["features"][&feature_id]["feature_type"],
+                    "feature_type": ft,
                     "points": points,
-                    "tiles": game_data["features"][&feature_id]["tiles"],
+                    "tiles": tiles,
                 }),
             });
         }
 
-        // Return meeples
-        let meeple_events = return_meeples(game_data, &feature_id);
+        let meeple_events = return_meeples(state, &feature_id);
         events.extend(meeple_events);
     }
 
     // Check monasteries near the placed tile
-    let (monastery_events, monastery_scores) =
-        check_monastery_completion(game_data, &last_pos);
+    let (monastery_events, monastery_scores) = check_monastery_completion(state, &last_pos);
     events.extend(monastery_events);
     for (pid, points) in &monastery_scores {
-        *scores.entry(pid.clone()).or_insert(0) += points;
+        *state.scores.entry(pid.clone()).or_insert(0) += points;
     }
 
-    game_data["scores"] = serde_json::json!(scores);
-
-    // Advance to next non-forfeited player
     let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
-    let next_index = find_next_player(game_data, players, player_index);
+    let next_index = find_next_player_typed(state, players, player_index);
 
     let next_phase = Phase {
         name: "draw_tile".into(),
@@ -674,34 +660,27 @@ fn apply_score_check(
         metadata: serde_json::json!({"player_index": next_index}),
     };
 
-    TransitionResult {
-        game_data: game_data.clone(),
+    TypedTransitionResult {
+        state: state.clone(),
         events,
         next_phase,
-        scores: float_scores(&game_data["scores"]),
+        scores: state.float_scores(),
         game_over: None,
     }
 }
 
-fn apply_end_game_scoring(
-    game_data: &mut serde_json::Value,
+fn apply_end_game_scoring_typed(
+    state: &mut CarcassonneState,
     _phase: &Phase,
     _players: &[Player],
-) -> TransitionResult {
+) -> TypedTransitionResult<CarcassonneState> {
     let mut events: Vec<Event> = Vec::new();
-    let mut scores: HashMap<String, i64> = HashMap::new();
 
-    if let Some(obj) = game_data["scores"].as_object() {
-        for (k, v) in obj {
-            scores.insert(k.clone(), v.as_i64().unwrap_or(0));
-        }
-    }
-
-    let (end_scores, breakdown) = score_end_game(game_data);
-    game_data["end_game_breakdown"] = serde_json::json!(breakdown);
+    let (end_scores, breakdown) = score_end_game(state);
+    state.end_game_breakdown = Some(serde_json::json!(breakdown));
 
     for (pid, points) in &end_scores {
-        *scores.entry(pid.clone()).or_insert(0) += points;
+        *state.scores.entry(pid.clone()).or_insert(0) += points;
         events.push(Event {
             event_type: "end_game_points".into(),
             player_id: Some(pid.clone()),
@@ -712,19 +691,17 @@ fn apply_end_game_scoring(
         });
     }
 
-    game_data["scores"] = serde_json::json!(scores);
-
-    let max_score = scores.values().copied().max().unwrap_or(0);
-    let winners: Vec<String> = scores
+    let max_score = state.scores.values().copied().max().unwrap_or(0);
+    let winners: Vec<String> = state.scores
         .iter()
         .filter(|(_, &s)| s == max_score)
         .map(|(pid, _)| pid.clone())
         .collect();
 
-    let final_scores = float_scores(&game_data["scores"]);
+    let final_scores = state.float_scores();
 
-    TransitionResult {
-        game_data: game_data.clone(),
+    TypedTransitionResult {
+        state: state.clone(),
         events,
         next_phase: Phase {
             name: "game_over".into(),
@@ -743,43 +720,28 @@ fn apply_end_game_scoring(
     }
 }
 
-// ------------------------------------------------------------------ //
-//  Valid actions helpers
-// ------------------------------------------------------------------ //
+// ================================================================== //
+//  Typed valid actions helpers
+// ================================================================== //
 
-fn get_valid_tile_placements(
-    game_data: &serde_json::Value,
+fn get_valid_tile_placements_typed(
+    state: &CarcassonneState,
     player_id: &str,
 ) -> Vec<serde_json::Value> {
-    let current_tile = match game_data["current_tile"].as_str() {
-        Some(t) => t,
+    let current_tile = match &state.current_tile {
+        Some(t) => t.as_str(),
         None => return vec![],
     };
 
-    let board_tiles = parse_board_tiles(&game_data["board"]["tiles"]);
-    let open_positions: Vec<String> = game_data["board"]["open_positions"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .unwrap_or_default();
-
-    let has_meeples = game_data["meeple_supply"]
-        .get(player_id)
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0)
-        > 0;
+    let has_meeples = state.meeple_supply.get(player_id).copied().unwrap_or(0) > 0;
 
     let mut placements = Vec::new();
 
-    for pos_key in &open_positions {
-        let parts: Vec<&str> = pos_key.split(',').collect();
-        if parts.len() != 2 {
-            continue;
-        }
-        let x: i64 = parts[0].parse().unwrap_or(0);
-        let y: i64 = parts[1].parse().unwrap_or(0);
+    for pos_key in &state.board.open_positions {
+        let pos = Position::from_key(pos_key);
 
         for rotation in [0u32, 90, 180, 270] {
-            if can_place_tile(&board_tiles, current_tile, pos_key, rotation) {
+            if can_place_tile(&state.board.tiles, current_tile, pos_key, rotation) {
                 let mut meeple_spots: Vec<String> = Vec::new();
                 if has_meeples {
                     let rotated_features = get_rotated_features(current_tile, rotation);
@@ -794,8 +756,8 @@ fn get_valid_tile_placements(
                 }
 
                 placements.push(serde_json::json!({
-                    "x": x,
-                    "y": y,
+                    "x": pos.x,
+                    "y": pos.y,
                     "rotation": rotation,
                     "meeple_spots": meeple_spots,
                 }));
@@ -806,20 +768,21 @@ fn get_valid_tile_placements(
     placements
 }
 
-fn get_valid_meeple_placements(
-    game_data: &serde_json::Value,
+fn get_valid_meeple_placements_typed(
+    state: &CarcassonneState,
     player_id: &str,
 ) -> Vec<serde_json::Value> {
-    let last_pos = match game_data["last_placed_position"].as_str() {
-        Some(p) => p,
+    let last_pos = match &state.last_placed_position {
+        Some(p) => p.as_str(),
         None => return vec![serde_json::json!({"skip": true})],
     };
 
-    let placed_tile = &game_data["board"]["tiles"][last_pos];
-    let tile_type_id = placed_tile["tile_type_id"].as_str().unwrap_or("");
-    let rotation = placed_tile["rotation"].as_u64().unwrap_or(0) as u32;
+    let placed_tile = match state.board.tiles.get(last_pos) {
+        Some(t) => t,
+        None => return vec![serde_json::json!({"skip": true})],
+    };
 
-    let rotated_features = get_rotated_features(tile_type_id, rotation);
+    let rotated_features = get_rotated_features(&placed_tile.tile_type_id, placed_tile.rotation);
     let mut spots: Vec<serde_json::Value> = Vec::new();
     let mut seen_spots = std::collections::HashSet::new();
 
@@ -828,7 +791,7 @@ fn get_valid_meeple_placements(
             if !seen_spots.insert(spot.clone()) {
                 continue;
             }
-            if can_place_meeple(game_data, player_id, last_pos, spot) {
+            if can_place_meeple(state, player_id, last_pos, spot) {
                 spots.push(serde_json::json!({"meeple_spot": spot}));
             }
         }
@@ -838,12 +801,12 @@ fn get_valid_meeple_placements(
     spots
 }
 
-// ------------------------------------------------------------------ //
-//  Validation helpers
-// ------------------------------------------------------------------ //
+// ================================================================== //
+//  Typed validation helpers
+// ================================================================== //
 
-fn validate_place_tile(
-    game_data: &serde_json::Value,
+fn validate_place_tile_typed(
+    state: &CarcassonneState,
     action: &Action,
 ) -> Option<String> {
     let x = action.payload.get("x").and_then(|v| v.as_i64());
@@ -859,13 +822,12 @@ fn validate_place_tile(
     }
 
     let pos_key = format!("{},{}", x.unwrap(), y.unwrap());
-    let current_tile = match game_data["current_tile"].as_str() {
-        Some(t) => t,
+    let current_tile = match &state.current_tile {
+        Some(t) => t.as_str(),
         None => return Some("No tile drawn".into()),
     };
 
-    let board_tiles = parse_board_tiles(&game_data["board"]["tiles"]);
-    if !can_place_tile(&board_tiles, current_tile, &pos_key, rotation) {
+    if !can_place_tile(&state.board.tiles, current_tile, &pos_key, rotation) {
         return Some(format!(
             "Cannot place tile {} at {} with rotation {}",
             current_tile, pos_key, rotation
@@ -875,8 +837,8 @@ fn validate_place_tile(
     None
 }
 
-fn validate_place_meeple(
-    game_data: &serde_json::Value,
+fn validate_place_meeple_typed(
+    state: &CarcassonneState,
     action: &Action,
 ) -> Option<String> {
     if action.payload.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
@@ -888,12 +850,12 @@ fn validate_place_meeple(
         None => return Some("Missing meeple_spot in payload".into()),
     };
 
-    let last_pos = match game_data["last_placed_position"].as_str() {
-        Some(p) => p,
+    let last_pos = match &state.last_placed_position {
+        Some(p) => p.as_str(),
         None => return Some("No tile was placed this turn".into()),
     };
 
-    if !can_place_meeple(game_data, &action.player_id, last_pos, spot) {
+    if !can_place_meeple(state, &action.player_id, last_pos, spot) {
         return Some(format!(
             "Cannot place meeple on spot {} at {}",
             spot, last_pos
@@ -903,55 +865,24 @@ fn validate_place_meeple(
     None
 }
 
-// ------------------------------------------------------------------ //
+// ================================================================== //
 //  Utility helpers
-// ------------------------------------------------------------------ //
+// ================================================================== //
 
-fn parse_board_tiles(tiles_val: &serde_json::Value) -> HashMap<String, PlacedTile> {
-    let mut board = HashMap::new();
-    if let Some(obj) = tiles_val.as_object() {
-        for (k, v) in obj {
-            board.insert(
-                k.clone(),
-                PlacedTile {
-                    tile_type_id: v["tile_type_id"].as_str().unwrap_or("").into(),
-                    rotation: v["rotation"].as_u64().unwrap_or(0) as u32,
-                },
-            );
-        }
-    }
-    board
-}
-
-fn float_scores(scores_val: &serde_json::Value) -> HashMap<String, f64> {
-    let mut result = HashMap::new();
-    if let Some(obj) = scores_val.as_object() {
-        for (k, v) in obj {
-            result.insert(k.clone(), v.as_f64().unwrap_or(0.0));
-        }
-    }
-    result
-}
-
-fn find_next_player(
-    game_data: &serde_json::Value,
+fn find_next_player_typed(
+    state: &CarcassonneState,
     players: &[Player],
     current_index: usize,
 ) -> usize {
-    let forfeited: std::collections::HashSet<String> = game_data
-        .get("forfeited_players")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
+    let forfeited: std::collections::HashSet<&str> = state.forfeited_players
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
 
     let num_players = players.len();
     let mut next = (current_index + 1) % num_players;
     for _ in 0..num_players {
-        if !forfeited.contains(&players[next].player_id) {
+        if !forfeited.contains(players[next].player_id.as_str()) {
             break;
         }
         next = (next + 1) % num_players;
@@ -986,28 +917,20 @@ mod tests {
 
         let (game_data, phase, events) = plugin.create_initial_state(&players, &config);
 
-        // Starting tile placed
         assert!(game_data["board"]["tiles"]["0,0"].is_object());
         assert_eq!(
             game_data["board"]["tiles"]["0,0"]["tile_type_id"].as_str().unwrap(),
             "D"
         );
 
-        // Tile bag has tiles
         assert!(game_data["tile_bag"].as_array().unwrap().len() > 0);
-
-        // Meeple supply
         assert_eq!(game_data["meeple_supply"]["p1"].as_i64().unwrap(), 7);
         assert_eq!(game_data["meeple_supply"]["p2"].as_i64().unwrap(), 7);
-
-        // Scores start at 0
         assert_eq!(game_data["scores"]["p1"].as_i64().unwrap(), 0);
 
-        // First phase is draw_tile
         assert_eq!(phase.name, "draw_tile");
         assert!(phase.auto_resolve);
 
-        // Events: game_started + starting_tile_placed
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].event_type, "game_started");
         assert_eq!(events[1].event_type, "starting_tile_placed");
@@ -1024,7 +947,6 @@ mod tests {
 
         let (game_data, phase, _events) = plugin.create_initial_state(&players, &config);
 
-        // Draw tile
         let draw_action = Action {
             action_type: "draw_tile".into(),
             player_id: "p1".into(),
@@ -1035,11 +957,9 @@ mod tests {
         assert_eq!(result.next_phase.name, "place_tile");
         assert!(result.game_data["current_tile"].as_str().is_some());
 
-        // Get valid actions for the drawn tile
         let valid = plugin.get_valid_actions(&result.game_data, &result.next_phase, "p1");
         assert!(!valid.is_empty(), "Should have valid placements");
 
-        // Place the tile at the first valid position
         let placement = &valid[0];
         let place_action = Action {
             action_type: "place_tile".into(),
@@ -1055,7 +975,6 @@ mod tests {
         );
         assert_eq!(place_result.next_phase.name, "place_meeple");
 
-        // Skip meeple
         let skip_action = Action {
             action_type: "place_meeple".into(),
             player_id: "p1".into(),
@@ -1069,7 +988,6 @@ mod tests {
         );
         assert_eq!(meeple_result.next_phase.name, "score_check");
 
-        // Score check (auto-resolve)
         let score_action = Action {
             action_type: "score_check".into(),
             player_id: "p1".into(),
@@ -1082,7 +1000,6 @@ mod tests {
             &players,
         );
         assert_eq!(score_result.next_phase.name, "draw_tile");
-        // Player 2's turn
         assert_eq!(
             score_result.next_phase.metadata["player_index"].as_u64().unwrap(),
             1
@@ -1149,5 +1066,43 @@ mod tests {
             "Game should complete within {} turns",
             max_turns
         );
+    }
+
+    #[test]
+    fn test_typed_roundtrip() {
+        let plugin = CarcassonnePlugin;
+        let players = make_players(2);
+        let config = GameConfig {
+            random_seed: Some(42),
+            options: serde_json::json!({}),
+        };
+
+        let (game_data, phase, _) = plugin.create_initial_state(&players, &config);
+
+        // Decode → encode should produce equivalent JSON
+        let state = plugin.decode_state(&game_data);
+        let re_encoded = plugin.encode_state(&state);
+
+        // Check key fields match
+        assert_eq!(
+            re_encoded["board"]["tiles"]["0,0"]["tile_type_id"],
+            game_data["board"]["tiles"]["0,0"]["tile_type_id"]
+        );
+        assert_eq!(re_encoded["tile_bag"], game_data["tile_bag"]);
+        assert_eq!(re_encoded["scores"], game_data["scores"]);
+        assert_eq!(re_encoded["meeple_supply"], game_data["meeple_supply"]);
+
+        // Typed valid actions should match JSON-path valid actions
+        let draw_action = Action {
+            action_type: "draw_tile".into(),
+            player_id: "p1".into(),
+            payload: serde_json::json!({}),
+        };
+        let result = plugin.apply_action(&game_data, &phase, &draw_action, &players);
+
+        let valid_json = plugin.get_valid_actions(&result.game_data, &result.next_phase, "p1");
+        let state2 = plugin.decode_state(&result.game_data);
+        let valid_typed = plugin.get_valid_actions_typed(&state2, &result.next_phase, "p1");
+        assert_eq!(valid_json.len(), valid_typed.len());
     }
 }

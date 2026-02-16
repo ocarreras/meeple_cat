@@ -8,14 +8,19 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
-use crate::engine::arena::run_arena;
-use crate::engine::bot_strategy::{BotStrategy, MctsStrategy, RandomStrategy};
-use crate::engine::mcts::{mcts_search, MctsParams};
-use crate::engine::models;
-use crate::engine::plugin::GamePlugin;
-use crate::games::carcassonne::evaluator::{
-    make_carcassonne_eval, AGGRESSIVE_WEIGHTS, CONSERVATIVE_WEIGHTS, FIELD_HEAVY_WEIGHTS,
+use crate::engine::arena::{run_arena, run_arena_typed};
+use crate::engine::bot_strategy::{
+    BotStrategy, MctsStrategy, RandomStrategy,
+    TypedBotStrategy, TypedMctsStrategy, TypedRandomStrategy,
 };
+use crate::engine::mcts::{mcts_search, mcts_search_typed, MctsParams};
+use crate::engine::models;
+use crate::engine::plugin::{GamePlugin, TypedGamePlugin};
+use crate::games::carcassonne::evaluator::{
+    make_carcassonne_eval, make_carcassonne_eval_typed,
+    AGGRESSIVE_WEIGHTS, CONSERVATIVE_WEIGHTS, FIELD_HEAVY_WEIGHTS,
+};
+use crate::games::carcassonne::plugin::CarcassonnePlugin;
 use crate::games::GameRegistry;
 
 pub mod proto {
@@ -283,7 +288,21 @@ fn resolve_eval_fn(
         "aggressive" => Some(make_carcassonne_eval(&AGGRESSIVE_WEIGHTS)),
         "field_heavy" => Some(make_carcassonne_eval(&FIELD_HEAVY_WEIGHTS)),
         "conservative" => Some(make_carcassonne_eval(&CONSERVATIVE_WEIGHTS)),
-        "default" | "" => None, // will use Carcassonne default inside mcts_search
+        "default" | "" => None,
+        _ => None,
+    }
+}
+
+fn resolve_typed_eval_fn(
+    eval_profile: &str,
+) -> Option<
+    Box<dyn Fn(&crate::games::carcassonne::types::CarcassonneState, &models::Phase, &str, &[models::Player]) -> f64 + Send + Sync>,
+> {
+    match eval_profile {
+        "aggressive" => Some(make_carcassonne_eval_typed(&AGGRESSIVE_WEIGHTS)),
+        "field_heavy" => Some(make_carcassonne_eval_typed(&FIELD_HEAVY_WEIGHTS)),
+        "conservative" => Some(make_carcassonne_eval_typed(&CONSERVATIVE_WEIGHTS)),
+        "default" | "" => None,
         _ => None,
     }
 }
@@ -550,7 +569,6 @@ impl GameEngineService for GameEngineServer {
         request: Request<MctsSearchRequest>,
     ) -> Result<Response<MctsSearchResponse>, Status> {
         let req = request.into_inner();
-        let plugin = self.get_plugin(&req.game_id)?;
         let game_data = game_data_from_bytes(&req.game_data_json)?;
         let phase = req
             .phase
@@ -573,21 +591,23 @@ impl GameEngineService for GameEngineServer {
             req.tile_aware_amaf,
         );
 
-        let eval_fn = resolve_eval_fn(&req.game_id, &req.eval_profile);
-        // Cast Box<dyn Fn(...) + Send + Sync> to &dyn Fn(...) for mcts_search
-        let eval_ref: Option<&dyn Fn(&serde_json::Value, &models::Phase, &str, &[models::Player], &dyn GamePlugin) -> f64> =
-            eval_fn.as_ref().map(|f| f.as_ref() as &dyn Fn(&serde_json::Value, &models::Phase, &str, &[models::Player], &dyn GamePlugin) -> f64);
-
         let t0 = Instant::now();
-        let action = mcts_search(
-            &game_data,
-            &phase,
-            &req.player_id,
-            plugin,
-            &players,
-            &params,
-            eval_ref,
-        );
+
+        // Use typed fast path for Carcassonne
+        let action = if req.game_id == "carcassonne" {
+            let plugin = CarcassonnePlugin;
+            let eval_fn = resolve_typed_eval_fn(&req.eval_profile);
+            let eval_ref: Option<&dyn Fn(&crate::games::carcassonne::types::CarcassonneState, &models::Phase, &str, &[models::Player]) -> f64> =
+                eval_fn.as_ref().map(|f| f.as_ref() as _);
+            mcts_search_typed(&game_data, &phase, &req.player_id, &plugin, &players, &params, eval_ref)
+        } else {
+            let plugin = self.get_plugin(&req.game_id)?;
+            let eval_fn = resolve_eval_fn(&req.game_id, &req.eval_profile);
+            let eval_ref: Option<&dyn Fn(&serde_json::Value, &models::Phase, &str, &[models::Player], &dyn GamePlugin) -> f64> =
+                eval_fn.as_ref().map(|f| f.as_ref() as _);
+            mcts_search(&game_data, &phase, &req.player_id, plugin, &players, &params, eval_ref)
+        };
+
         let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
         Ok(Response::new(MctsSearchResponse {
@@ -610,43 +630,6 @@ impl GameEngineService for GameEngineServer {
         let (tx, rx) = mpsc::channel(32);
 
         tokio::task::spawn_blocking(move || {
-            let plugin = match registry.get(&req.game_id) {
-                Some(p) => p,
-                None => {
-                    let _ = tx.blocking_send(Err(Status::not_found(format!(
-                        "unknown game_id: {}",
-                        req.game_id
-                    ))));
-                    return;
-                }
-            };
-
-            let mut strategies: HashMap<String, Box<dyn BotStrategy>> = HashMap::new();
-            for strat_config in &req.strategies {
-                let strategy: Box<dyn BotStrategy> = match strat_config.strategy_type.as_str() {
-                    "random" => Box::new(RandomStrategy),
-                    "mcts" => {
-                        let params = build_mcts_params(
-                            strat_config.num_simulations,
-                            strat_config.time_limit_ms,
-                            0.0, // exploration_constant not in ArenaStrategyConfig; use default
-                            strat_config.num_determinizations,
-                            strat_config.pw_c,
-                            strat_config.pw_alpha,
-                            strat_config.use_rave,
-                            strat_config.rave_k,
-                            strat_config.max_amaf_depth,
-                            strat_config.rave_fpu,
-                            strat_config.tile_aware_amaf,
-                        );
-                        Box::new(MctsStrategy::new(params))
-                    }
-                    _ => Box::new(RandomStrategy),
-                };
-                strategies.insert(strat_config.name.clone(), strategy);
-            }
-
-            let num_players = strategies.len();
             let game_options = if req.game_options.is_empty() {
                 None
             } else {
@@ -665,22 +648,104 @@ impl GameEngineService for GameEngineServer {
             let tx_progress = tx.clone();
             let num_games = req.num_games as usize;
 
-            let result = run_arena(
-                plugin,
-                &strategies,
-                num_games,
-                req.base_seed as u64,
-                num_players,
-                game_options,
-                req.alternate_seats,
-                Some(&|completed, total| {
-                    let _ = tx_progress.blocking_send(Ok(ArenaProgressUpdate {
-                        games_completed: completed as i32,
-                        total_games: total as i32,
-                        final_result: None,
-                    }));
-                }),
-            );
+            // Use typed fast path for Carcassonne
+            let result = if req.game_id == "carcassonne" {
+                let plugin = CarcassonnePlugin;
+                let mut strategies: HashMap<String, Box<dyn TypedBotStrategy<CarcassonnePlugin>>> = HashMap::new();
+                for strat_config in &req.strategies {
+                    let strategy: Box<dyn TypedBotStrategy<CarcassonnePlugin>> = match strat_config.strategy_type.as_str() {
+                        "random" => Box::new(TypedRandomStrategy),
+                        "mcts" => {
+                            let params = build_mcts_params(
+                                strat_config.num_simulations,
+                                strat_config.time_limit_ms,
+                                0.0,
+                                strat_config.num_determinizations,
+                                strat_config.pw_c,
+                                strat_config.pw_alpha,
+                                strat_config.use_rave,
+                                strat_config.rave_k,
+                                strat_config.max_amaf_depth,
+                                strat_config.rave_fpu,
+                                strat_config.tile_aware_amaf,
+                            );
+                            let eval_fn = resolve_typed_eval_fn(&strat_config.eval_profile);
+                            Box::new(TypedMctsStrategy::<CarcassonnePlugin> { params, eval_fn })
+                        }
+                        _ => Box::new(TypedRandomStrategy),
+                    };
+                    strategies.insert(strat_config.name.clone(), strategy);
+                }
+                let num_players = strategies.len();
+                run_arena_typed(
+                    &plugin,
+                    &strategies,
+                    num_games,
+                    req.base_seed as u64,
+                    num_players,
+                    game_options,
+                    req.alternate_seats,
+                    Some(&|completed, total| {
+                        let _ = tx_progress.blocking_send(Ok(ArenaProgressUpdate {
+                            games_completed: completed as i32,
+                            total_games: total as i32,
+                            final_result: None,
+                        }));
+                    }),
+                )
+            } else {
+                let plugin = match registry.get(&req.game_id) {
+                    Some(p) => p,
+                    None => {
+                        let _ = tx.blocking_send(Err(Status::not_found(format!(
+                            "unknown game_id: {}",
+                            req.game_id
+                        ))));
+                        return;
+                    }
+                };
+                let mut strategies: HashMap<String, Box<dyn BotStrategy>> = HashMap::new();
+                for strat_config in &req.strategies {
+                    let strategy: Box<dyn BotStrategy> = match strat_config.strategy_type.as_str() {
+                        "random" => Box::new(RandomStrategy),
+                        "mcts" => {
+                            let params = build_mcts_params(
+                                strat_config.num_simulations,
+                                strat_config.time_limit_ms,
+                                0.0,
+                                strat_config.num_determinizations,
+                                strat_config.pw_c,
+                                strat_config.pw_alpha,
+                                strat_config.use_rave,
+                                strat_config.rave_k,
+                                strat_config.max_amaf_depth,
+                                strat_config.rave_fpu,
+                                strat_config.tile_aware_amaf,
+                            );
+                            Box::new(MctsStrategy::new(params))
+                        }
+                        _ => Box::new(RandomStrategy),
+                    };
+                    strategies.insert(strat_config.name.clone(), strategy);
+                }
+                let num_players = strategies.len();
+                run_arena(
+                    plugin,
+                    &strategies,
+                    num_games,
+                    req.base_seed as u64,
+                    num_players,
+                    game_options,
+                    req.alternate_seats,
+                    Some(&|completed, total| {
+                        let _ = tx_progress.blocking_send(Ok(ArenaProgressUpdate {
+                            games_completed: completed as i32,
+                            total_games: total as i32,
+                            final_result: None,
+                        }));
+                    }),
+                )
+            };
 
             // Build final result
             let mut score_stats = HashMap::new();

@@ -8,8 +8,11 @@ use rand::seq::SliceRandom;
 
 use crate::engine::evaluator::default_eval_fn;
 use crate::engine::models::*;
-use crate::engine::plugin::GamePlugin;
-use crate::engine::simulator::{apply_action_and_resolve, SimulationState};
+use crate::engine::plugin::{GamePlugin, TypedGamePlugin};
+use crate::engine::simulator::{
+    apply_action_and_resolve, apply_action_and_resolve_typed,
+    SimulationState, TypedSimulationState,
+};
 
 /// MCTS search parameters.
 pub struct MctsParams {
@@ -546,6 +549,288 @@ fn amaf_key(action: &serde_json::Value, state: Option<&SimulationState>) -> Stri
     action_key(action)
 }
 
+// ================================================================== //
+//  Typed MCTS — zero-JSON hot path
+// ================================================================== //
+
+/// Typed MCTS search. Decodes game_data once, then clones typed state per iteration.
+pub fn mcts_search_typed<P: TypedGamePlugin>(
+    game_data: &serde_json::Value,
+    phase: &Phase,
+    player_id: &str,
+    plugin: &P,
+    players: &[Player],
+    params: &MctsParams,
+    eval_fn: Option<&dyn Fn(&P::State, &Phase, &str, &[Player]) -> f64>,
+) -> serde_json::Value {
+    let base_state = plugin.decode_state(game_data);
+
+    let valid_actions = plugin.get_valid_actions_typed(&base_state, phase, player_id);
+    if valid_actions.len() <= 1 {
+        return valid_actions.into_iter().next().unwrap_or(serde_json::json!({}));
+    }
+
+    let mut action_visits: HashMap<String, u32> = HashMap::new();
+    let mut action_values: HashMap<String, f64> = HashMap::new();
+    let mut action_map: HashMap<String, serde_json::Value> = HashMap::new();
+
+    let sims_per_det = (params.num_simulations / params.num_determinizations).max(1);
+    let total_deadline = Instant::now() + std::time::Duration::from_millis(params.time_limit_ms as u64);
+    let time_per_det = std::time::Duration::from_millis((params.time_limit_ms / params.num_determinizations as f64) as u64);
+
+    let base_scores = plugin.get_scores_typed(&base_state);
+
+    for _det_idx in 0..params.num_determinizations {
+        let det_deadline = std::cmp::min(Instant::now() + time_per_det, total_deadline);
+        if Instant::now() >= total_deadline {
+            break;
+        }
+
+        // Determinize: shuffle hidden info in typed state
+        let mut det_state = base_state.clone();
+        plugin.determinize(&mut det_state);
+
+        let root_state = TypedSimulationState {
+            state: det_state,
+            phase: phase.clone(),
+            players: players.to_vec(),
+            scores: base_scores.clone(),
+            game_over: None,
+        };
+
+        let mut arena = NodeArena::new();
+        let root_idx = arena.alloc(MctsNode::new(None, None));
+
+        for _sim_i in 0..sims_per_det {
+            if Instant::now() >= det_deadline {
+                break;
+            }
+            run_one_iteration_typed(
+                &mut arena,
+                root_idx,
+                &root_state,
+                player_id,
+                players,
+                plugin,
+                params,
+                eval_fn,
+            );
+        }
+
+        let root = arena.get(root_idx);
+        for &child_idx in &root.children {
+            let child = arena.get(child_idx);
+            if let Some(ref action) = child.action_taken {
+                let key = action_key(action);
+                action_map.entry(key.clone()).or_insert_with(|| action.clone());
+                *action_visits.entry(key.clone()).or_insert(0) += child.visit_count;
+                *action_values.entry(key).or_insert(0.0) += child.total_value;
+            }
+        }
+    }
+
+    if action_visits.is_empty() {
+        return valid_actions.into_iter().next().unwrap_or(serde_json::json!({}));
+    }
+
+    let best_key = action_visits.iter()
+        .max_by_key(|(_, &v)| v)
+        .map(|(k, _)| k.clone())
+        .unwrap();
+
+    action_map.remove(&best_key).unwrap_or(serde_json::json!({}))
+}
+
+fn run_one_iteration_typed<P: TypedGamePlugin>(
+    arena: &mut NodeArena,
+    root_idx: usize,
+    root_state: &TypedSimulationState<P::State>,
+    searching_player: &str,
+    players: &[Player],
+    plugin: &P,
+    params: &MctsParams,
+    eval_fn: Option<&dyn Fn(&P::State, &Phase, &str, &[Player]) -> f64>,
+) {
+    let mut node_idx = root_idx;
+    let mut state = root_state.clone();
+    let mut played_actions: Vec<(String, Option<String>)> = Vec::new();
+
+    // 1. SELECT
+    loop {
+        let node = arena.get(node_idx);
+        if node.children.is_empty() || !at_widening_limit(node, params.pw_c, params.pw_alpha) {
+            break;
+        }
+
+        let child_idx = if params.use_rave {
+            arena.best_child_rave(node_idx, params.exploration_constant, params.rave_k, params.rave_fpu)
+        } else {
+            arena.best_child_uct(node_idx, params.exploration_constant)
+        };
+
+        node_idx = child_idx;
+        let child = arena.get(child_idx);
+
+        if child.action_taken.is_some() && child.acting_player.is_some() {
+            let key = if !child.amaf_key.is_empty() {
+                child.amaf_key.clone()
+            } else {
+                action_key_from_opt(&child.action_taken)
+            };
+            played_actions.push((key, child.acting_player.clone()));
+            apply_node_action_typed(plugin, &mut state, arena.get(child_idx));
+        }
+    }
+
+    // 2. EXPAND
+    if state.game_over.is_none() {
+        let needs_expand = arena.get(node_idx).untried_actions.is_none();
+        if needs_expand {
+            let acting_pid = get_acting_player(&state.phase, players);
+            let actions = if let Some(ref pid) = acting_pid {
+                let mut acts = plugin.get_valid_actions_typed(&state.state, &state.phase, pid);
+                acts.sort_by(|a, b| action_sort_key(a).cmp(&action_sort_key(b)));
+                acts
+            } else {
+                vec![]
+            };
+            arena.get_mut(node_idx).untried_actions = Some(actions);
+        }
+
+        let should_expand = {
+            let node = arena.get(node_idx);
+            state.game_over.is_none()
+                && node.untried_actions.as_ref().map_or(false, |u| !u.is_empty())
+                && !at_widening_limit(node, params.pw_c, params.pw_alpha)
+        };
+
+        if should_expand {
+            let acting_pid = get_acting_player(&state.phase, players);
+            let action_payload = arena.get_mut(node_idx)
+                .untried_actions.as_mut().unwrap()
+                .remove(0);
+
+            let amaf_key_str = if params.use_rave {
+                if params.tile_aware_amaf {
+                    amaf_key_typed(plugin, &action_payload, &state)
+                } else {
+                    action_key(&action_payload)
+                }
+            } else {
+                String::new()
+            };
+
+            let mut child = MctsNode::new(Some(action_payload.clone()), Some(node_idx));
+            child.acting_player = acting_pid.clone();
+            child.amaf_key = amaf_key_str;
+
+            let child_idx = arena.alloc(child);
+            arena.get_mut(node_idx).children.push(child_idx);
+            node_idx = child_idx;
+
+            if acting_pid.is_some() {
+                let child = arena.get(child_idx);
+                let key = if !child.amaf_key.is_empty() {
+                    child.amaf_key.clone()
+                } else {
+                    action_key(&action_payload)
+                };
+                played_actions.push((key, acting_pid));
+                apply_node_action_typed(plugin, &mut state, arena.get(child_idx));
+            }
+        }
+    }
+
+    // 3. EVALUATE
+    let value = if state.game_over.is_some() {
+        terminal_value_typed(&state.game_over, searching_player)
+    } else if let Some(eval) = eval_fn {
+        eval(&state.state, &state.phase, searching_player, players)
+    } else {
+        // Default: sigmoid of score differential
+        default_typed_eval(plugin, &state.state, searching_player)
+    };
+
+    // 4. BACKPROPAGATE
+    backpropagate(arena, node_idx, value, searching_player, &played_actions, params.use_rave, params.max_amaf_depth);
+}
+
+fn apply_node_action_typed<P: TypedGamePlugin>(
+    plugin: &P,
+    state: &mut TypedSimulationState<P::State>,
+    node: &MctsNode,
+) {
+    let action_type = if !state.phase.expected_actions.is_empty() {
+        state.phase.expected_actions[0].action_type.clone()
+    } else {
+        state.phase.name.clone()
+    };
+    let action = Action {
+        action_type,
+        player_id: node.acting_player.clone().unwrap_or_else(|| "system".into()),
+        payload: node.action_taken.clone().unwrap_or(serde_json::json!({})),
+    };
+    apply_action_and_resolve_typed(plugin, state, &action);
+}
+
+fn terminal_value_typed(game_over: &Option<GameResult>, player_id: &str) -> f64 {
+    match game_over {
+        None => 0.5,
+        Some(result) => {
+            if result.winners.iter().any(|w| w == player_id) {
+                if result.winners.len() == 1 { 1.0 } else { 0.8 }
+            } else {
+                0.0
+            }
+        }
+    }
+}
+
+fn default_typed_eval<P: TypedGamePlugin>(
+    plugin: &P,
+    state: &P::State,
+    player_id: &str,
+) -> f64 {
+    let scores = plugin.get_scores_typed(state);
+    let my_score = scores.get(player_id).copied().unwrap_or(0.0);
+
+    let mut max_opp = 0.0f64;
+    let mut has_opp = false;
+    for (pid, &s) in &scores {
+        if pid != player_id {
+            if !has_opp || s > max_opp {
+                max_opp = s;
+                has_opp = true;
+            }
+        }
+    }
+
+    if !has_opp {
+        return 0.5;
+    }
+
+    let diff = my_score - max_opp;
+    1.0 / (1.0 + (-diff / 20.0_f64).exp())
+}
+
+fn amaf_key_typed<P: TypedGamePlugin>(
+    plugin: &P,
+    action: &serde_json::Value,
+    state: &TypedSimulationState<P::State>,
+) -> String {
+    if let (Some(x), Some(y), Some(r)) = (
+        action.get("x").and_then(|v| v.as_i64()),
+        action.get("y").and_then(|v| v.as_i64()),
+        action.get("rotation").and_then(|v| v.as_u64()),
+    ) {
+        let context = plugin.amaf_context(&state.state);
+        if !context.is_empty() {
+            return format!("{}:{},{},{}", context, x, y, r);
+        }
+    }
+    action_key(action)
+}
+
 fn action_sort_key(action: &serde_json::Value) -> (i32, i64) {
     if action.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
         return (10, 0);
@@ -635,10 +920,42 @@ mod tests {
 
         let (game_data, phase, _) = plugin.create_initial_state(&players, &config);
 
-        // draw_tile has no valid actions (auto-resolve), but let's test with skip-only meeple
         let params = MctsParams::default();
-
-        // This will return empty since draw_tile has no player actions
         let _ = mcts_search(&game_data, &phase, "p1", &plugin, &players, &params, None);
+    }
+
+    #[test]
+    fn test_mcts_typed_returns_valid_action() {
+        let plugin = CarcassonnePlugin;
+        let players = make_players(2);
+        let config = GameConfig {
+            random_seed: Some(42),
+            options: serde_json::json!({"tile_count": 5}),
+        };
+
+        let (game_data, phase, _) = plugin.create_initial_state(&players, &config);
+
+        // Advance to place_tile phase
+        let draw_action = Action {
+            action_type: "draw_tile".into(),
+            player_id: "p1".into(),
+            payload: serde_json::json!({}),
+        };
+        let result = plugin.apply_action(&game_data, &phase, &draw_action, &players);
+        let game_data = result.game_data;
+        let phase = result.next_phase;
+
+        let params = MctsParams {
+            num_simulations: 20,
+            time_limit_ms: 500.0,
+            num_determinizations: 2,
+            ..Default::default()
+        };
+
+        let best = mcts_search_typed(&game_data, &phase, "p1", &plugin, &players, &params, None);
+
+        assert!(best.get("x").is_some(), "Typed MCTS should return an action with x");
+        assert!(best.get("y").is_some(), "Typed MCTS should return an action with y");
+        assert!(best.get("rotation").is_some(), "Typed MCTS should return an action with rotation");
     }
 }

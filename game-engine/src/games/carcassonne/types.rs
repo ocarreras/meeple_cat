@@ -145,6 +145,8 @@ pub struct Feature {
     pub pennants: u32,
     #[serde(default)]
     pub open_edges: Vec<[String; 2]>,
+    #[serde(default, rename = "_merged_from")]
+    pub merged_from: Vec<String>,
 }
 
 /// Full Carcassonne game state (strongly typed, serialized to/from JSON at gRPC boundary).
@@ -160,9 +162,26 @@ pub struct CarcassonneState {
     pub scores: HashMap<String, i64>,
     pub current_player_index: usize,
     #[serde(default)]
-    pub rng_state: serde_json::Value,
+    pub rng_state: Option<u64>,
     #[serde(default)]
     pub forfeited_players: Vec<String>,
+    #[serde(default)]
+    pub end_game_breakdown: Option<serde_json::Value>,
+}
+
+impl CarcassonneState {
+    pub fn from_json(value: &serde_json::Value) -> Result<Self, serde_json::Error> {
+        serde_json::from_value(value.clone())
+    }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::to_value(self).expect("CarcassonneState serialization should not fail")
+    }
+
+    /// Scores as f64 for compatibility with engine models.
+    pub fn float_scores(&self) -> std::collections::HashMap<String, f64> {
+        self.scores.iter().map(|(k, v)| (k.clone(), *v as f64)).collect()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
