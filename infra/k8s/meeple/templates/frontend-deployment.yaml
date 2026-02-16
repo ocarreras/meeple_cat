@@ -23,6 +23,7 @@ spec:
         {{- include "meeple.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: frontend
     spec:
+      terminationGracePeriodSeconds: 15
       containers:
         - name: frontend
           image: {{ .Values.frontend.image }}
