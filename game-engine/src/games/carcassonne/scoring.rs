@@ -80,7 +80,7 @@ pub fn score_end_game(
                     let neighbors_present: i64 = pos
                         .all_surrounding()
                         .iter()
-                        .filter(|p| state.board.tiles.contains_key(&p.to_key()))
+                        .filter(|p| state.board.tiles.contains_key(&(p.x, p.y)))
                         .count() as i64;
                     (1 + neighbors_present, "monasteries")
                 }
@@ -135,13 +135,14 @@ pub(crate) fn get_adjacent_completed_cities(
             continue;
         }
 
-        let Some(placed_tile) = state.board.tiles.get(tile_pos.as_str()) else {
+        let pos = Position::from_key(tile_pos);
+        let Some(placed_tile) = state.board.tiles.get(&(pos.x, pos.y)) else {
             continue;
         };
 
-        let rotated = get_rotated_features(&placed_tile.tile_type_id, placed_tile.rotation);
+        let rotated = get_rotated_features(placed_tile.tile_type_id, placed_tile.rotation);
 
-        for tile_feat in &rotated {
+        for tile_feat in rotated {
             let matching: Vec<&str> = tile_feat
                 .meeple_spots
                 .iter()

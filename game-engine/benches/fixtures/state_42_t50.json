@@ -1,5 +1,5 @@
 {
-  "open_positions_count": 88,
+  "open_positions_count": 84,
   "phase": {
     "auto_resolve": false,
     "concurrent_mode": "sequential",
@@ -21,93 +21,89 @@
   "state": {
     "board": {
       "open_positions": [
-        "-1,-32",
-        "-1,12",
-        "-2,-14",
-        "-2,-15",
-        "-2,-16",
-        "-2,-17",
-        "-2,-18",
-        "-2,-19",
-        "-2,-20",
-        "-2,-21",
-        "-2,-22",
-        "-2,-23",
-        "-2,-24",
-        "-2,-25",
-        "-2,-26",
-        "-2,-27",
-        "-2,-28",
-        "-2,-29",
-        "-2,-3",
-        "-2,-30",
-        "-2,-31",
-        "-2,-4",
-        "-2,-5",
-        "-2,-6",
-        "-2,-7",
-        "-2,-8",
-        "-2,-9",
-        "-2,1",
-        "-2,10",
-        "-2,11",
-        "-2,2",
-        "-2,3",
-        "-2,4",
-        "-2,5",
-        "-2,6",
-        "-2,7",
-        "-2,8",
-        "-2,9",
+        "-36,-3",
+        "-36,-2",
+        "-35,-4",
+        "-35,-1",
+        "-34,-3",
+        "-34,-1",
+        "-33,-3",
+        "-33,0",
+        "-32,-3",
+        "-32,-1",
+        "-31,-3",
+        "-31,-1",
+        "-30,-3",
+        "-30,-1",
+        "-29,-3",
+        "-29,-1",
+        "-28,-3",
+        "-28,-1",
+        "-27,-3",
+        "-27,-1",
+        "-26,-4",
+        "-26,-1",
+        "-25,-3",
+        "-25,0",
+        "-24,-2",
+        "-24,0",
+        "-23,-4",
+        "-23,-2",
+        "-23,0",
+        "-22,-5",
+        "-22,-3",
+        "-22,-2",
+        "-22,0",
+        "-21,-5",
+        "-21,0",
+        "-20,-4",
+        "-20,-3",
+        "-20,-2",
+        "-20,0",
+        "-19,-2",
+        "-19,0",
+        "-18,-3",
+        "-18,-2",
+        "-18,0",
+        "-17,-4",
+        "-17,0",
+        "-16,-3",
+        "-16,-2",
+        "-16,0",
+        "-15,-2",
+        "-15,0",
+        "-14,-2",
+        "-14,0",
+        "-13,-2",
+        "-13,0",
+        "-12,-2",
+        "-12,0",
+        "-11,-2",
+        "-11,0",
+        "-10,-2",
+        "-10,0",
+        "-9,-2",
+        "-9,1",
+        "-8,-1",
+        "-8,1",
+        "-8,2",
+        "-7,-1",
+        "-7,3",
+        "-6,-1",
+        "-6,1",
+        "-6,2",
+        "-5,-1",
+        "-5,1",
+        "-4,-2",
+        "-4,1",
         "-3,-1",
-        "-3,-10",
-        "-3,-11",
-        "-3,-12",
-        "-3,-13",
-        "-3,-2",
-        "-3,0",
+        "-3,1",
+        "-2,-1",
+        "-2,1",
+        "-1,-2",
+        "-1,1",
         "0,-1",
-        "0,-10",
-        "0,-11",
-        "0,-12",
-        "0,-13",
-        "0,-14",
-        "0,-15",
-        "0,-16",
-        "0,-17",
-        "0,-18",
-        "0,-19",
-        "0,-2",
-        "0,-20",
-        "0,-21",
-        "0,-22",
-        "0,-23",
-        "0,-24",
-        "0,-25",
-        "0,-26",
-        "0,-27",
-        "0,-28",
-        "0,-29",
-        "0,-3",
-        "0,-30",
-        "0,-31",
-        "0,-4",
-        "0,-5",
-        "0,-6",
-        "0,-7",
-        "0,-8",
-        "0,-9",
         "0,1",
-        "0,10",
-        "0,11",
-        "0,2",
-        "0,3",
-        "0,4",
-        "0,5",
-        "0,6",
-        "0,7",
-        "0,8",
-        "0,9",
         "1,0"
       ],
       "tiles": {
@@ -115,201 +111,201 @@
           "rotation": 0,
           "tile_type_id": "X"
         },
-        "-1,-10": {
-          "rotation": 0,
-          "tile_type_id": "U"
-        },
-        "-1,-11": {
-          "rotation": 90,
-          "tile_type_id": "L"
-        },
-        "-1,-12": {
-          "rotation": 180,
-          "tile_type_id": "A"
-        },
-        "-1,-13": {
-          "rotation": 180,
-          "tile_type_id": "I"
-        },
-        "-1,-14": {
-          "rotation": 0,
-          "tile_type_id": "D"
-        },
-        "-1,-15": {
-          "rotation": 90,
-          "tile_type_id": "H"
-        },
-        "-1,-16": {
-          "rotation": 0,
-          "tile_type_id": "F"
-        },
-        "-1,-17": {
-          "rotation": 0,
-          "tile_type_id": "F"
-        },
-        "-1,-18": {
-          "rotation": 180,
-          "tile_type_id": "Q"
-        },
-        "-1,-19": {
-          "rotation": 0,
-          "tile_type_id": "L"
-        },
-        "-1,-2": {
-          "rotation": 90,
-          "tile_type_id": "V"
-        },
-        "-1,-20": {
-          "rotation": 180,
-          "tile_type_id": "T"
-        },
-        "-1,-21": {
-          "rotation": 0,
-          "tile_type_id": "E"
-        },
-        "-1,-22": {
-          "rotation": 180,
-          "tile_type_id": "N"
-        },
-        "-1,-23": {
-          "rotation": 0,
-          "tile_type_id": "S"
-        },
-        "-1,-24": {
-          "rotation": 90,
-          "tile_type_id": "U"
-        },
-        "-1,-25": {
-          "rotation": 0,
-          "tile_type_id": "V"
-        },
-        "-1,-26": {
-          "rotation": 90,
-          "tile_type_id": "V"
-        },
-        "-1,-27": {
-          "rotation": 90,
-          "tile_type_id": "U"
-        },
-        "-1,-28": {
-          "rotation": 270,
-          "tile_type_id": "K"
-        },
-        "-1,-29": {
-          "rotation": 180,
-          "tile_type_id": "O"
-        },
-        "-1,-3": {
-          "rotation": 90,
-          "tile_type_id": "U"
-        },
-        "-1,-30": {
-          "rotation": 0,
-          "tile_type_id": "J"
-        },
-        "-1,-31": {
-          "rotation": 180,
-          "tile_type_id": "P"
-        },
-        "-1,-4": {
-          "rotation": 90,
-          "tile_type_id": "U"
-        },
-        "-1,-5": {
-          "rotation": 90,
-          "tile_type_id": "J"
-        },
-        "-1,-6": {
-          "rotation": 90,
-          "tile_type_id": "V"
-        },
-        "-1,-7": {
-          "rotation": 0,
-          "tile_type_id": "B"
-        },
-        "-1,-8": {
-          "rotation": 90,
-          "tile_type_id": "J"
-        },
-        "-1,-9": {
-          "rotation": 0,
-          "tile_type_id": "U"
-        },
         "-1,0": {
           "rotation": 0,
           "tile_type_id": "P"
         },
-        "-1,1": {
-          "rotation": 180,
-          "tile_type_id": "E"
+        "-10,-1": {
+          "rotation": 90,
+          "tile_type_id": "M"
         },
-        "-1,10": {
+        "-11,-1": {
           "rotation": 0,
           "tile_type_id": "U"
         },
-        "-1,11": {
+        "-12,-1": {
           "rotation": 0,
-          "tile_type_id": "V"
+          "tile_type_id": "U"
         },
-        "-1,2": {
-          "rotation": 0,
-          "tile_type_id": "Q"
-        },
-        "-1,3": {
-          "rotation": 180,
-          "tile_type_id": "M"
-        },
-        "-1,4": {
+        "-13,-1": {
           "rotation": 0,
           "tile_type_id": "N"
         },
-        "-1,5": {
-          "rotation": 180,
+        "-14,-1": {
+          "rotation": 90,
+          "tile_type_id": "L"
+        },
+        "-15,-1": {
+          "rotation": 270,
+          "tile_type_id": "A"
+        },
+        "-16,-1": {
+          "rotation": 0,
+          "tile_type_id": "I"
+        },
+        "-17,-1": {
+          "rotation": 90,
+          "tile_type_id": "D"
+        },
+        "-17,-2": {
+          "rotation": 90,
+          "tile_type_id": "V"
+        },
+        "-17,-3": {
+          "rotation": 270,
+          "tile_type_id": "W"
+        },
+        "-18,-1": {
+          "rotation": 0,
+          "tile_type_id": "H"
+        },
+        "-19,-1": {
+          "rotation": 90,
+          "tile_type_id": "F"
+        },
+        "-2,0": {
+          "rotation": 90,
           "tile_type_id": "E"
         },
-        "-1,6": {
+        "-20,-1": {
+          "rotation": 90,
+          "tile_type_id": "F"
+        },
+        "-21,-1": {
+          "rotation": 270,
+          "tile_type_id": "Q"
+        },
+        "-21,-2": {
+          "rotation": 0,
+          "tile_type_id": "E"
+        },
+        "-21,-3": {
           "rotation": 90,
           "tile_type_id": "H"
         },
-        "-1,7": {
+        "-21,-4": {
           "rotation": 0,
           "tile_type_id": "B"
         },
-        "-1,8": {
-          "rotation": 0,
-          "tile_type_id": "B"
-        },
-        "-1,9": {
+        "-22,-1": {
           "rotation": 90,
+          "tile_type_id": "L"
+        },
+        "-22,-4": {
+          "rotation": 0,
+          "tile_type_id": "B"
+        },
+        "-23,-1": {
+          "rotation": 270,
+          "tile_type_id": "T"
+        },
+        "-24,-1": {
+          "rotation": 90,
+          "tile_type_id": "E"
+        },
+        "-25,-1": {
+          "rotation": 0,
+          "tile_type_id": "N"
+        },
+        "-25,-2": {
+          "rotation": 270,
           "tile_type_id": "W"
         },
-        "-2,-1": {
-          "rotation": 270,
-          "tile_type_id": "R"
+        "-26,-2": {
+          "rotation": 90,
+          "tile_type_id": "U"
         },
-        "-2,-10": {
+        "-26,-3": {
+          "rotation": 180,
+          "tile_type_id": "S"
+        },
+        "-27,-2": {
+          "rotation": 90,
+          "tile_type_id": "U"
+        },
+        "-28,-2": {
+          "rotation": 180,
+          "tile_type_id": "V"
+        },
+        "-29,-2": {
+          "rotation": 0,
+          "tile_type_id": "H"
+        },
+        "-3,0": {
           "rotation": 0,
           "tile_type_id": "V"
         },
-        "-2,-11": {
-          "rotation": 90,
-          "tile_type_id": "W"
+        "-30,-2": {
+          "rotation": 0,
+          "tile_type_id": "V"
         },
-        "-2,-12": {
+        "-31,-2": {
+          "rotation": 90,
+          "tile_type_id": "U"
+        },
+        "-32,-2": {
           "rotation": 180,
+          "tile_type_id": "K"
+        },
+        "-33,-1": {
+          "rotation": 180,
+          "tile_type_id": "O"
+        },
+        "-33,-2": {
+          "rotation": 0,
           "tile_type_id": "E"
         },
-        "-2,-13": {
-          "rotation": 0,
-          "tile_type_id": "H"
+        "-34,-2": {
+          "rotation": 180,
+          "tile_type_id": "J"
         },
-        "-2,-2": {
+        "-35,-2": {
+          "rotation": 0,
+          "tile_type_id": "P"
+        },
+        "-35,-3": {
+          "rotation": 90,
+          "tile_type_id": "V"
+        },
+        "-4,-1": {
+          "rotation": 90,
+          "tile_type_id": "U"
+        },
+        "-4,0": {
+          "rotation": 90,
+          "tile_type_id": "U"
+        },
+        "-5,0": {
+          "rotation": 270,
+          "tile_type_id": "R"
+        },
+        "-6,0": {
+          "rotation": 90,
+          "tile_type_id": "J"
+        },
+        "-7,0": {
+          "rotation": 180,
+          "tile_type_id": "V"
+        },
+        "-7,1": {
           "rotation": 0,
           "tile_type_id": "L"
         },
-        "-2,0": {
+        "-7,2": {
           "rotation": 0,
           "tile_type_id": "C"
+        },
+        "-8,0": {
+          "rotation": 0,
+          "tile_type_id": "B"
+        },
+        "-9,-1": {
+          "rotation": 0,
+          "tile_type_id": "Q"
+        },
+        "-9,0": {
+          "rotation": 180,
+          "tile_type_id": "J"
         },
         "0,0": {
           "rotation": 0,
@@ -322,94 +318,87 @@
     "end_game_breakdown": null,
     "feature_redirects": {
       "f1": "f8",
-      "f10": "f39",
-      "f101": "f162",
+      "f104": "f112",
       "f106": "f121",
       "f109": "f122",
-      "f11": "f25",
       "f110": "f123",
-      "f113": "f116",
-      "f117": "f133",
-      "f119": "f133",
+      "f113": "f117",
+      "f116": "f125",
+      "f119": "f125",
       "f120": "f126",
-      "f125": "f133",
-      "f127": "f129",
-      "f128": "f139",
-      "f13": "f43",
-      "f132": "f175",
-      "f134": "f176",
-      "f135": "f177",
-      "f136": "f175",
-      "f137": "f176",
-      "f138": "f177",
-      "f14": "f42",
-      "f140": "f143",
-      "f142": "f156",
-      "f144": "f151",
-      "f145": "f156",
-      "f146": "f153",
-      "f147": "f161",
-      "f149": "f162",
-      "f15": "f27",
-      "f152": "f156",
-      "f155": "f166",
-      "f158": "f164",
-      "f159": "f166",
-      "f16": "f56",
-      "f160": "f165",
-      "f163": "f167",
-      "f168": "f172",
-      "f169": "f174",
-      "f17": "f53",
-      "f170": "f173",
-      "f18": "f39",
-      "f19": "f43",
-      "f2": "f27",
-      "f20": "f42",
+      "f127": "f146",
+      "f129": "f146",
+      "f130": "f144",
+      "f133": "f146",
+      "f134": "f149",
+      "f136": "f144",
+      "f137": "f149",
+      "f138": "f146",
+      "f140": "f149",
+      "f141": "f144",
+      "f142": "f149",
+      "f143": "f146",
+      "f145": "f149",
+      "f150": "f160",
+      "f151": "f158",
+      "f152": "f160",
+      "f153": "f176",
+      "f154": "f158",
+      "f155": "f176",
+      "f156": "f160",
+      "f159": "f176",
+      "f161": "f163",
+      "f162": "f176",
+      "f168": "f175",
+      "f169": "f176",
+      "f17": "f27",
+      "f170": "f177",
+      "f172": "f175",
+      "f173": "f177",
+      "f174": "f176",
+      "f18": "f25",
+      "f19": "f27",
+      "f2": "f15",
+      "f20": "f30",
+      "f21": "f25",
       "f22": "f30",
-      "f23": "f43",
-      "f24": "f56",
-      "f26": "f42",
-      "f29": "f72",
+      "f23": "f27",
+      "f24": "f31",
+      "f26": "f30",
       "f3": "f12",
-      "f32": "f35",
-      "f33": "f72",
-      "f34": "f37",
-      "f36": "f72",
+      "f32": "f40",
+      "f33": "f43",
+      "f34": "f50",
+      "f35": "f40",
+      "f36": "f50",
+      "f37": "f43",
       "f38": "f56",
-      "f4": "f56",
-      "f47": "f72",
-      "f49": "f68",
+      "f4": "f16",
+      "f44": "f50",
+      "f47": "f50",
+      "f48": "f54",
       "f5": "f8",
-      "f50": "f72",
-      "f51": "f102",
       "f52": "f54",
-      "f55": "f64",
-      "f57": "f68",
-      "f58": "f72",
-      "f59": "f102",
-      "f6": "f27",
-      "f60": "f68",
-      "f61": "f72",
-      "f62": "f102",
-      "f63": "f112",
-      "f66": "f74",
-      "f67": "f98",
-      "f69": "f162",
+      "f55": "f58",
+      "f59": "f61",
+      "f6": "f15",
+      "f62": "f64",
+      "f63": "f65",
+      "f67": "f74",
       "f7": "f12",
-      "f70": "f162",
-      "f71": "f102",
-      "f75": "f162",
-      "f76": "f79",
-      "f78": "f162",
-      "f82": "f86",
-      "f85": "f88",
+      "f70": "f78",
+      "f71": "f78",
+      "f75": "f78",
+      "f77": "f79",
+      "f80": "f95",
+      "f81": "f101",
+      "f82": "f97",
+      "f85": "f97",
+      "f86": "f88",
       "f89": "f91",
       "f92": "f94",
-      "f93": "f104",
-      "f95": "f100",
-      "f96": "f102",
-      "f97": "f103"
+      "f93": "f112",
+      "f96": "f101"
     },
     "features": {
       "f0": {
@@ -429,112 +418,118 @@
           "0,0"
         ]
       },
-      "f100": {
-        "_merged_from": [
-          "f95"
+      "f10": {
+        "_merged_from": [],
+        "feature_id": "f10",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-1,-1",
+            "S"
+          ]
         ],
+        "pennants": 0,
+        "tiles": [
+          "-1,-1"
+        ]
+      },
+      "f100": {
+        "_merged_from": [],
         "feature_id": "f100",
         "feature_type": "road",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-2,-10",
-            "W"
+            "-17,-3",
+            "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-11",
-          "-2,-10"
+          "-17,-3"
+        ]
+      },
+      "f101": {
+        "_merged_from": [
+          "f96",
+          "f81"
+        ],
+        "feature_id": "f101",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-17,-3",
+            "W:N"
+          ],
+          [
+            "-17,-3",
+            "E:N"
+          ],
+          [
+            "-17,-2",
+            "E"
+          ],
+          [
+            "-17,-2",
+            "W:S"
+          ],
+          [
+            "-17,-1",
+            "N:E"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-17,-3",
+          "-17,-2",
+          "-17,-1"
         ]
       },
       "f102": {
-        "_merged_from": [
-          "f96",
-          "f71",
-          "f62",
-          "f59",
-          "f51"
-        ],
+        "_merged_from": [],
         "feature_id": "f102",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-2,-10",
-            "N"
-          ],
-          [
-            "-2,-10",
-            "W:N"
-          ],
-          [
-            "-1,-9",
-            "W"
-          ],
-          [
-            "-1,-8",
+            "-17,-3",
             "W:S"
+          ],
+          [
+            "-17,-3",
+            "S:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-11",
-          "-2,-10",
-          "-1,-11",
-          "-1,-10",
-          "-1,-9",
-          "-1,-8"
+          "-17,-3"
         ]
       },
       "f103": {
-        "_merged_from": [
-          "f97"
-        ],
+        "_merged_from": [],
         "feature_id": "f103",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-2,-11",
-            "W:N"
+            "-17,-3",
+            "E:S"
           ],
           [
-            "-2,-10",
-            "W:S"
+            "-17,-3",
+            "S:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-11",
-          "-2,-10"
-        ]
-      },
-      "f104": {
-        "_merged_from": [
-          "f93"
-        ],
-        "feature_id": "f104",
-        "feature_type": "city",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-18",
-            "W"
-          ],
-          [
-            "-1,-18",
-            "E"
-          ]
-        ],
-        "pennants": 1,
-        "tiles": [
-          "-1,-19",
-          "-1,-18"
+          "-17,-3"
         ]
       },
       "f105": {
@@ -545,13 +540,13 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-19",
-            "E"
+            "-22,-1",
+            "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-19"
+          "-22,-1"
         ]
       },
       "f107": {
@@ -562,13 +557,13 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-19",
-            "W"
+            "-22,-1",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-19"
+          "-22,-1"
         ]
       },
       "f108": {
@@ -579,13 +574,30 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-19",
-            "E:N"
+            "-22,-1",
+            "S:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-19"
+          "-22,-1"
+        ]
+      },
+      "f11": {
+        "_merged_from": [],
+        "feature_id": "f11",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-1,-1",
+            "W"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-1,-1"
         ]
       },
       "f111": {
@@ -596,18 +608,19 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-19",
-            "W:N"
+            "-22,-1",
+            "N:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-19"
+          "-22,-1"
         ]
       },
       "f112": {
         "_merged_from": [
-          "f63"
+          "f104",
+          "f93"
         ],
         "feature_id": "f112",
         "feature_type": "city",
@@ -615,14 +628,15 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,4",
-            "W"
+            "-21,-1",
+            "N"
           ]
         ],
-        "pennants": 0,
+        "pennants": 1,
         "tiles": [
-          "-1,5",
-          "-1,4"
+          "-21,-2",
+          "-22,-1",
+          "-21,-1"
         ]
       },
       "f114": {
@@ -633,13 +647,13 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,6",
+            "-21,-3",
             "E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,6"
+          "-21,-3"
         ]
       },
       "f115": {
@@ -650,37 +664,37 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,6",
+            "-21,-3",
             "W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,6"
+          "-21,-3"
         ]
       },
-      "f116": {
+      "f117": {
         "_merged_from": [
           "f113"
         ],
-        "feature_id": "f116",
+        "feature_id": "f117",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,5",
-            "W"
+            "-21,-2",
+            "E"
           ],
           [
-            "-1,5",
-            "E"
+            "-21,-2",
+            "W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,6",
-          "-1,5"
+          "-21,-3",
+          "-21,-2"
         ]
       },
       "f118": {
@@ -692,7 +706,7 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,7"
+          "-21,-4"
         ]
       },
       "f12": {
@@ -736,8 +750,8 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,-20",
-          "-1,-19"
+          "-23,-1",
+          "-22,-1"
         ]
       },
       "f122": {
@@ -750,14 +764,14 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-19",
-            "E:S"
+            "-22,-1",
+            "S:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-20",
-          "-1,-19"
+          "-23,-1",
+          "-22,-1"
         ]
       },
       "f123": {
@@ -770,14 +784,14 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-19",
-            "W:S"
+            "-22,-1",
+            "N:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-20",
-          "-1,-19"
+          "-23,-1",
+          "-22,-1"
         ]
       },
       "f124": {
@@ -789,7 +803,45 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,8"
+          "-22,-4"
+        ]
+      },
+      "f125": {
+        "_merged_from": [
+          "f119",
+          "f116"
+        ],
+        "feature_id": "f125",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-22,-4",
+            "N"
+          ],
+          [
+            "-22,-4",
+            "S"
+          ],
+          [
+            "-22,-4",
+            "W"
+          ],
+          [
+            "-21,-4",
+            "E"
+          ],
+          [
+            "-21,-4",
+            "S"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-22,-4",
+          "-21,-4",
+          "-21,-3"
         ]
       },
       "f126": {
@@ -802,63 +854,60 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-20",
-            "W"
+            "-23,-1",
+            "N"
           ],
           [
-            "-1,-20",
-            "E"
+            "-23,-1",
+            "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-21",
-          "-1,-20"
+          "-24,-1",
+          "-23,-1"
         ]
       },
-      "f129": {
-        "_merged_from": [
-          "f127"
+      "f128": {
+        "_merged_from": [],
+        "feature_id": "f128",
+        "feature_type": "city",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-25,-1",
+            "N"
+          ],
+          [
+            "-25,-1",
+            "W"
+          ]
         ],
-        "feature_id": "f129",
+        "pennants": 0,
+        "tiles": [
+          "-25,-1"
+        ]
+      },
+      "f13": {
+        "_merged_from": [],
+        "feature_id": "f13",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-22",
-            "W"
+            "-1,-1",
+            "E:S"
           ],
           [
-            "-1,-21",
-            "E"
-          ],
-          [
-            "-1,-21",
-            "W"
+            "-1,-1",
+            "S:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-22",
-          "-1,-21"
-        ]
-      },
-      "f130": {
-        "_merged_from": [],
-        "feature_id": "f130",
-        "feature_type": "road",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,9",
-            "E"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,9"
+          "-1,-1"
         ]
       },
       "f131": {
@@ -869,130 +918,186 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,9",
-            "W"
+            "-25,-2",
+            "E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,9"
+          "-25,-2"
         ]
       },
-      "f133": {
-        "_merged_from": [
-          "f125",
-          "f119",
-          "f117"
+      "f132": {
+        "_merged_from": [],
+        "feature_id": "f132",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-25,-2",
+            "S"
+          ]
         ],
-        "feature_id": "f133",
+        "pennants": 0,
+        "tiles": [
+          "-25,-2"
+        ]
+      },
+      "f135": {
+        "_merged_from": [],
+        "feature_id": "f135",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,9",
+            "-25,-2",
             "E:S"
           ],
           [
-            "-1,9",
-            "W:S"
-          ],
-          [
-            "-1,8",
-            "E"
-          ],
-          [
-            "-1,8",
-            "W"
-          ],
-          [
-            "-1,7",
-            "E"
-          ],
-          [
-            "-1,7",
-            "W"
+            "-25,-2",
+            "S:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,9",
-          "-1,8",
-          "-1,7",
-          "-1,6"
+          "-25,-2"
         ]
       },
       "f139": {
-        "_merged_from": [
-          "f128"
-        ],
+        "_merged_from": [],
         "feature_id": "f139",
         "feature_type": "city",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-23",
-            "E"
+            "-26,-3",
+            "S"
           ],
           [
-            "-1,-23",
+            "-26,-3",
             "W"
           ],
           [
-            "-1,-22",
+            "-26,-3",
             "E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-23",
-          "-1,-22"
+          "-26,-3"
         ]
       },
-      "f141": {
+      "f14": {
         "_merged_from": [],
-        "feature_id": "f141",
-        "feature_type": "road",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-24",
-            "E"
-          ],
-          [
-            "-1,-24",
-            "W"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-24"
-        ]
-      },
-      "f143": {
-        "_merged_from": [
-          "f140"
-        ],
-        "feature_id": "f143",
+        "feature_id": "f14",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-24",
-            "E:N"
+            "-1,-1",
+            "S:W"
           ],
           [
-            "-1,-24",
-            "W:N"
+            "-1,-1",
+            "W:S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-24",
-          "-1,-23"
+          "-1,-1"
+        ]
+      },
+      "f144": {
+        "_merged_from": [
+          "f141",
+          "f136",
+          "f130"
+        ],
+        "feature_id": "f144",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-28,-2",
+            "N"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-28,-2",
+          "-27,-2",
+          "-26,-2",
+          "-25,-2"
+        ]
+      },
+      "f146": {
+        "_merged_from": [
+          "f143",
+          "f138",
+          "f133",
+          "f129",
+          "f127"
+        ],
+        "feature_id": "f146",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-28,-2",
+            "N:E"
+          ],
+          [
+            "-27,-2",
+            "N"
+          ],
+          [
+            "-26,-2",
+            "N"
+          ],
+          [
+            "-25,-2",
+            "E:N"
+          ],
+          [
+            "-24,-1",
+            "S"
+          ],
+          [
+            "-24,-1",
+            "N"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-28,-2",
+          "-27,-2",
+          "-26,-2",
+          "-25,-2",
+          "-25,-1",
+          "-24,-1"
+        ]
+      },
+      "f147": {
+        "_merged_from": [],
+        "feature_id": "f147",
+        "feature_type": "city",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-29,-2",
+            "N"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-29,-2"
         ]
       },
       "f148": {
@@ -1003,151 +1108,79 @@
         "meeples": [],
         "open_edges": [
           [
-            "-2,-13",
+            "-29,-2",
             "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-13"
+          "-29,-2"
         ]
       },
-      "f150": {
-        "_merged_from": [],
-        "feature_id": "f150",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-2,-13",
-            "W"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-2,-13"
-        ]
-      },
-      "f151": {
+      "f149": {
         "_merged_from": [
-          "f144"
-        ],
-        "feature_id": "f151",
-        "feature_type": "road",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-26",
-            "W"
-          ],
-          [
-            "-1,-25",
-            "W"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-26",
-          "-1,-25"
-        ]
-      },
-      "f153": {
-        "_merged_from": [
-          "f146"
-        ],
-        "feature_id": "f153",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-26",
-            "W:N"
-          ],
-          [
-            "-1,-25",
-            "W:S"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-26",
-          "-1,-25"
-        ]
-      },
-      "f154": {
-        "_merged_from": [],
-        "feature_id": "f154",
-        "feature_type": "road",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-27",
-            "E"
-          ],
-          [
-            "-1,-27",
-            "W"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-27"
-        ]
-      },
-      "f156": {
-        "_merged_from": [
-          "f152",
           "f145",
-          "f142"
+          "f142",
+          "f140",
+          "f137",
+          "f134"
         ],
-        "feature_id": "f156",
+        "feature_id": "f149",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-27",
-            "E:N"
+            "-28,-2",
+            "S"
           ],
           [
-            "-1,-27",
-            "W:N"
+            "-28,-2",
+            "N:W"
           ],
           [
-            "-1,-26",
-            "E"
+            "-27,-2",
+            "S"
           ],
           [
-            "-1,-26",
-            "W:S"
-          ],
-          [
-            "-1,-25",
-            "E"
-          ],
-          [
-            "-1,-25",
-            "W:N"
-          ],
-          [
-            "-1,-24",
-            "E:S"
-          ],
-          [
-            "-1,-24",
-            "W:S"
+            "-25,-2",
+            "S:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-27",
-          "-1,-26",
-          "-1,-25",
-          "-1,-24"
+          "-29,-2",
+          "-28,-2",
+          "-27,-2",
+          "-26,-3",
+          "-26,-2",
+          "-25,-2"
+        ]
+      },
+      "f15": {
+        "_merged_from": [
+          "f6",
+          "f2"
+        ],
+        "feature_id": "f15",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-1,-1",
+            "W:N"
+          ],
+          [
+            "0,0",
+            "E:N"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-1,-1",
+          "-1,0",
+          "0,0"
         ]
       },
       "f157": {
@@ -1158,167 +1191,201 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-28",
-            "W"
+            "-32,-2",
+            "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-28"
+          "-32,-2"
         ]
       },
-      "f161": {
+      "f158": {
         "_merged_from": [
-          "f147"
+          "f154",
+          "f151"
         ],
-        "feature_id": "f161",
-        "feature_type": "city",
-        "is_complete": true,
+        "feature_id": "f158",
+        "feature_type": "road",
+        "is_complete": false,
         "meeples": [],
-        "open_edges": [],
+        "open_edges": [
+          [
+            "-32,-2",
+            "N"
+          ],
+          [
+            "-30,-2",
+            "S"
+          ]
+        ],
         "pennants": 0,
         "tiles": [
-          "-2,-12",
-          "-2,-13"
+          "-32,-2",
+          "-31,-2",
+          "-30,-2"
         ]
       },
-      "f162": {
+      "f16": {
         "_merged_from": [
-          "f149",
-          "f101",
-          "f78",
-          "f75",
-          "f70",
-          "f69"
+          "f4"
         ],
-        "feature_id": "f162",
+        "feature_id": "f16",
+        "feature_type": "city",
+        "is_complete": false,
+        "meeples": [
+          {
+            "player_id": "p0",
+            "position": "-1,0",
+            "spot": "city_NW"
+          }
+        ],
+        "open_edges": [
+          [
+            "-1,0",
+            "N"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-2,0",
+          "-1,0"
+        ]
+      },
+      "f160": {
+        "_merged_from": [
+          "f156",
+          "f152",
+          "f150"
+        ],
+        "feature_id": "f160",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-2,-12",
-            "W"
+            "-32,-2",
+            "N:E"
           ],
           [
-            "-2,-11",
-            "W:S"
+            "-31,-2",
+            "N"
           ],
           [
-            "-1,-12",
-            "E"
+            "-30,-2",
+            "N"
+          ],
+          [
+            "-30,-2",
+            "S:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-12",
-          "-2,-13",
-          "-2,-11",
-          "-1,-13",
-          "-1,-12",
-          "-1,-11"
+          "-32,-2",
+          "-31,-2",
+          "-30,-2",
+          "-29,-2"
+        ]
+      },
+      "f163": {
+        "_merged_from": [
+          "f161"
+        ],
+        "feature_id": "f163",
+        "feature_type": "city",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-33,-1",
+            "E"
+          ]
+        ],
+        "pennants": 1,
+        "tiles": [
+          "-33,-1",
+          "-33,-2"
         ]
       },
       "f164": {
-        "_merged_from": [
-          "f158"
-        ],
+        "_merged_from": [],
         "feature_id": "f164",
         "feature_type": "road",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-29",
+            "-33,-1",
             "W"
           ],
           [
-            "-1,-28",
-            "E"
+            "-33,-1",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-29",
-          "-1,-28"
+          "-33,-1"
         ]
       },
       "f165": {
-        "_merged_from": [
-          "f160"
-        ],
+        "_merged_from": [],
         "feature_id": "f165",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-29",
+            "-33,-1",
             "W:S"
           ],
           [
-            "-1,-28",
-            "E:S"
+            "-33,-1",
+            "N:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-29",
-          "-1,-28"
+          "-33,-1"
         ]
       },
       "f166": {
-        "_merged_from": [
-          "f159",
-          "f155"
-        ],
+        "_merged_from": [],
         "feature_id": "f166",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-29",
+            "-33,-1",
             "W:N"
           ],
           [
-            "-1,-28",
-            "E:N"
-          ],
-          [
-            "-1,-27",
-            "E:S"
-          ],
-          [
-            "-1,-27",
-            "W:S"
+            "-33,-1",
+            "N:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-29",
-          "-1,-28",
-          "-1,-27"
+          "-33,-1"
         ]
       },
       "f167": {
-        "_merged_from": [
-          "f163"
-        ],
+        "_merged_from": [],
         "feature_id": "f167",
         "feature_type": "city",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-29",
-            "E"
+            "-34,-2",
+            "S"
           ]
         ],
-        "pennants": 1,
+        "pennants": 0,
         "tiles": [
-          "-1,-30",
-          "-1,-29"
+          "-34,-2"
         ]
       },
       "f171": {
@@ -1329,99 +1396,23 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-31",
-            "S"
+            "-35,-2",
+            "N"
           ],
           [
-            "-1,-31",
-            "E"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-31"
-        ]
-      },
-      "f172": {
-        "_merged_from": [
-          "f168"
-        ],
-        "feature_id": "f172",
-        "feature_type": "road",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-31",
+            "-35,-2",
             "W"
-          ],
-          [
-            "-1,-30",
-            "E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-31",
-          "-1,-30"
-        ]
-      },
-      "f173": {
-        "_merged_from": [
-          "f170"
-        ],
-        "feature_id": "f173",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-31",
-            "W:S"
-          ],
-          [
-            "-1,-30",
-            "E:S"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-31",
-          "-1,-30"
-        ]
-      },
-      "f174": {
-        "_merged_from": [
-          "f169"
-        ],
-        "feature_id": "f174",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-31",
-            "W:N"
-          ],
-          [
-            "-1,-30",
-            "W"
-          ],
-          [
-            "-1,-30",
-            "E:N"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-31",
-          "-1,-30"
+          "-35,-2"
         ]
       },
       "f175": {
         "_merged_from": [
-          "f136",
-          "f132"
+          "f172",
+          "f168"
         ],
         "feature_id": "f175",
         "feature_type": "road",
@@ -1429,21 +1420,29 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,11",
+            "-35,-3",
             "W"
+          ],
+          [
+            "-34,-2",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,11",
-          "-1,10",
-          "-1,9"
+          "-35,-3",
+          "-35,-2",
+          "-34,-2"
         ]
       },
       "f176": {
         "_merged_from": [
-          "f137",
-          "f134"
+          "f174",
+          "f169",
+          "f162",
+          "f159",
+          "f155",
+          "f153"
         ],
         "feature_id": "f176",
         "feature_type": "field",
@@ -1451,37 +1450,53 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,11",
-            "N"
-          ],
-          [
-            "-1,11",
+            "-35,-3",
             "E"
           ],
           [
-            "-1,11",
-            "W:N"
+            "-35,-3",
+            "S"
           ],
           [
-            "-1,10",
-            "E"
+            "-35,-3",
+            "W:S"
           ],
           [
-            "-1,9",
-            "E:N"
+            "-34,-2",
+            "N:E"
+          ],
+          [
+            "-33,-2",
+            "S"
+          ],
+          [
+            "-32,-2",
+            "N:W"
+          ],
+          [
+            "-31,-2",
+            "S"
+          ],
+          [
+            "-30,-2",
+            "S:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,11",
-          "-1,10",
-          "-1,9"
+          "-35,-3",
+          "-35,-2",
+          "-34,-2",
+          "-33,-2",
+          "-32,-2",
+          "-31,-2",
+          "-30,-2"
         ]
       },
       "f177": {
         "_merged_from": [
-          "f138",
-          "f135"
+          "f173",
+          "f170"
         ],
         "feature_id": "f177",
         "feature_type": "field",
@@ -1489,89 +1504,93 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,11",
-            "W:S"
-          ],
-          [
-            "-1,10",
-            "W"
-          ],
-          [
-            "-1,9",
+            "-35,-3",
             "W:N"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,11",
-          "-1,10",
-          "-1,9"
-        ]
-      },
-      "f21": {
-        "_merged_from": [],
-        "feature_id": "f21",
-        "feature_type": "road",
-        "is_complete": false,
-        "meeples": [
-          {
-            "player_id": "p0",
-            "position": "-1,-3",
-            "spot": "road_EW"
-          }
-        ],
-        "open_edges": [
-          [
-            "-1,-3",
-            "E"
           ],
           [
-            "-1,-3",
-            "W"
+            "-34,-2",
+            "N:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-3"
+          "-35,-3",
+          "-35,-2",
+          "-34,-2"
         ]
       },
       "f25": {
         "_merged_from": [
-          "f11"
+          "f21",
+          "f18"
         ],
         "feature_id": "f25",
         "feature_type": "road",
-        "is_complete": true,
-        "meeples": [],
-        "open_edges": [],
-        "pennants": 0,
-        "tiles": [
-          "-2,-1",
-          "-1,-1"
-        ]
-      },
-      "f27": {
-        "_merged_from": [
-          "f15",
-          "f6",
-          "f2"
-        ],
-        "feature_id": "f27",
-        "feature_type": "field",
         "is_complete": false,
-        "meeples": [],
+        "meeples": [
+          {
+            "player_id": "p1",
+            "position": "-3,0",
+            "spot": "road_SW"
+          }
+        ],
         "open_edges": [
           [
-            "0,0",
-            "E:N"
+            "-3,0",
+            "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-1",
-          "-1,-1",
-          "-1,0",
-          "0,0"
+          "-5,0",
+          "-4,0",
+          "-3,0"
+        ]
+      },
+      "f27": {
+        "_merged_from": [
+          "f23",
+          "f19",
+          "f17"
+        ],
+        "feature_id": "f27",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [
+          {
+            "player_id": "p0",
+            "position": "-2,0",
+            "spot": "field_NSW"
+          }
+        ],
+        "open_edges": [
+          [
+            "-4,0",
+            "N"
+          ],
+          [
+            "-3,0",
+            "N"
+          ],
+          [
+            "-3,0",
+            "S:E"
+          ],
+          [
+            "-2,0",
+            "S"
+          ],
+          [
+            "-2,0",
+            "N"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-5,0",
+          "-4,0",
+          "-3,0",
+          "-2,0"
         ]
       },
       "f28": {
@@ -1582,172 +1601,161 @@
         "meeples": [
           {
             "player_id": "p0",
-            "position": "-1,-4",
+            "position": "-4,-1",
             "spot": "road_EW"
           }
         ],
         "open_edges": [
           [
-            "-1,-4",
+            "-4,-1",
             "E"
           ],
           [
-            "-1,-4",
+            "-4,-1",
             "W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-4"
+          "-4,-1"
         ]
       },
-      "f30": {
-        "_merged_from": [
-          "f22"
-        ],
-        "feature_id": "f30",
+      "f29": {
+        "_merged_from": [],
+        "feature_id": "f29",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-4",
-            "E:N"
+            "-4,-1",
+            "S"
           ],
           [
-            "-1,-4",
-            "W:N"
-          ],
-          [
-            "-1,-3",
+            "-4,-1",
             "E:S"
           ],
           [
-            "-1,-3",
+            "-4,-1",
             "W:S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-4",
-          "-1,-3"
+          "-4,-1"
+        ]
+      },
+      "f30": {
+        "_merged_from": [
+          "f26",
+          "f22",
+          "f20"
+        ],
+        "feature_id": "f30",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [
+          {
+            "player_id": "p0",
+            "position": "-4,0",
+            "spot": "field_S"
+          }
+        ],
+        "open_edges": [
+          [
+            "-4,-1",
+            "E:N"
+          ],
+          [
+            "-4,-1",
+            "W:N"
+          ],
+          [
+            "-3,0",
+            "S:W"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-4,-1",
+          "-5,0",
+          "-4,0",
+          "-3,0"
         ]
       },
       "f31": {
-        "_merged_from": [],
+        "_merged_from": [
+          "f24"
+        ],
         "feature_id": "f31",
         "feature_type": "city",
         "is_complete": false,
         "meeples": [
           {
             "player_id": "p1",
-            "position": "-1,-5",
-            "spot": "city_E"
+            "position": "-5,0",
+            "spot": "city_NSW"
           }
         ],
         "open_edges": [
           [
-            "-1,-5",
+            "-5,0",
+            "N"
+          ],
+          [
+            "-5,0",
+            "S"
+          ]
+        ],
+        "pennants": 1,
+        "tiles": [
+          "-6,0",
+          "-5,0"
+        ]
+      },
+      "f39": {
+        "_merged_from": [],
+        "feature_id": "f39",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-7,1",
             "E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-5"
-        ]
-      },
-      "f35": {
-        "_merged_from": [
-          "f32"
-        ],
-        "feature_id": "f35",
-        "feature_type": "road",
-        "is_complete": false,
-        "meeples": [
-          {
-            "player_id": "p0",
-            "position": "-1,-6",
-            "spot": "road_NW"
-          }
-        ],
-        "open_edges": [
-          [
-            "-1,-6",
-            "W"
-          ],
-          [
-            "-1,-5",
-            "W"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-6",
-          "-1,-5"
-        ]
-      },
-      "f37": {
-        "_merged_from": [
-          "f34"
-        ],
-        "feature_id": "f37",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-6",
-            "W:N"
-          ],
-          [
-            "-1,-5",
-            "W:S"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-6",
-          "-1,-5"
-        ]
-      },
-      "f39": {
-        "_merged_from": [
-          "f18",
-          "f10"
-        ],
-        "feature_id": "f39",
-        "feature_type": "road",
-        "is_complete": true,
-        "meeples": [],
-        "open_edges": [],
-        "pennants": 0,
-        "tiles": [
-          "-2,-2",
-          "-1,-2",
-          "-1,-1"
+          "-7,1"
         ]
       },
       "f40": {
-        "_merged_from": [],
+        "_merged_from": [
+          "f35",
+          "f32"
+        ],
         "feature_id": "f40",
         "feature_type": "road",
         "is_complete": false,
         "meeples": [
           {
             "player_id": "p1",
-            "position": "-2,-2",
-            "spot": "road_S"
+            "position": "-6,0",
+            "spot": "road_SW"
           }
         ],
         "open_edges": [
           [
-            "-2,-2",
+            "-6,0",
             "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-2"
+          "-7,1",
+          "-7,0",
+          "-6,0"
         ]
       },
       "f41": {
@@ -1758,39 +1766,36 @@
         "meeples": [],
         "open_edges": [
           [
-            "-2,-2",
+            "-7,1",
             "W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-2"
+          "-7,1"
         ]
       },
       "f42": {
-        "_merged_from": [
-          "f26",
-          "f20",
-          "f14"
-        ],
+        "_merged_from": [],
         "feature_id": "f42",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
-        "open_edges": [],
+        "open_edges": [
+          [
+            "-7,1",
+            "E:N"
+          ]
+        ],
         "pennants": 0,
         "tiles": [
-          "-2,-2",
-          "-2,-1",
-          "-1,-2",
-          "-1,-1"
+          "-7,1"
         ]
       },
       "f43": {
         "_merged_from": [
-          "f23",
-          "f19",
-          "f13"
+          "f37",
+          "f33"
         ],
         "feature_id": "f43",
         "feature_type": "field",
@@ -1798,53 +1803,23 @@
         "meeples": [],
         "open_edges": [
           [
-            "-2,-2",
-            "S:E"
-          ],
-          [
-            "-1,-3",
-            "E:N"
-          ],
-          [
-            "-1,-3",
-            "W:N"
-          ],
-          [
-            "-1,-2",
-            "E"
-          ],
-          [
-            "-1,-1",
+            "-7,1",
             "E:S"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-2,-2",
-          "-1,-3",
-          "-1,-2",
-          "-1,-1"
-        ]
-      },
-      "f44": {
-        "_merged_from": [],
-        "feature_id": "f44",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-2,-2",
-            "S:W"
           ],
           [
-            "-2,-2",
-            "W:S"
+            "-6,0",
+            "N"
+          ],
+          [
+            "-6,0",
+            "S:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-2"
+          "-7,1",
+          "-7,0",
+          "-6,0"
         ]
       },
       "f45": {
@@ -1855,13 +1830,13 @@
         "meeples": [],
         "open_edges": [
           [
-            "-2,-2",
+            "-7,1",
             "W:N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-2"
+          "-7,1"
         ]
       },
       "f46": {
@@ -1872,291 +1847,425 @@
         "meeples": [
           {
             "player_id": "p0",
-            "position": "-1,-7",
+            "position": "-8,0",
             "spot": "monastery"
           }
         ],
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,-7"
+          "-8,0"
         ]
       },
-      "f48": {
+      "f49": {
         "_merged_from": [],
-        "feature_id": "f48",
-        "feature_type": "city",
+        "feature_id": "f49",
+        "feature_type": "road",
         "is_complete": false,
-        "meeples": [
-          {
-            "player_id": "p1",
-            "position": "-1,-8",
-            "spot": "city_E"
-          }
-        ],
+        "meeples": [],
         "open_edges": [
           [
-            "-1,-8",
-            "E"
+            "-9,0",
+            "W"
+          ],
+          [
+            "-9,0",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-8"
+          "-9,0"
+        ]
+      },
+      "f50": {
+        "_merged_from": [
+          "f47",
+          "f44",
+          "f36",
+          "f34"
+        ],
+        "feature_id": "f50",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [
+          {
+            "player_id": "p0",
+            "position": "-7,0",
+            "spot": "field_SW"
+          }
+        ],
+        "open_edges": [
+          [
+            "-9,0",
+            "W:S"
+          ],
+          [
+            "-9,0",
+            "N:E"
+          ],
+          [
+            "-8,0",
+            "N"
+          ],
+          [
+            "-8,0",
+            "S"
+          ],
+          [
+            "-7,1",
+            "W:S"
+          ],
+          [
+            "-7,0",
+            "S"
+          ],
+          [
+            "-6,0",
+            "S:W"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-9,0",
+          "-8,0",
+          "-7,1",
+          "-7,0",
+          "-6,0"
+        ]
+      },
+      "f51": {
+        "_merged_from": [],
+        "feature_id": "f51",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-9,0",
+            "W:N"
+          ],
+          [
+            "-9,0",
+            "N:W"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-9,0"
         ]
       },
       "f53": {
-        "_merged_from": [
-          "f17"
-        ],
+        "_merged_from": [],
         "feature_id": "f53",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [
           {
             "player_id": "p0",
-            "position": "-1,1",
-            "spot": "field_NEW"
+            "position": "-9,-1",
+            "spot": "field_S"
           }
         ],
         "open_edges": [
           [
-            "-1,1",
-            "W"
-          ],
-          [
-            "-1,1",
-            "E"
+            "-9,-1",
+            "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,2",
-          "-1,1"
+          "-9,-1"
         ]
       },
       "f54": {
         "_merged_from": [
-          "f52"
+          "f52",
+          "f48"
         ],
         "feature_id": "f54",
         "feature_type": "city",
         "is_complete": false,
         "meeples": [
           {
-            "player_id": "p0",
-            "position": "-1,2",
-            "spot": "city_NEW"
+            "player_id": "p1",
+            "position": "-9,0",
+            "spot": "city_S"
           }
         ],
         "open_edges": [
           [
-            "-1,3",
-            "E"
+            "-10,-1",
+            "N"
           ],
           [
-            "-1,2",
+            "-9,-1",
             "E"
-          ],
-          [
-            "-1,2",
-            "W"
           ]
         ],
         "pennants": 2,
         "tiles": [
-          "-1,3",
-          "-1,2"
+          "-10,-1",
+          "-9,-1",
+          "-9,0"
         ]
       },
       "f56": {
         "_merged_from": [
-          "f16",
-          "f4",
-          "f38",
-          "f24"
+          "f38"
         ],
         "feature_id": "f56",
         "feature_type": "city",
         "is_complete": false,
         "meeples": [
           {
-            "player_id": "p0",
-            "position": "-1,0",
-            "spot": "city_NW"
-          },
-          {
             "player_id": "p1",
-            "position": "-2,-1",
-            "spot": "city_NSW"
+            "position": "-7,1",
+            "spot": "city_N"
           }
         ],
         "open_edges": [
           [
-            "-2,0",
+            "-7,2",
             "N"
           ],
           [
-            "-2,0",
-            "W"
+            "-7,2",
+            "E"
           ],
           [
-            "-2,-1",
+            "-7,2",
             "W"
           ]
         ],
-        "pennants": 2,
+        "pennants": 1,
         "tiles": [
-          "-2,0",
-          "-1,1",
-          "-1,0",
-          "-2,-2",
-          "-2,-1"
+          "-7,2",
+          "-7,1"
         ]
       },
-      "f64": {
+      "f57": {
+        "_merged_from": [],
+        "feature_id": "f57",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-11,-1",
+            "N"
+          ],
+          [
+            "-11,-1",
+            "S"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-11,-1"
+        ]
+      },
+      "f58": {
         "_merged_from": [
           "f55"
         ],
-        "feature_id": "f64",
+        "feature_id": "f58",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [
           {
             "player_id": "p1",
-            "position": "-1,3",
-            "spot": "field_NW"
+            "position": "-10,-1",
+            "spot": "field_SW"
           }
         ],
         "open_edges": [
           [
-            "-1,4",
-            "E"
+            "-11,-1",
+            "N:E"
           ],
           [
-            "-1,3",
-            "W"
+            "-11,-1",
+            "S:E"
+          ],
+          [
+            "-10,-1",
+            "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,4",
-          "-1,3"
+          "-11,-1",
+          "-10,-1"
+        ]
+      },
+      "f60": {
+        "_merged_from": [],
+        "feature_id": "f60",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-12,-1",
+            "N"
+          ],
+          [
+            "-12,-1",
+            "S"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-12,-1"
+        ]
+      },
+      "f61": {
+        "_merged_from": [
+          "f59"
+        ],
+        "feature_id": "f61",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-12,-1",
+            "N:E"
+          ],
+          [
+            "-12,-1",
+            "S:E"
+          ],
+          [
+            "-11,-1",
+            "N:W"
+          ],
+          [
+            "-11,-1",
+            "S:W"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-12,-1",
+          "-11,-1"
+        ]
+      },
+      "f64": {
+        "_merged_from": [
+          "f62"
+        ],
+        "feature_id": "f64",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-13,-1",
+            "S"
+          ],
+          [
+            "-12,-1",
+            "N:W"
+          ],
+          [
+            "-12,-1",
+            "S:W"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-13,-1",
+          "-12,-1"
         ]
       },
       "f65": {
-        "_merged_from": [],
+        "_merged_from": [
+          "f63"
+        ],
         "feature_id": "f65",
         "feature_type": "city",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-11",
-            "E"
+            "-13,-1",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-11"
+          "-14,-1",
+          "-13,-1"
+        ]
+      },
+      "f66": {
+        "_merged_from": [],
+        "feature_id": "f66",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-14,-1",
+            "S"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-14,-1"
         ]
       },
       "f68": {
-        "_merged_from": [
-          "f60",
-          "f57",
-          "f49"
-        ],
+        "_merged_from": [],
         "feature_id": "f68",
         "feature_type": "road",
         "is_complete": false,
-        "meeples": [
-          {
-            "player_id": "p1",
-            "position": "-1,-9",
-            "spot": "road_NS"
-          }
-        ],
+        "meeples": [],
         "open_edges": [
           [
-            "-1,-8",
-            "W"
+            "-14,-1",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-11",
-          "-1,-10",
-          "-1,-9",
-          "-1,-8"
+          "-14,-1"
+        ]
+      },
+      "f69": {
+        "_merged_from": [],
+        "feature_id": "f69",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-14,-1",
+            "S:E"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-14,-1"
         ]
       },
       "f72": {
-        "_merged_from": [
-          "f61",
-          "f58",
-          "f50",
-          "f47",
-          "f36",
-          "f33",
-          "f29"
-        ],
+        "_merged_from": [],
         "feature_id": "f72",
         "feature_type": "field",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-10",
-            "E"
-          ],
-          [
-            "-1,-9",
-            "E"
-          ],
-          [
-            "-1,-8",
-            "W:N"
-          ],
-          [
-            "-1,-7",
-            "E"
-          ],
-          [
-            "-1,-7",
-            "W"
-          ],
-          [
-            "-1,-6",
-            "E"
-          ],
-          [
-            "-1,-6",
-            "W:S"
-          ],
-          [
-            "-1,-5",
-            "W:N"
-          ],
-          [
-            "-1,-4",
-            "E:S"
-          ],
-          [
-            "-1,-4",
-            "W:S"
+            "-14,-1",
+            "N:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-11",
-          "-1,-10",
-          "-1,-9",
-          "-1,-8",
-          "-1,-7",
-          "-1,-6",
-          "-1,-5",
-          "-1,-4"
+          "-14,-1"
         ]
       },
       "f73": {
@@ -2168,12 +2277,12 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,-12"
+          "-15,-1"
         ]
       },
       "f74": {
         "_merged_from": [
-          "f66"
+          "f67"
         ],
         "feature_id": "f74",
         "feature_type": "road",
@@ -2182,30 +2291,69 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,-12",
-          "-1,-11"
+          "-15,-1",
+          "-14,-1"
         ]
       },
-      "f77": {
+      "f76": {
         "_merged_from": [],
-        "feature_id": "f77",
+        "feature_id": "f76",
         "feature_type": "city",
         "is_complete": false,
         "meeples": [],
         "open_edges": [
           [
-            "-1,-13",
-            "E"
+            "-16,-1",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-13"
+          "-16,-1"
+        ]
+      },
+      "f78": {
+        "_merged_from": [
+          "f75",
+          "f71",
+          "f70"
+        ],
+        "feature_id": "f78",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-16,-1",
+            "S"
+          ],
+          [
+            "-15,-1",
+            "N"
+          ],
+          [
+            "-15,-1",
+            "S"
+          ],
+          [
+            "-14,-1",
+            "N:W"
+          ],
+          [
+            "-14,-1",
+            "S:W"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-16,-1",
+          "-15,-1",
+          "-14,-1"
         ]
       },
       "f79": {
         "_merged_from": [
-          "f76"
+          "f77"
         ],
         "feature_id": "f79",
         "feature_type": "city",
@@ -2214,8 +2362,8 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,-14",
-          "-1,-13"
+          "-17,-1",
+          "-16,-1"
         ]
       },
       "f8": {
@@ -2246,48 +2394,6 @@
           "0,0"
         ]
       },
-      "f80": {
-        "_merged_from": [],
-        "feature_id": "f80",
-        "feature_type": "road",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-14",
-            "E"
-          ],
-          [
-            "-1,-14",
-            "W"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-14"
-        ]
-      },
-      "f81": {
-        "_merged_from": [],
-        "feature_id": "f81",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-14",
-            "E:N"
-          ],
-          [
-            "-1,-14",
-            "W:N"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-14"
-        ]
-      },
       "f83": {
         "_merged_from": [],
         "feature_id": "f83",
@@ -2296,13 +2402,13 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-15",
-            "E"
+            "-18,-1",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-15"
+          "-18,-1"
         ]
       },
       "f84": {
@@ -2313,37 +2419,13 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-15",
-            "W"
+            "-18,-1",
+            "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-15"
-        ]
-      },
-      "f86": {
-        "_merged_from": [
-          "f82"
-        ],
-        "feature_id": "f86",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,-14",
-            "E:S"
-          ],
-          [
-            "-1,-14",
-            "W:S"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,-15",
-          "-1,-14"
+          "-18,-1"
         ]
       },
       "f87": {
@@ -2354,22 +2436,22 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-16",
-            "E"
+            "-19,-1",
+            "S"
           ],
           [
-            "-1,-16",
-            "W"
+            "-19,-1",
+            "N"
           ]
         ],
         "pennants": 1,
         "tiles": [
-          "-1,-16"
+          "-19,-1"
         ]
       },
       "f88": {
         "_merged_from": [
-          "f85"
+          "f86"
         ],
         "feature_id": "f88",
         "feature_type": "field",
@@ -2378,8 +2460,8 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,-16",
-          "-1,-15"
+          "-19,-1",
+          "-18,-1"
         ]
       },
       "f9": {
@@ -2407,17 +2489,17 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-17",
-            "E"
+            "-20,-1",
+            "S"
           ],
           [
-            "-1,-17",
-            "W"
+            "-20,-1",
+            "N"
           ]
         ],
         "pennants": 1,
         "tiles": [
-          "-1,-17"
+          "-20,-1"
         ]
       },
       "f91": {
@@ -2431,8 +2513,8 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,-17",
-          "-1,-16"
+          "-20,-1",
+          "-19,-1"
         ]
       },
       "f94": {
@@ -2446,23 +2528,75 @@
         "open_edges": [],
         "pennants": 0,
         "tiles": [
-          "-1,-18",
-          "-1,-17"
+          "-21,-1",
+          "-20,-1"
+        ]
+      },
+      "f95": {
+        "_merged_from": [
+          "f80"
+        ],
+        "feature_id": "f95",
+        "feature_type": "road",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-17,-2",
+            "W"
+          ],
+          [
+            "-17,-1",
+            "N"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-17,-2",
+          "-17,-1"
+        ]
+      },
+      "f97": {
+        "_merged_from": [
+          "f85",
+          "f82"
+        ],
+        "feature_id": "f97",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-17,-2",
+            "W:N"
+          ],
+          [
+            "-17,-1",
+            "N:W"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-17,-2",
+          "-18,-1",
+          "-17,-1"
         ]
       },
       "f98": {
-        "_merged_from": [
-          "f67"
-        ],
+        "_merged_from": [],
         "feature_id": "f98",
         "feature_type": "road",
-        "is_complete": true,
+        "is_complete": false,
         "meeples": [],
-        "open_edges": [],
+        "open_edges": [
+          [
+            "-17,-3",
+            "W"
+          ]
+        ],
         "pennants": 0,
         "tiles": [
-          "-2,-11",
-          "-1,-11"
+          "-17,-3"
         ]
       },
       "f99": {
@@ -2473,18 +2607,18 @@
         "meeples": [],
         "open_edges": [
           [
-            "-2,-11",
-            "W"
+            "-17,-3",
+            "E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-2,-11"
+          "-17,-3"
         ]
       }
     },
     "forfeited_players": [],
-    "last_placed_position": "-1,11",
+    "last_placed_position": "-35,-3",
     "meeple_supply": {
       "p0": 0,
       "p1": 0
@@ -2493,7 +2627,7 @@
     "rng_state": null,
     "scores": {
       "p0": 0,
-      "p1": 3
+      "p1": 0
     },
     "tile_bag": [
       "R",
@@ -2520,283 +2654,283 @@
     "tile_feature_map": {
       "-1,-1": {
         "field_NE": "f12",
-        "field_NW": "f27",
-        "field_SE": "f43",
-        "field_SW": "f42",
+        "field_NW": "f15",
+        "field_SE": "f13",
+        "field_SW": "f14",
         "road_E": "f9",
         "road_N": "f8",
-        "road_S": "f39",
-        "road_W": "f25"
+        "road_S": "f10",
+        "road_W": "f11"
       },
-      "-1,-10": {
-        "field_E": "f72",
-        "field_W": "f102",
-        "road_NS": "f68"
+      "-1,0": {
+        "city_NW": "f16",
+        "field_NE": "f15",
+        "field_SE": "f12",
+        "road_ES": "f8"
       },
-      "-1,-11": {
+      "-10,-1": {
+        "city_NE": "f54",
+        "field_SW": "f58"
+      },
+      "-11,-1": {
+        "field_E": "f58",
+        "field_W": "f61",
+        "road_NS": "f57"
+      },
+      "-12,-1": {
+        "field_E": "f61",
+        "field_W": "f64",
+        "road_NS": "f60"
+      },
+      "-13,-1": {
+        "city_NW": "f65",
+        "field_ES": "f64"
+      },
+      "-14,-1": {
         "city_E": "f65",
-        "field_ES": "f162",
+        "field_ES": "f69",
         "field_NE": "f72",
-        "field_NW": "f102",
-        "field_SW": "f162",
+        "field_NW": "f78",
+        "field_SW": "f78",
         "road_N": "f68",
-        "road_S": "f74",
+        "road_S": "f66",
+        "road_W": "f74"
+      },
+      "-15,-1": {
+        "field_NSW": "f78",
+        "monastery": "f73",
+        "road_E": "f74"
+      },
+      "-16,-1": {
+        "city_N": "f76",
+        "city_W": "f79",
+        "field_ES": "f78"
+      },
+      "-17,-1": {
+        "city_E": "f79",
+        "field_E": "f101",
+        "field_W": "f97",
+        "road_NS": "f95"
+      },
+      "-17,-2": {
+        "field_ES": "f101",
+        "field_NW": "f97",
+        "road_NW": "f95"
+      },
+      "-17,-3": {
+        "field_ES": "f103",
+        "field_NE": "f101",
+        "field_NW": "f101",
+        "field_SW": "f102",
+        "road_E": "f99",
+        "road_S": "f100",
         "road_W": "f98"
       },
-      "-1,-12": {
-        "field_ESW": "f162",
-        "monastery": "f73",
-        "road_N": "f74"
+      "-18,-1": {
+        "city_N": "f83",
+        "city_S": "f84",
+        "field_E": "f97",
+        "field_W": "f88"
       },
-      "-1,-13": {
-        "city_E": "f77",
-        "city_S": "f79",
-        "field_NW": "f162"
+      "-19,-1": {
+        "city_NS": "f87",
+        "field_E": "f88",
+        "field_W": "f91"
       },
-      "-1,-14": {
-        "city_N": "f79",
-        "field_N": "f81",
-        "field_S": "f86",
-        "road_EW": "f80"
+      "-2,0": {
+        "city_E": "f16",
+        "field_NSW": "f27"
       },
-      "-1,-15": {
-        "city_E": "f83",
-        "city_W": "f84",
-        "field_N": "f86",
-        "field_S": "f88"
+      "-20,-1": {
+        "city_NS": "f90",
+        "field_E": "f91",
+        "field_W": "f94"
       },
-      "-1,-16": {
-        "city_EW": "f87",
-        "field_N": "f88",
-        "field_S": "f91"
+      "-21,-1": {
+        "city_NSW": "f112",
+        "field_E": "f94"
       },
-      "-1,-17": {
-        "city_EW": "f90",
-        "field_N": "f91",
-        "field_S": "f94"
+      "-21,-2": {
+        "city_N": "f112",
+        "field_ESW": "f117"
       },
-      "-1,-18": {
-        "city_ESW": "f104",
-        "field_N": "f94"
+      "-21,-3": {
+        "city_E": "f114",
+        "city_W": "f115",
+        "field_N": "f117",
+        "field_S": "f125"
       },
-      "-1,-19": {
-        "city_N": "f104",
-        "field_NE": "f108",
-        "field_NW": "f111",
-        "field_SE": "f122",
-        "field_SW": "f123",
-        "road_E": "f105",
-        "road_S": "f121",
-        "road_W": "f107"
+      "-21,-4": {
+        "field_NESW": "f125",
+        "monastery": "f118"
       },
-      "-1,-2": {
-        "field_ES": "f43",
-        "field_NW": "f42",
-        "road_NW": "f39"
-      },
-      "-1,-20": {
-        "city_ESW": "f126",
-        "field_NE": "f122",
+      "-22,-1": {
+        "city_E": "f112",
+        "field_ES": "f108",
+        "field_NE": "f111",
         "field_NW": "f123",
-        "road_N": "f121"
+        "field_SW": "f122",
+        "road_N": "f107",
+        "road_S": "f105",
+        "road_W": "f121"
       },
-      "-1,-21": {
-        "city_N": "f126",
-        "field_ESW": "f129"
+      "-22,-4": {
+        "field_NESW": "f125",
+        "monastery": "f124"
       },
-      "-1,-22": {
-        "city_ES": "f139",
-        "field_NW": "f129"
+      "-23,-1": {
+        "city_NSW": "f126",
+        "field_ES": "f122",
+        "field_NE": "f123",
+        "road_E": "f121"
       },
-      "-1,-23": {
-        "city_NEW": "f139",
-        "field_S": "f143"
+      "-24,-1": {
+        "city_E": "f126",
+        "field_NSW": "f146"
       },
-      "-1,-24": {
-        "field_N": "f143",
-        "field_S": "f156",
-        "road_EW": "f141"
+      "-25,-1": {
+        "city_NW": "f128",
+        "field_ES": "f146"
       },
-      "-1,-25": {
-        "field_NE": "f156",
-        "field_SW": "f153",
-        "road_SW": "f151"
+      "-25,-2": {
+        "field_ES": "f135",
+        "field_NE": "f146",
+        "field_NW": "f146",
+        "field_SW": "f149",
+        "road_E": "f131",
+        "road_S": "f132",
+        "road_W": "f144"
       },
-      "-1,-26": {
-        "field_ES": "f156",
-        "field_NW": "f153",
-        "road_NW": "f151"
+      "-26,-2": {
+        "field_N": "f146",
+        "field_S": "f149",
+        "road_EW": "f144"
       },
-      "-1,-27": {
-        "field_N": "f156",
-        "field_S": "f166",
-        "road_EW": "f154"
+      "-26,-3": {
+        "city_ESW": "f139",
+        "field_N": "f149"
       },
-      "-1,-28": {
-        "city_W": "f157",
-        "field_ES": "f165",
-        "field_N": "f166",
-        "road_ES": "f164"
+      "-27,-2": {
+        "field_N": "f146",
+        "field_S": "f149",
+        "road_EW": "f144"
       },
-      "-1,-29": {
-        "city_ES": "f167",
+      "-28,-2": {
+        "field_NE": "f146",
+        "field_SW": "f149",
+        "road_NE": "f144"
+      },
+      "-29,-2": {
+        "city_N": "f147",
+        "city_S": "f148",
+        "field_E": "f149",
+        "field_W": "f160"
+      },
+      "-3,0": {
+        "field_NE": "f27",
+        "field_SW": "f30",
+        "road_SW": "f25"
+      },
+      "-30,-2": {
+        "field_NE": "f160",
+        "field_SW": "f176",
+        "road_SW": "f158"
+      },
+      "-31,-2": {
+        "field_N": "f160",
+        "field_S": "f176",
+        "road_EW": "f158"
+      },
+      "-32,-2": {
+        "city_S": "f157",
+        "field_NE": "f160",
+        "field_W": "f176",
+        "road_NE": "f158"
+      },
+      "-33,-1": {
+        "city_ES": "f163",
         "field_NW": "f166",
         "field_SW": "f165",
         "road_NW": "f164"
       },
-      "-1,-3": {
-        "field_N": "f43",
-        "field_S": "f30",
-        "road_EW": "f21"
+      "-33,-2": {
+        "city_N": "f163",
+        "field_ESW": "f176"
       },
-      "-1,-30": {
-        "city_N": "f167",
-        "field_ES": "f173",
-        "field_W": "f174",
-        "road_ES": "f172"
+      "-34,-2": {
+        "city_S": "f167",
+        "field_E": "f176",
+        "field_NW": "f177",
+        "road_NW": "f175"
       },
-      "-1,-31": {
-        "city_ES": "f171",
-        "field_NW": "f174",
-        "field_SW": "f173",
-        "road_NW": "f172"
+      "-35,-2": {
+        "city_NW": "f171",
+        "field_NE": "f177",
+        "field_SE": "f176",
+        "road_ES": "f175"
       },
-      "-1,-4": {
+      "-35,-3": {
+        "field_ES": "f176",
+        "field_NW": "f177",
+        "road_NW": "f175"
+      },
+      "-4,-1": {
         "field_N": "f30",
-        "field_S": "f72",
+        "field_S": "f29",
         "road_EW": "f28"
       },
-      "-1,-5": {
-        "city_E": "f31",
-        "field_N": "f72",
-        "field_SW": "f37",
-        "road_SW": "f35"
+      "-4,0": {
+        "field_N": "f27",
+        "field_S": "f30",
+        "road_EW": "f25"
       },
-      "-1,-6": {
-        "field_ES": "f72",
-        "field_NW": "f37",
-        "road_NW": "f35"
-      },
-      "-1,-7": {
-        "field_NESW": "f72",
-        "monastery": "f46"
-      },
-      "-1,-8": {
-        "city_E": "f48",
-        "field_N": "f72",
-        "field_SW": "f102",
-        "road_SW": "f68"
-      },
-      "-1,-9": {
-        "field_E": "f72",
-        "field_W": "f102",
-        "road_NS": "f68"
-      },
-      "-1,0": {
-        "city_NW": "f56",
-        "field_NE": "f27",
-        "field_SE": "f12",
-        "road_ES": "f8"
-      },
-      "-1,1": {
-        "city_S": "f56",
-        "field_NEW": "f53"
-      },
-      "-1,10": {
-        "field_E": "f176",
-        "field_W": "f177",
-        "road_NS": "f175"
-      },
-      "-1,11": {
-        "field_NE": "f176",
-        "field_SW": "f177",
-        "road_SW": "f175"
-      },
-      "-1,2": {
-        "city_NEW": "f54",
-        "field_S": "f53"
-      },
-      "-1,3": {
-        "city_ES": "f54",
-        "field_NW": "f64"
-      },
-      "-1,4": {
-        "city_NW": "f112",
-        "field_ES": "f64"
-      },
-      "-1,5": {
-        "city_S": "f112",
-        "field_NEW": "f116"
-      },
-      "-1,6": {
-        "city_E": "f114",
-        "city_W": "f115",
-        "field_N": "f133",
-        "field_S": "f116"
-      },
-      "-1,7": {
-        "field_NESW": "f133",
-        "monastery": "f118"
-      },
-      "-1,8": {
-        "field_NESW": "f133",
-        "monastery": "f124"
-      },
-      "-1,9": {
-        "field_ES": "f133",
-        "field_NE": "f176",
-        "field_NW": "f177",
-        "field_SW": "f133",
-        "road_E": "f130",
-        "road_N": "f175",
-        "road_W": "f131"
-      },
-      "-2,-1": {
-        "city_NSW": "f56",
-        "field_ES": "f42",
+      "-5,0": {
+        "city_NSW": "f31",
+        "field_ES": "f30",
         "field_NE": "f27",
         "road_E": "f25"
       },
-      "-2,-10": {
-        "field_NE": "f102",
-        "field_SW": "f103",
-        "road_SW": "f100"
+      "-6,0": {
+        "city_E": "f31",
+        "field_N": "f43",
+        "field_SW": "f50",
+        "road_SW": "f40"
       },
-      "-2,-11": {
-        "field_ES": "f162",
-        "field_NE": "f102",
-        "field_NW": "f103",
-        "field_SW": "f162",
-        "road_E": "f98",
-        "road_N": "f100",
-        "road_W": "f99"
+      "-7,0": {
+        "field_NE": "f43",
+        "field_SW": "f50",
+        "road_NE": "f40"
       },
-      "-2,-12": {
-        "city_S": "f161",
-        "field_NEW": "f162"
-      },
-      "-2,-13": {
-        "city_N": "f161",
-        "city_S": "f148",
-        "field_E": "f162",
-        "field_W": "f150"
-      },
-      "-2,-2": {
+      "-7,1": {
         "city_N": "f56",
         "field_NE": "f42",
         "field_NW": "f45",
         "field_SE": "f43",
-        "field_SW": "f44",
+        "field_SW": "f50",
         "road_E": "f39",
         "road_S": "f40",
         "road_W": "f41"
       },
-      "-2,0": {
+      "-7,2": {
         "city_NESW": "f56"
+      },
+      "-8,0": {
+        "field_NESW": "f50",
+        "monastery": "f46"
+      },
+      "-9,-1": {
+        "city_NEW": "f54",
+        "field_S": "f53"
+      },
+      "-9,0": {
+        "city_S": "f54",
+        "field_E": "f50",
+        "field_NW": "f51",
+        "road_NW": "f49"
       },
       "0,0": {
         "city_N": "f0",
-        "field_N": "f27",
+        "field_N": "f15",
         "field_S": "f12",
         "road_EW": "f8"
       }

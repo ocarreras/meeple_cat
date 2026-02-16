@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use crate::engine::models::Event;
-use super::tiles::get_rotated_features;
+use super::tiles::get_rotated_features_by_name;
 use super::types::*;
 
 /// Generate a sequential feature ID and increment the counter.
@@ -39,9 +39,9 @@ pub fn initialize_features_from_tile(
     let mut tile_feature_map: HashMap<String, HashMap<String, String>> = HashMap::new();
     tile_feature_map.insert(position_key.to_string(), HashMap::new());
 
-    let rotated_features = get_rotated_features(tile_type_id, rotation);
+    let rotated_features = get_rotated_features_by_name(tile_type_id, rotation);
 
-    for tile_feat in &rotated_features {
+    for tile_feat in rotated_features {
         let feature_id = {
             let id = *feature_id_counter;
             *feature_id_counter += 1;
@@ -51,7 +51,7 @@ pub fn initialize_features_from_tile(
         let open_edges: Vec<[String; 2]> = tile_feat
             .edges
             .iter()
-            .map(|e| [position_key.to_string(), e.clone()])
+            .map(|e| [position_key.to_string(), e.to_string()])
             .collect();
 
         let pennants: u32 = if tile_feat.has_pennant { 1 } else { 0 };
@@ -70,7 +70,7 @@ pub fn initialize_features_from_tile(
 
         let spots = tile_feature_map.get_mut(position_key).unwrap();
         for spot in &tile_feat.meeple_spots {
-            spots.insert(spot.clone(), feature_id.clone());
+            spots.insert(spot.to_string(), feature_id.clone());
         }
     }
 
@@ -87,7 +87,7 @@ pub fn create_and_merge_features(
 ) -> Vec<Event> {
     let mut events = Vec::new();
 
-    let rotated_features = get_rotated_features(tile_type_id, rotation);
+    let rotated_features = get_rotated_features_by_name(tile_type_id, rotation);
 
     // Initialize the feature map for this tile position
     state.tile_feature_map.insert(position_key.to_string(), HashMap::new());
@@ -96,13 +96,13 @@ pub fn create_and_merge_features(
     let mut edge_to_feature: Vec<(String, String)> = Vec::new();
 
     // Step 1: Create features for the new tile
-    for tile_feat in &rotated_features {
+    for tile_feat in rotated_features {
         let feature_id = next_feature_id(state);
 
         let open_edges: Vec<[String; 2]> = tile_feat
             .edges
             .iter()
-            .map(|e| [position_key.to_string(), e.clone()])
+            .map(|e| [position_key.to_string(), e.to_string()])
             .collect();
 
         let pennants: u32 = if tile_feat.has_pennant { 1 } else { 0 };
@@ -122,12 +122,12 @@ pub fn create_and_merge_features(
 
         if let Some(spots) = state.tile_feature_map.get_mut(position_key) {
             for spot in &tile_feat.meeple_spots {
-                spots.insert(spot.clone(), feature_id.clone());
+                spots.insert(spot.to_string(), feature_id.clone());
             }
         }
 
         for edge_dir in &tile_feat.edges {
-            edge_to_feature.push((edge_dir.clone(), feature_id.clone()));
+            edge_to_feature.push((edge_dir.to_string(), feature_id.clone()));
         }
     }
 
@@ -141,7 +141,7 @@ pub fn create_and_merge_features(
         let neighbor_key = neighbor_pos.to_key();
 
         // Check if neighbor tile exists
-        if !state.board.tiles.contains_key(&neighbor_key) {
+        if !state.board.tiles.contains_key(&(neighbor_pos.x, neighbor_pos.y)) {
             continue;
         }
 
@@ -307,7 +307,7 @@ pub fn is_feature_complete(state: &CarcassonneState, feature: &Feature) -> bool 
             }
             let pos = Position::from_key(&feature.tiles[0]);
             for surrounding in pos.all_surrounding() {
-                if !state.board.tiles.contains_key(&surrounding.to_key()) {
+                if !state.board.tiles.contains_key(&(surrounding.x, surrounding.y)) {
                     return false;
                 }
             }

@@ -21,39 +21,39 @@
   "state": {
     "board": {
       "open_positions": [
-        "-1,-4",
-        "-1,2",
-        "-2,-1",
+        "-5,0",
+        "-4,-1",
+        "-4,1",
+        "-3,-1",
+        "-3,1",
         "-2,-2",
-        "-2,-3",
-        "-2,0",
         "-2,1",
+        "-1,-1",
+        "-1,1",
         "0,-1",
-        "0,-2",
-        "0,-3",
         "0,1",
         "1,0"
       ],
       "tiles": {
-        "-1,-1": {
-          "rotation": 90,
-          "tile_type_id": "U"
-        },
-        "-1,-2": {
-          "rotation": 180,
-          "tile_type_id": "N"
-        },
-        "-1,-3": {
-          "rotation": 0,
-          "tile_type_id": "R"
-        },
         "-1,0": {
           "rotation": 180,
           "tile_type_id": "V"
         },
-        "-1,1": {
-          "rotation": 0,
+        "-2,-1": {
+          "rotation": 180,
           "tile_type_id": "O"
+        },
+        "-2,0": {
+          "rotation": 0,
+          "tile_type_id": "U"
+        },
+        "-3,0": {
+          "rotation": 0,
+          "tile_type_id": "N"
+        },
+        "-4,0": {
+          "rotation": 0,
+          "tile_type_id": "R"
         },
         "0,0": {
           "rotation": 0,
@@ -65,15 +65,15 @@
     "current_tile": "R",
     "end_game_breakdown": null,
     "feature_redirects": {
-      "f1": "f11",
+      "f1": "f4",
+      "f13": "f15",
       "f14": "f16",
-      "f2": "f13",
+      "f2": "f6",
       "f3": "f12",
-      "f4": "f11",
       "f5": "f12",
-      "f6": "f13",
-      "f8": "f15",
-      "f9": "f12"
+      "f7": "f11",
+      "f8": "f12",
+      "f9": "f15"
     },
     "features": {
       "f0": {
@@ -101,60 +101,58 @@
         "meeples": [
           {
             "player_id": "p0",
-            "position": "-1,1",
-            "spot": "city_NW"
+            "position": "-2,-1",
+            "spot": "city_ES"
           }
         ],
         "open_edges": [
           [
-            "-1,1",
-            "N"
+            "-2,-1",
+            "S"
           ],
           [
-            "-1,1",
-            "W"
+            "-2,-1",
+            "E"
           ]
         ],
         "pennants": 1,
         "tiles": [
-          "-1,1"
+          "-2,-1"
         ]
       },
       "f11": {
         "_merged_from": [
-          "f4",
-          "f1"
+          "f7"
         ],
         "feature_id": "f11",
         "feature_type": "road",
         "is_complete": false,
         "meeples": [
           {
-            "player_id": "p0",
-            "position": "-1,0",
-            "spot": "road_NE"
+            "player_id": "p1",
+            "position": "-2,0",
+            "spot": "road_NS"
           }
         ],
         "open_edges": [
           [
-            "-1,1",
-            "E"
+            "-2,-1",
+            "W"
           ],
           [
-            "0,0",
-            "E"
+            "-2,0",
+            "N"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,1",
-          "-1,0",
-          "0,0"
+          "-2,-1",
+          "-2,0"
         ]
       },
       "f12": {
         "_merged_from": [
-          "f9",
+          "f8",
           "f5",
           "f3"
         ],
@@ -164,20 +162,20 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,1",
-            "E:N"
+            "-2,-1",
+            "W:S"
           ],
           [
-            "-1,-1",
-            "E:N"
-          ],
-          [
-            "-1,-1",
-            "W:N"
+            "-2,0",
+            "N:E"
           ],
           [
             "-1,0",
-            "W"
+            "S"
+          ],
+          [
+            "-1,0",
+            "N:W"
           ],
           [
             "0,0",
@@ -190,41 +188,16 @@
         ],
         "pennants": 0,
         "tiles": [
-          "-1,1",
-          "-1,-1",
-          "-1,0",
-          "0,0"
-        ]
-      },
-      "f13": {
-        "_merged_from": [
-          "f6",
-          "f2"
-        ],
-        "feature_id": "f13",
-        "feature_type": "field",
-        "is_complete": false,
-        "meeples": [],
-        "open_edges": [
-          [
-            "-1,1",
-            "E:S"
-          ],
-          [
-            "0,0",
-            "E:N"
-          ]
-        ],
-        "pennants": 0,
-        "tiles": [
-          "-1,1",
+          "-2,-1",
+          "-2,0",
           "-1,0",
           "0,0"
         ]
       },
       "f15": {
         "_merged_from": [
-          "f8"
+          "f13",
+          "f9"
         ],
         "feature_id": "f15",
         "feature_type": "field",
@@ -232,22 +205,23 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-2",
-            "W"
+            "-3,0",
+            "S"
           ],
           [
-            "-1,-1",
-            "E:S"
+            "-2,-1",
+            "W:N"
           ],
           [
-            "-1,-1",
-            "W:S"
+            "-2,0",
+            "N:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-2",
-          "-1,-1"
+          "-3,0",
+          "-2,-1",
+          "-2,0"
         ]
       },
       "f16": {
@@ -260,28 +234,28 @@
         "meeples": [
           {
             "player_id": "p1",
-            "position": "-1,-2",
-            "spot": "city_ES"
+            "position": "-3,0",
+            "spot": "city_NW"
           }
         ],
         "open_edges": [
           [
-            "-1,-3",
-            "E"
+            "-4,0",
+            "N"
           ],
           [
-            "-1,-3",
+            "-4,0",
             "W"
           ],
           [
-            "-1,-2",
-            "E"
+            "-3,0",
+            "N"
           ]
         ],
         "pennants": 1,
         "tiles": [
-          "-1,-3",
-          "-1,-2"
+          "-4,0",
+          "-3,0"
         ]
       },
       "f17": {
@@ -292,19 +266,19 @@
         "meeples": [
           {
             "player_id": "p0",
-            "position": "-1,-3",
+            "position": "-4,0",
             "spot": "road_S"
           }
         ],
         "open_edges": [
           [
-            "-1,-3",
+            "-4,0",
             "S"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-3"
+          "-4,0"
         ]
       },
       "f18": {
@@ -315,13 +289,13 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-3",
+            "-4,0",
             "S:W"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-3"
+          "-4,0"
         ]
       },
       "f19": {
@@ -332,45 +306,72 @@
         "meeples": [],
         "open_edges": [
           [
-            "-1,-3",
+            "-4,0",
             "S:E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-3"
+          "-4,0"
         ]
       },
-      "f7": {
-        "_merged_from": [],
-        "feature_id": "f7",
+      "f4": {
+        "_merged_from": [
+          "f1"
+        ],
+        "feature_id": "f4",
         "feature_type": "road",
         "is_complete": false,
         "meeples": [
           {
-            "player_id": "p1",
-            "position": "-1,-1",
-            "spot": "road_EW"
+            "player_id": "p0",
+            "position": "-1,0",
+            "spot": "road_NE"
           }
         ],
         "open_edges": [
           [
-            "-1,-1",
-            "E"
+            "-1,0",
+            "N"
           ],
           [
-            "-1,-1",
-            "W"
+            "0,0",
+            "E"
           ]
         ],
         "pennants": 0,
         "tiles": [
-          "-1,-1"
+          "-1,0",
+          "0,0"
+        ]
+      },
+      "f6": {
+        "_merged_from": [
+          "f2"
+        ],
+        "feature_id": "f6",
+        "feature_type": "field",
+        "is_complete": false,
+        "meeples": [],
+        "open_edges": [
+          [
+            "-1,0",
+            "N:E"
+          ],
+          [
+            "0,0",
+            "E:N"
+          ]
+        ],
+        "pennants": 0,
+        "tiles": [
+          "-1,0",
+          "0,0"
         ]
       }
     },
     "forfeited_players": [],
-    "last_placed_position": "-1,-3",
+    "last_placed_position": "-4,0",
     "meeple_supply": {
       "p0": 4,
       "p1": 5
@@ -449,37 +450,37 @@
       "A"
     ],
     "tile_feature_map": {
-      "-1,-1": {
-        "field_N": "f12",
-        "field_S": "f15",
-        "road_EW": "f7"
+      "-1,0": {
+        "field_NE": "f6",
+        "field_SW": "f12",
+        "road_NE": "f4"
       },
-      "-1,-2": {
-        "city_ES": "f16",
-        "field_NW": "f15"
+      "-2,-1": {
+        "city_ES": "f10",
+        "field_NW": "f15",
+        "field_SW": "f12",
+        "road_NW": "f11"
       },
-      "-1,-3": {
+      "-2,0": {
+        "field_E": "f12",
+        "field_W": "f15",
+        "road_NS": "f11"
+      },
+      "-3,0": {
+        "city_NW": "f16",
+        "field_ES": "f15"
+      },
+      "-4,0": {
         "city_NEW": "f16",
         "field_SE": "f19",
         "field_SW": "f18",
         "road_S": "f17"
       },
-      "-1,0": {
-        "field_NE": "f13",
-        "field_SW": "f12",
-        "road_NE": "f11"
-      },
-      "-1,1": {
-        "city_NW": "f10",
-        "field_NE": "f12",
-        "field_SE": "f13",
-        "road_ES": "f11"
-      },
       "0,0": {
         "city_N": "f0",
-        "field_N": "f13",
+        "field_N": "f6",
         "field_S": "f12",
-        "road_EW": "f11"
+        "road_EW": "f4"
       }
     }
   },

@@ -9,15 +9,8 @@ use super::types::*;
 use EdgeType::{City as C, Field as F, Road as R};
 use FeatureType::{City, Field, Monastery, Road};
 
-fn edges(n: EdgeType, e: EdgeType, s: EdgeType, w: EdgeType) -> HashMap<String, EdgeType> {
-    [
-        ("N".into(), n),
-        ("E".into(), e),
-        ("S".into(), s),
-        ("W".into(), w),
-    ]
-    .into_iter()
-    .collect()
+fn edges(n: EdgeType, e: EdgeType, s: EdgeType, w: EdgeType) -> [EdgeType; 4] {
+    [n, e, s, w]
 }
 
 fn feat(
@@ -406,10 +399,37 @@ pub static TILE_LOOKUP: Lazy<HashMap<String, &'static TileDefinition>> = Lazy::n
         .collect()
 });
 
-pub const STARTING_TILE_ID: &str = "D";
+/// Pre-computed rotated edges for all tile types × 4 rotations.
+/// Indexed by tile type u8 index → \[rotation_index (0-3)\]\[direction_index (N=0,E=1,S=2,W=3)\].
+pub static ROTATED_EDGES: Lazy<Vec<[[EdgeType; 4]; 4]>> = Lazy::new(|| {
+    let mut table = vec![[[EdgeType::Field; 4]; 4]; 24];
+    for tile in TILE_CATALOG.iter() {
+        let idx = tile_type_to_index(&tile.tile_type_id) as usize;
+        for rot_idx in 0..4usize {
+            for dir_idx in 0..4usize {
+                let source_idx = (dir_idx + 4 - rot_idx) % 4;
+                table[idx][rot_idx][dir_idx] = tile.edges[source_idx];
+            }
+        }
+    }
+    table
+});
 
-/// Build the draw bag. Excludes one copy of the starting tile.
-pub fn build_tile_bag(_expansions: Option<&[String]>) -> Vec<String> {
+/// Fast tile definition lookup by u8 index (0–23).
+pub static TILE_DEFS: Lazy<Vec<&'static TileDefinition>> = Lazy::new(|| {
+    let mut defs: Vec<Option<&'static TileDefinition>> = vec![None; 24];
+    for t in TILE_CATALOG.iter() {
+        let idx = tile_type_to_index(&t.tile_type_id) as usize;
+        defs[idx] = Some(t);
+    }
+    defs.into_iter().map(|d| d.unwrap()).collect()
+});
+
+pub const STARTING_TILE_ID: &str = "D";
+pub const STARTING_TILE_IDX: u8 = 3; // tile_type_to_index("D")
+
+/// Build the draw bag as u8 tile type indices. Excludes one copy of the starting tile.
+pub fn build_tile_bag(_expansions: Option<&[String]>) -> Vec<u8> {
     let mut bag = Vec::with_capacity(71);
     for tile_def in TILE_CATALOG.iter() {
         let count = if tile_def.tile_type_id == STARTING_TILE_ID {
@@ -417,44 +437,63 @@ pub fn build_tile_bag(_expansions: Option<&[String]>) -> Vec<String> {
         } else {
             tile_def.count
         };
+        let idx = tile_type_to_index(&tile_def.tile_type_id);
         for _ in 0..count {
-            bag.push(tile_def.tile_type_id.clone());
+            bag.push(idx);
         }
     }
     bag
 }
 
-/// Get the features of a tile with rotation applied.
-pub fn get_rotated_features(tile_type_id: &str, rotation: u32) -> Vec<TileFeature> {
-    let tile_def = &TILE_LOOKUP[tile_type_id];
-    if rotation == 0 {
-        return tile_def.features.clone();
+/// Pre-computed rotated features for all tile types × 4 rotations.
+/// Indexed by tile type u8 index → [rotation_index (0-3)].
+/// Returns a borrowed slice — zero allocation on the hot path.
+pub static ROTATED_FEATURES: Lazy<Vec<[Vec<TileFeature>; 4]>> = Lazy::new(|| {
+    let mut table: Vec<[Vec<TileFeature>; 4]> = Vec::with_capacity(24);
+    for _ in 0..24 {
+        table.push([vec![], vec![], vec![], vec![]]);
     }
+    for tile in TILE_CATALOG.iter() {
+        let idx = tile_type_to_index(&tile.tile_type_id) as usize;
+        for rot_idx in 0..4usize {
+            let rotation = rot_idx as u32 * 90;
+            if rotation == 0 {
+                table[idx][0] = tile.features.clone();
+            } else {
+                table[idx][rot_idx] = tile.features
+                    .iter()
+                    .map(|feat| TileFeature {
+                        feature_type: feat.feature_type,
+                        edges: feat.edges.iter()
+                            .map(|e| rotate_compound_edge(e, rotation))
+                            .collect(),
+                        has_pennant: feat.has_pennant,
+                        is_monastery: feat.is_monastery,
+                        meeple_spots: feat.meeple_spots.iter()
+                            .map(|s| rotate_meeple_spot(s, rotation))
+                            .collect(),
+                        adjacent_cities: feat.adjacent_cities.iter()
+                            .map(|s| rotate_meeple_spot(s, rotation))
+                            .collect(),
+                    })
+                    .collect();
+            }
+        }
+    }
+    table
+});
 
-    tile_def
-        .features
-        .iter()
-        .map(|feat| TileFeature {
-            feature_type: feat.feature_type,
-            edges: feat
-                .edges
-                .iter()
-                .map(|e| rotate_compound_edge(e, rotation))
-                .collect(),
-            has_pennant: feat.has_pennant,
-            is_monastery: feat.is_monastery,
-            meeple_spots: feat
-                .meeple_spots
-                .iter()
-                .map(|s| rotate_meeple_spot(s, rotation))
-                .collect(),
-            adjacent_cities: feat
-                .adjacent_cities
-                .iter()
-                .map(|s| rotate_meeple_spot(s, rotation))
-                .collect(),
-        })
-        .collect()
+/// Get the features of a tile with rotation applied.
+/// Returns a borrowed slice from the pre-computed table — zero allocation.
+#[inline]
+pub fn get_rotated_features(tile_type_idx: u8, rotation: u32) -> &'static [TileFeature] {
+    let rot_idx = ((rotation / 90) % 4) as usize;
+    &ROTATED_FEATURES[tile_type_idx as usize][rot_idx]
+}
+
+/// String-based wrapper for non-hot-path callers.
+pub fn get_rotated_features_by_name(tile_type_id: &str, rotation: u32) -> &'static [TileFeature] {
+    get_rotated_features(tile_type_to_index(tile_type_id), rotation)
 }
 
 #[cfg(test)]
@@ -488,15 +527,15 @@ mod tests {
     #[test]
     fn test_starting_tile_is_d() {
         let tile = &TILE_LOOKUP[STARTING_TILE_ID];
-        assert_eq!(tile.edges["N"], EdgeType::City);
-        assert_eq!(tile.edges["E"], EdgeType::Road);
-        assert_eq!(tile.edges["S"], EdgeType::Field);
-        assert_eq!(tile.edges["W"], EdgeType::Road);
+        assert_eq!(tile.edges[0], EdgeType::City);  // N
+        assert_eq!(tile.edges[1], EdgeType::Road);   // E
+        assert_eq!(tile.edges[2], EdgeType::Field);  // S
+        assert_eq!(tile.edges[3], EdgeType::Road);   // W
     }
 
     #[test]
     fn test_rotated_features_d_90() {
-        let features = get_rotated_features("D", 90);
+        let features = get_rotated_features(tile_type_to_index("D"), 90);
         // D rotated 90°: city moves from N to E
         let city_feat = features.iter().find(|f| f.feature_type == FeatureType::City).unwrap();
         assert!(city_feat.edges.contains(&"E".to_string()));

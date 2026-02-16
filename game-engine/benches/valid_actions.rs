@@ -113,8 +113,8 @@ fn bench_can_place_tile(c: &mut Criterion) {
     let mut group = c.benchmark_group("can_place_tile");
 
     for fixture in &fixtures {
-        let current_tile = match &fixture.state.current_tile {
-            Some(t) => t.clone(),
+        let current_tile_idx = match fixture.state.current_tile {
+            Some(idx) => idx,
             None => continue,
         };
 
@@ -125,12 +125,12 @@ fn bench_can_place_tile(c: &mut Criterion) {
             |b, f| {
                 b.iter(|| {
                     let mut count = 0u32;
-                    for pos_key in &f.state.board.open_positions {
+                    for &pos in &f.state.board.open_positions {
                         for rotation in [0u32, 90, 180, 270] {
                             if can_place_tile(
                                 &f.state.board.tiles,
-                                &current_tile,
-                                pos_key,
+                                current_tile_idx,
+                                pos,
                                 rotation,
                             ) {
                                 count += 1;
@@ -152,21 +152,21 @@ fn bench_get_rotated_edge(c: &mut Criterion) {
     let mut group = c.benchmark_group("get_rotated_edge");
 
     for fixture in &fixtures {
-        let current_tile = match &fixture.state.current_tile {
-            Some(t) => t.clone(),
+        let current_tile_idx = match fixture.state.current_tile {
+            Some(idx) => idx,
             None => continue,
         };
 
         // Bench calling get_rotated_edge for all 4 directions × 4 rotations
         group.bench_with_input(
             BenchmarkId::new("16_calls", &fixture.label),
-            &current_tile,
-            |b, tile_id| {
+            &current_tile_idx,
+            |b, &tile_idx| {
                 b.iter(|| {
                     let mut last = meeple_game_engine::games::carcassonne::types::EdgeType::Field;
                     for rotation in [0u32, 90, 180, 270] {
                         for direction in ["N", "E", "S", "W"] {
-                            last = get_rotated_edge(tile_id, rotation, direction);
+                            last = get_rotated_edge(tile_idx, rotation, direction);
                         }
                     }
                     last

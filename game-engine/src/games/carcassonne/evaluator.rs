@@ -278,7 +278,7 @@ fn raw_feature_potential(
             let neighbors: usize = pos
                 .all_surrounding()
                 .iter()
-                .filter(|p| state.board.tiles.contains_key(&p.to_key()))
+                .filter(|p| state.board.tiles.contains_key(&(p.x, p.y)))
                 .count();
             let cp = completion_probability(8 - neighbors, tiles_remaining);
             cp * 9.0 + (1.0 - cp) * (1.0 + neighbors as f64)

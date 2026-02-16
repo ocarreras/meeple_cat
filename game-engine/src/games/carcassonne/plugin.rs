@@ -12,7 +12,7 @@ use super::features::{
 };
 use super::meeples::{can_place_meeple, return_meeples};
 use super::scoring::{score_completed_feature, score_end_game};
-use super::tiles::{STARTING_TILE_ID, build_tile_bag, get_rotated_features};
+use super::tiles::{STARTING_TILE_ID, STARTING_TILE_IDX, build_tile_bag, get_rotated_features};
 use super::types::*;
 
 pub struct CarcassonnePlugin;
@@ -62,9 +62,9 @@ impl TypedGamePlugin for CarcassonnePlugin {
             }
         }
 
-        let mut board_tiles: HashMap<String, PlacedTile> = HashMap::new();
-        board_tiles.insert("0,0".into(), PlacedTile {
-            tile_type_id: STARTING_TILE_ID.into(),
+        let mut board_tiles: HashMap<(i32, i32), PlacedTile> = HashMap::new();
+        board_tiles.insert((0, 0), PlacedTile {
+            tile_type_id: STARTING_TILE_IDX,
             rotation: 0,
         });
         let open_positions = recalculate_open_positions(&board_tiles);
@@ -185,11 +185,12 @@ impl TypedGamePlugin for CarcassonnePlugin {
         _player_id: Option<&str>,
         _players: &[Player],
     ) -> serde_json::Value {
+        let current_tile_str: Option<&str> = state.current_tile.map(tile_index_to_type);
         let mut view = serde_json::json!({
             "board": state.board,
             "features": state.features,
             "tile_feature_map": state.tile_feature_map,
-            "current_tile": state.current_tile,
+            "current_tile": current_tile_str,
             "tiles_remaining": state.tile_bag.len(),
             "meeple_supply": state.meeple_supply,
             "scores": state.scores,
@@ -305,7 +306,9 @@ impl TypedGamePlugin for CarcassonnePlugin {
     }
 
     fn amaf_context(&self, state: &CarcassonneState) -> String {
-        state.current_tile.clone().unwrap_or_default()
+        state.current_tile
+            .map(|idx| tile_index_to_type(idx).to_string())
+            .unwrap_or_default()
     }
 }
 
@@ -345,7 +348,7 @@ fn apply_draw_tile(
     let mut drawn_tile = state.tile_bag.remove(0);
 
     // Skip unplaceable tiles
-    while !tile_has_valid_placement(&state.board.tiles, &state.board.open_positions, &drawn_tile) {
+    while !tile_has_valid_placement(&state.board.tiles, &state.board.open_positions, drawn_tile) {
         if state.tile_bag.is_empty() {
             let scores = state.float_scores();
             return TypedTransitionResult {
@@ -355,7 +358,7 @@ fn apply_draw_tile(
                         event_type: "tile_discarded".into(),
                         player_id: Some(player.player_id.clone()),
                         payload: serde_json::json!({
-                            "tile": drawn_tile,
+                            "tile": tile_index_to_type(drawn_tile),
                             "reason": "no_valid_placement",
                         }),
                     },
@@ -379,13 +382,13 @@ fn apply_draw_tile(
         drawn_tile = state.tile_bag.remove(0);
     }
 
-    state.current_tile = Some(drawn_tile.clone());
+    state.current_tile = Some(drawn_tile);
 
     let events = vec![Event {
         event_type: "tile_drawn".into(),
         player_id: Some(player.player_id.clone()),
         payload: serde_json::json!({
-            "tile": drawn_tile,
+            "tile": tile_index_to_type(drawn_tile),
             "tiles_remaining": state.tile_bag.len(),
         }),
     }];
@@ -419,17 +422,18 @@ fn apply_place_tile(
     action: &Action,
     players: &[Player],
 ) -> TypedTransitionResult<CarcassonneState> {
-    let x = action.payload["x"].as_i64().unwrap_or(0);
-    let y = action.payload["y"].as_i64().unwrap_or(0);
+    let x = action.payload["x"].as_i64().unwrap_or(0) as i32;
+    let y = action.payload["y"].as_i64().unwrap_or(0) as i32;
     let rotation = action.payload["rotation"].as_u64().unwrap_or(0) as u32;
     let pos_key = format!("{},{}", x, y);
-    let tile_type_id = state.current_tile.clone().unwrap_or_default();
+    let tile_type_idx = state.current_tile.unwrap_or(0);
+    let tile_type_str = tile_index_to_type(tile_type_idx);
     let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
     let player = &players[player_index];
 
     // Place tile on board
-    state.board.tiles.insert(pos_key.clone(), PlacedTile {
-        tile_type_id: tile_type_id.clone(),
+    state.board.tiles.insert((x, y), PlacedTile {
+        tile_type_id: tile_type_idx,
         rotation,
     });
 
@@ -440,13 +444,13 @@ fn apply_place_tile(
     state.current_tile = None;
 
     // Create features and merge with adjacent
-    let merge_events = create_and_merge_features(&mut state, &tile_type_id, &pos_key, rotation);
+    let merge_events = create_and_merge_features(&mut state, tile_type_str, &pos_key, rotation);
 
     let mut events = vec![Event {
         event_type: "tile_placed".into(),
         player_id: Some(player.player_id.clone()),
         payload: serde_json::json!({
-            "tile": tile_type_id,
+            "tile": tile_type_str,
             "x": x,
             "y": y,
             "rotation": rotation,
@@ -701,8 +705,8 @@ fn get_valid_tile_placements(
     state: &CarcassonneState,
     player_id: &str,
 ) -> Vec<serde_json::Value> {
-    let current_tile = match &state.current_tile {
-        Some(t) => t.as_str(),
+    let current_tile_idx = match state.current_tile {
+        Some(idx) => idx,
         None => return vec![],
     };
 
@@ -710,27 +714,25 @@ fn get_valid_tile_placements(
 
     let mut placements = Vec::new();
 
-    for pos_key in &state.board.open_positions {
-        let pos = Position::from_key(pos_key);
-
+    for &(x, y) in &state.board.open_positions {
         for rotation in [0u32, 90, 180, 270] {
-            if can_place_tile(&state.board.tiles, current_tile, pos_key, rotation) {
+            if can_place_tile(&state.board.tiles, current_tile_idx, (x, y), rotation) {
                 let mut meeple_spots: Vec<String> = Vec::new();
                 if has_meeples {
-                    let rotated_features = get_rotated_features(current_tile, rotation);
+                    let rotated_features = get_rotated_features(current_tile_idx, rotation);
                     let mut seen = std::collections::HashSet::new();
-                    for feat in &rotated_features {
+                    for feat in rotated_features {
                         for spot in &feat.meeple_spots {
-                            if seen.insert(spot.clone()) {
-                                meeple_spots.push(spot.clone());
+                            if seen.insert(spot.to_string()) {
+                                meeple_spots.push(spot.to_string());
                             }
                         }
                     }
                 }
 
                 placements.push(serde_json::json!({
-                    "x": pos.x,
-                    "y": pos.y,
+                    "x": x,
+                    "y": y,
                     "rotation": rotation,
                     "meeple_spots": meeple_spots,
                 }));
@@ -750,18 +752,19 @@ fn get_valid_meeple_placements(
         None => return vec![serde_json::json!({"skip": true})],
     };
 
-    let placed_tile = match state.board.tiles.get(last_pos) {
-        Some(t) => t,
+    let pos = Position::from_key(last_pos);
+    let placed_tile = match state.board.tiles.get(&(pos.x, pos.y)) {
+        Some(t) => *t,
         None => return vec![serde_json::json!({"skip": true})],
     };
 
-    let rotated_features = get_rotated_features(&placed_tile.tile_type_id, placed_tile.rotation);
+    let rotated_features = get_rotated_features(placed_tile.tile_type_id, placed_tile.rotation);
     let mut spots: Vec<serde_json::Value> = Vec::new();
     let mut seen_spots = std::collections::HashSet::new();
 
-    for tile_feat in &rotated_features {
+    for tile_feat in rotated_features {
         for spot in &tile_feat.meeple_spots {
-            if !seen_spots.insert(spot.clone()) {
+            if !seen_spots.insert(spot.to_string()) {
                 continue;
             }
             if can_place_meeple(state, player_id, last_pos, spot) {
@@ -794,16 +797,16 @@ fn validate_place_tile(
         return Some(format!("Invalid rotation: {}", rotation));
     }
 
-    let pos_key = format!("{},{}", x.unwrap(), y.unwrap());
-    let current_tile = match &state.current_tile {
-        Some(t) => t.as_str(),
+    let current_tile_idx = match state.current_tile {
+        Some(idx) => idx,
         None => return Some("No tile drawn".into()),
     };
 
-    if !can_place_tile(&state.board.tiles, current_tile, &pos_key, rotation) {
+    let pos = (x.unwrap() as i32, y.unwrap() as i32);
+    if !can_place_tile(&state.board.tiles, current_tile_idx, pos, rotation) {
         return Some(format!(
-            "Cannot place tile {} at {} with rotation {}",
-            current_tile, pos_key, rotation
+            "Cannot place tile {} at {},{} with rotation {}",
+            tile_index_to_type(current_tile_idx), pos.0, pos.1, rotation
         ));
     }
 
@@ -1071,7 +1074,8 @@ mod tests {
         // INV2: All features' tiles are on the board
         for (fid, feat) in &state.features {
             for tile_pos in &feat.tiles {
-                if !state.board.tiles.contains_key(tile_pos) {
+                let pos = Position::from_key(tile_pos);
+                if !state.board.tiles.contains_key(&(pos.x, pos.y)) {
                     violations.push(format!(
                         "INV2 [{}]: feature '{}' ({:?}) references tile '{}' not on board",
                         context, fid, feat.feature_type, tile_pos
@@ -1134,19 +1138,19 @@ mod tests {
                 let pos = Position::from_key(&oe[0]);
                 let dir = oe[1].split(':').next().unwrap_or(&oe[1]);
                 let neighbor = pos.neighbor(dir);
-                let neighbor_key = neighbor.to_key();
-                if state.board.tiles.contains_key(&neighbor_key) {
+                if state.board.tiles.contains_key(&(neighbor.x, neighbor.y)) {
                     violations.push(format!(
-                        "INV6 [{}]: feature '{}' ({:?}) has open_edge [{}, {}] but neighbor '{}' IS on board",
-                        context, fid, feat.feature_type, oe[0], oe[1], neighbor_key
+                        "INV6 [{}]: feature '{}' ({:?}) has open_edge [{}, {}] but neighbor '{},{}' IS on board",
+                        context, fid, feat.feature_type, oe[0], oe[1], neighbor.x, neighbor.y
                     ));
                 }
             }
         }
 
         // INV7: All tile positions on board should have entries in tile_feature_map
-        for pos_key in state.board.tiles.keys() {
-            if !state.tile_feature_map.contains_key(pos_key) {
+        for &(x, y) in state.board.tiles.keys() {
+            let pos_key = format!("{},{}", x, y);
+            if !state.tile_feature_map.contains_key(&pos_key) {
                 violations.push(format!(
                     "INV7 [{}]: board tile at '{}' has no tile_feature_map entry",
                     context, pos_key

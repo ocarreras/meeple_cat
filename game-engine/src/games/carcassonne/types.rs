@@ -42,6 +42,26 @@ pub fn direction_index(dir: &str) -> usize {
     }
 }
 
+// --- Tile type ID conversion ---
+
+const TILE_TYPE_STRINGS: [&str; 24] = [
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+    "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+    "U", "V", "W", "X",
+];
+
+/// Convert tile type ID string (e.g. "A") to u8 index (0–23).
+#[inline]
+pub fn tile_type_to_index(id: &str) -> u8 {
+    id.as_bytes()[0] - b'A'
+}
+
+/// Convert tile type u8 index (0–23) to string ID (e.g. "A").
+#[inline]
+pub fn tile_index_to_type(idx: u8) -> &'static str {
+    TILE_TYPE_STRINGS[idx as usize]
+}
+
 // --- Tile definitions ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +80,8 @@ pub struct TileFeature {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TileDefinition {
     pub tile_type_id: String,
-    pub edges: HashMap<String, EdgeType>,
+    /// Edges indexed by direction: N=0, E=1, S=2, W=3.
+    pub edges: [EdgeType; 4],
     pub features: Vec<TileFeature>,
     pub count: u32,
     pub image_id: String,
@@ -119,9 +140,11 @@ impl Position {
 
 // --- Board-level types ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A tile placed on the board. Uses u8 tile type index and u32 rotation
+/// for Copy semantics and cheap cloning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlacedTile {
-    pub tile_type_id: String,
+    pub tile_type_id: u8,
     pub rotation: u32,
 }
 
@@ -153,8 +176,10 @@ pub struct Feature {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CarcassonneState {
     pub board: Board,
-    pub tile_bag: Vec<String>,
-    pub current_tile: Option<String>,
+    #[serde(with = "serde_tile_bag")]
+    pub tile_bag: Vec<u8>,
+    #[serde(with = "serde_current_tile")]
+    pub current_tile: Option<u8>,
     pub last_placed_position: Option<String>,
     pub features: HashMap<String, Feature>,
     pub tile_feature_map: HashMap<String, HashMap<String, String>>,
@@ -186,26 +211,122 @@ impl CarcassonneState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Board with (i32, i32) tuple keys for zero-allocation neighbor lookups.
+/// Custom Serialize/Deserialize maintains "x,y" string key JSON format.
+#[derive(Debug, Clone)]
 pub struct Board {
-    pub tiles: HashMap<String, PlacedTile>,
-    pub open_positions: Vec<String>,
+    pub tiles: HashMap<(i32, i32), PlacedTile>,
+    pub open_positions: Vec<(i32, i32)>,
+}
+
+// --- Board custom serde ---
+
+#[derive(Serialize, Deserialize)]
+struct PlacedTileSerde {
+    tile_type_id: String,
+    rotation: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+struct BoardSerde {
+    tiles: HashMap<String, PlacedTileSerde>,
+    open_positions: Vec<String>,
+}
+
+impl Serialize for Board {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let serde_board = BoardSerde {
+            tiles: self.tiles.iter().map(|(&(x, y), tile)| {
+                (
+                    format!("{},{}", x, y),
+                    PlacedTileSerde {
+                        tile_type_id: tile_index_to_type(tile.tile_type_id).to_string(),
+                        rotation: tile.rotation,
+                    },
+                )
+            }).collect(),
+            open_positions: self.open_positions.iter()
+                .map(|(x, y)| format!("{},{}", x, y))
+                .collect(),
+        };
+        serde_board.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Board {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let serde_board = BoardSerde::deserialize(deserializer)?;
+        Ok(Board {
+            tiles: serde_board.tiles.into_iter().map(|(key, tile)| {
+                let pos = Position::from_key(&key);
+                (
+                    (pos.x, pos.y),
+                    PlacedTile {
+                        tile_type_id: tile_type_to_index(&tile.tile_type_id),
+                        rotation: tile.rotation,
+                    },
+                )
+            }).collect(),
+            open_positions: serde_board.open_positions.into_iter().map(|key| {
+                let pos = Position::from_key(&key);
+                (pos.x, pos.y)
+            }).collect(),
+        })
+    }
+}
+
+// --- Serde helpers for tile_bag (Vec<u8> ↔ Vec<String>) ---
+
+mod serde_tile_bag {
+    use super::tile_index_to_type;
+
+    pub fn serialize<S: serde::Serializer>(bag: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        let mut seq = serializer.serialize_seq(Some(bag.len()))?;
+        for &idx in bag {
+            seq.serialize_element(tile_index_to_type(idx))?;
+        }
+        seq.end()
+    }
+
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+        use serde::Deserialize;
+        let strings: Vec<String> = Vec::deserialize(deserializer)?;
+        Ok(strings.iter().map(|s| super::tile_type_to_index(s)).collect())
+    }
+}
+
+// --- Serde helpers for current_tile (Option<u8> ↔ Option<String>) ---
+
+mod serde_current_tile {
+    use super::tile_index_to_type;
+
+    pub fn serialize<S: serde::Serializer>(tile: &Option<u8>, serializer: S) -> Result<S::Ok, S::Error> {
+        match tile {
+            Some(idx) => serializer.serialize_some(tile_index_to_type(*idx)),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<u8>, D::Error> {
+        use serde::Deserialize;
+        let opt: Option<String> = Option::deserialize(deserializer)?;
+        Ok(opt.map(|s| super::tile_type_to_index(&s)))
+    }
 }
 
 // --- Rotation helpers ---
 
 /// Rotate edge types clockwise by rotation degrees (0, 90, 180, 270).
-pub fn rotate_edges(edges: &HashMap<String, EdgeType>, rotation: u32) -> HashMap<String, EdgeType> {
+pub fn rotate_edges(edges: &[EdgeType; 4], rotation: u32) -> [EdgeType; 4] {
     let steps = ((rotation / 90) % 4) as usize;
     if steps == 0 {
-        return edges.clone();
+        return *edges;
     }
-    let mut rotated = HashMap::with_capacity(4);
-    for (i, d) in DIRECTIONS.iter().enumerate() {
-        let source = DIRECTIONS[(i + 4 - steps) % 4];
-        if let Some(edge_type) = edges.get(source) {
-            rotated.insert(d.to_string(), *edge_type);
-        }
+    let mut rotated = [EdgeType::Field; 4];
+    for i in 0..4 {
+        let source = (i + 4 - steps) % 4;
+        rotated[i] = edges[source];
     }
     rotated
 }
@@ -327,20 +448,14 @@ mod tests {
 
     #[test]
     fn test_rotate_edges() {
-        let edges: HashMap<String, EdgeType> = [
-            ("N".into(), EdgeType::City),
-            ("E".into(), EdgeType::Road),
-            ("S".into(), EdgeType::Field),
-            ("W".into(), EdgeType::Road),
-        ]
-        .into_iter()
-        .collect();
+        // N=City, E=Road, S=Field, W=Road
+        let edges = [EdgeType::City, EdgeType::Road, EdgeType::Field, EdgeType::Road];
 
         let rotated = rotate_edges(&edges, 90);
-        assert_eq!(rotated["N"], EdgeType::Road);  // W→N
-        assert_eq!(rotated["E"], EdgeType::City);   // N→E
-        assert_eq!(rotated["S"], EdgeType::Road);   // E→S
-        assert_eq!(rotated["W"], EdgeType::Field);  // S→W
+        assert_eq!(rotated[0], EdgeType::Road);  // W→N
+        assert_eq!(rotated[1], EdgeType::City);   // N→E
+        assert_eq!(rotated[2], EdgeType::Road);   // E→S
+        assert_eq!(rotated[3], EdgeType::Field);  // S→W
     }
 
     #[test]
@@ -348,5 +463,13 @@ mod tests {
         let pos = Position::new(0, 0);
         let surrounding = pos.all_surrounding();
         assert_eq!(surrounding.len(), 8);
+    }
+
+    #[test]
+    fn test_tile_type_roundtrip() {
+        for idx in 0..24u8 {
+            let s = tile_index_to_type(idx);
+            assert_eq!(tile_type_to_index(s), idx);
+        }
     }
 }
