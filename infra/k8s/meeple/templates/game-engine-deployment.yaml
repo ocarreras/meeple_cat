@@ -1,0 +1,52 @@
+{{- if .Values.gameEngine.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "meeple.fullname" . }}-game-engine
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "meeple.labels" . | nindent 4 }}
+    app.kubernetes.io/component: game-engine
+spec:
+  replicas: {{ .Values.gameEngine.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "meeple.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: game-engine
+  template:
+    metadata:
+      labels:
+        {{- include "meeple.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: game-engine
+    spec:
+      containers:
+        - name: game-engine
+          image: {{ .Values.gameEngine.image }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.gameEngine.port }}
+          env:
+            - name: MEEPLE_ENGINE_PORT
+              value: {{ .Values.gameEngine.port | quote }}
+            - name: RUST_LOG
+              value: "info"
+          readinessProbe:
+            grpc:
+              port: {{ .Values.gameEngine.port }}
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            grpc:
+              port: {{ .Values.gameEngine.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.gameEngine.resources | nindent 12 }}
+{{- end }}

@@ -52,3 +52,12 @@ class PluginRegistry:
                         self.register(mod.plugin)
                 except Exception as e:
                     logger.warning(f"Failed to load game plugin '{modname}': {e}")
+
+    def connect_grpc(self, address: str) -> None:
+        """Connect to the Rust game engine via gRPC and register all available games."""
+        from src.engine.grpc_plugin import connect_grpc
+
+        plugins = connect_grpc(address)
+        for plugin in plugins:
+            self.register(plugin)
+        logger.info(f"Registered {len(plugins)} game plugins from gRPC at {address}")

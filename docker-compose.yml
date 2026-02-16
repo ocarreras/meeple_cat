@@ -50,6 +50,19 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  game-engine:
+    build:
+      context: ./game-engine
+    container_name: meeple_game_engine
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "true"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   frontend:
     build:
       context: ./frontend

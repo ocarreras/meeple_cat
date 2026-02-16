@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # Game engine
     disconnect_grace_period_seconds: int = 30
+    game_engine_grpc_url: str = ""  # empty = local Python plugins, e.g. "localhost:50051"
 
     # Google OIDC (empty = disabled)
     google_client_id: str = ""

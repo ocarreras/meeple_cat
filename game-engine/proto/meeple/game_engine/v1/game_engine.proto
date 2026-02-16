@@ -1,0 +1,274 @@
+syntax = "proto3";
+package meeple.game_engine.v1;
+
+// --- Core engine types ---
+
+message Player {
+  string player_id = 1;
+  string display_name = 2;
+  int32 seat_index = 3;
+  bool is_bot = 4;
+  string bot_id = 5;
+}
+
+message GameConfig {
+  int32 base_time_ms = 1;
+  int32 increment_ms = 2;
+  map<string, string> options = 3;
+  optional int64 random_seed = 4;
+}
+
+message ExpectedAction {
+  optional string player_id = 1;
+  string action_type = 2;
+}
+
+message Phase {
+  string name = 1;
+  string concurrent_mode = 2;
+  repeated ExpectedAction expected_actions = 3;
+  bool auto_resolve = 4;
+  map<string, string> metadata = 5;
+}
+
+message Action {
+  string action_type = 1;
+  string player_id = 2;
+  bytes payload_json = 3;
+}
+
+message Event {
+  string event_type = 1;
+  optional string player_id = 2;
+  bytes payload_json = 3;
+}
+
+message GameResult {
+  repeated string winners = 1;
+  map<string, double> final_scores = 2;
+  string reason = 3;
+}
+
+message TransitionResult {
+  bytes game_data_json = 1;
+  repeated Event events = 2;
+  Phase next_phase = 3;
+  map<string, double> scores = 4;
+  optional GameResult game_over = 5;
+}
+
+// --- Service ---
+
+service GameEngineService {
+  rpc GetGameInfo(GetGameInfoRequest) returns (GetGameInfoResponse);
+  rpc ListGames(ListGamesRequest) returns (ListGamesResponse);
+  rpc CreateInitialState(CreateInitialStateRequest) returns (CreateInitialStateResponse);
+  rpc GetValidActions(GetValidActionsRequest) returns (GetValidActionsResponse);
+  rpc ValidateAction(ValidateActionRequest) returns (ValidateActionResponse);
+  rpc ApplyAction(ApplyActionRequest) returns (ApplyActionResponse);
+  rpc GetPlayerView(GetPlayerViewRequest) returns (GetPlayerViewResponse);
+  rpc GetSpectatorSummary(GetSpectatorSummaryRequest) returns (GetSpectatorSummaryResponse);
+  rpc StateToAiView(StateToAiViewRequest) returns (StateToAiViewResponse);
+  rpc ParseAiAction(ParseAiActionRequest) returns (ParseAiActionResponse);
+  rpc OnPlayerForfeit(OnPlayerForfeitRequest) returns (OnPlayerForfeitResponse);
+  rpc MctsSearch(MctsSearchRequest) returns (MctsSearchResponse);
+  rpc RunArena(RunArenaRequest) returns (stream ArenaProgressUpdate);
+}
+
+// --- Requests/Responses ---
+
+message GetGameInfoRequest {
+  string game_id = 1;
+}
+
+message GetGameInfoResponse {
+  string game_id = 1;
+  string display_name = 2;
+  int32 min_players = 3;
+  int32 max_players = 4;
+  string description = 5;
+  string disconnect_policy = 6;
+}
+
+message ListGamesRequest {}
+
+message ListGamesResponse {
+  repeated GetGameInfoResponse games = 1;
+}
+
+message CreateInitialStateRequest {
+  string game_id = 1;
+  repeated Player players = 2;
+  GameConfig config = 3;
+}
+
+message CreateInitialStateResponse {
+  bytes game_data_json = 1;
+  Phase phase = 2;
+  repeated Event events = 3;
+}
+
+message GetValidActionsRequest {
+  string game_id = 1;
+  bytes game_data_json = 2;
+  Phase phase = 3;
+  string player_id = 4;
+}
+
+message GetValidActionsResponse {
+  repeated bytes actions_json = 1;
+}
+
+message ValidateActionRequest {
+  string game_id = 1;
+  bytes game_data_json = 2;
+  Phase phase = 3;
+  Action action = 4;
+}
+
+message ValidateActionResponse {
+  optional string error = 1;
+}
+
+message ApplyActionRequest {
+  string game_id = 1;
+  bytes game_data_json = 2;
+  Phase phase = 3;
+  Action action = 4;
+  repeated Player players = 5;
+}
+
+message ApplyActionResponse {
+  TransitionResult result = 1;
+}
+
+message GetPlayerViewRequest {
+  string game_id = 1;
+  bytes game_data_json = 2;
+  Phase phase = 3;
+  optional string player_id = 4;
+  repeated Player players = 5;
+}
+
+message GetPlayerViewResponse {
+  bytes view_json = 1;
+}
+
+message GetSpectatorSummaryRequest {
+  string game_id = 1;
+  bytes game_data_json = 2;
+  Phase phase = 3;
+  repeated Player players = 4;
+}
+
+message GetSpectatorSummaryResponse {
+  bytes summary_json = 1;
+}
+
+message StateToAiViewRequest {
+  string game_id = 1;
+  bytes game_data_json = 2;
+  Phase phase = 3;
+  string player_id = 4;
+  repeated Player players = 5;
+}
+
+message StateToAiViewResponse {
+  bytes ai_view_json = 1;
+}
+
+message ParseAiActionRequest {
+  string game_id = 1;
+  bytes response_json = 2;
+  Phase phase = 3;
+  string player_id = 4;
+}
+
+message ParseAiActionResponse {
+  Action action = 1;
+}
+
+message OnPlayerForfeitRequest {
+  string game_id = 1;
+  bytes game_data_json = 2;
+  Phase phase = 3;
+  string player_id = 4;
+  repeated Player players = 5;
+}
+
+message OnPlayerForfeitResponse {
+  optional TransitionResult result = 1;
+}
+
+message MctsSearchRequest {
+  string game_id = 1;
+  bytes game_data_json = 2;
+  Phase phase = 3;
+  string player_id = 4;
+  repeated Player players = 5;
+  int32 num_simulations = 10;
+  double time_limit_ms = 11;
+  double exploration_constant = 12;
+  int32 num_determinizations = 13;
+  string eval_profile = 14;
+  double pw_c = 15;
+  double pw_alpha = 16;
+  bool use_rave = 17;
+  double rave_k = 18;
+  int32 max_amaf_depth = 19;
+  bool rave_fpu = 20;
+  bool tile_aware_amaf = 21;
+}
+
+message MctsSearchResponse {
+  bytes action_json = 1;
+  int32 iterations_run = 2;
+  double elapsed_ms = 3;
+}
+
+message RunArenaRequest {
+  string game_id = 1;
+  int32 num_games = 2;
+  int32 base_seed = 3;
+  bool alternate_seats = 4;
+  map<string, string> game_options = 5;
+  repeated ArenaStrategyConfig strategies = 6;
+}
+
+message ArenaStrategyConfig {
+  string name = 1;
+  string strategy_type = 2;
+  int32 num_simulations = 10;
+  double time_limit_ms = 11;
+  int32 num_determinizations = 12;
+  string eval_profile = 13;
+  double pw_c = 14;
+  double pw_alpha = 15;
+  bool use_rave = 16;
+  double rave_k = 17;
+  int32 max_amaf_depth = 18;
+  bool rave_fpu = 19;
+  bool tile_aware_amaf = 20;
+}
+
+message ArenaProgressUpdate {
+  int32 games_completed = 1;
+  int32 total_games = 2;
+  optional ArenaFinalResult final_result = 3;
+}
+
+message ArenaFinalResult {
+  int32 num_games = 1;
+  map<string, int32> wins = 2;
+  int32 draws = 3;
+  map<string, ArenaScoreStats> score_stats = 4;
+  double total_duration_s = 5;
+}
+
+message ArenaScoreStats {
+  double avg = 1;
+  double stddev = 2;
+  double win_rate = 3;
+  double ci_95_lo = 4;
+  double ci_95_hi = 5;
+}

@@ -62,7 +62,15 @@ async def lifespan(app: FastAPI):
 
     # Initialize plugin registry
     registry = PluginRegistry()
-    registry.auto_discover()
+    if settings.game_engine_grpc_url:
+        try:
+            registry.connect_grpc(settings.game_engine_grpc_url)
+            logger.info(f"Connected to Rust game engine at {settings.game_engine_grpc_url}")
+        except Exception as e:
+            logger.warning(f"Failed to connect to Rust game engine: {e}, falling back to Python plugins")
+            registry.auto_discover()
+    else:
+        registry.auto_discover()
     app.state.registry = registry
     logger.info(f"Loaded {len(registry.list_games())} game plugins")
 

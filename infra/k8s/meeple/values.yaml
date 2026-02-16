@@ -50,6 +50,19 @@ redis:
       cpu: 500m
       memory: 384Mi
 
+gameEngine:
+  enabled: false
+  image: ghcr.io/ocarreras/meeple-game-engine:latest
+  replicas: 1
+  port: 50051
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: "2"
+      memory: 256Mi
+
 ingress:
   enabled: true
   className: traefik

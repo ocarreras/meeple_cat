@@ -12,6 +12,7 @@ env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/meeple-backend
   FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/meeple-frontend
+  GAME_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/meeple-game-engine
 
 jobs:
   changes:
@@ -20,6 +21,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       infra: ${{ steps.filter.outputs.infra }}
+      game-engine: ${{ steps.filter.outputs.game-engine }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -32,6 +34,8 @@ jobs:
               - 'frontend/**'
             infra:
               - 'infra/k8s/**'
+            game-engine:
+              - 'game-engine/**'
 
   test-backend:
     needs: changes
@@ -64,6 +68,22 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+
+  test-game-engine:
+    needs: changes
+    if: needs.changes.outputs.game-engine == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: game-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: game-engine
+      - run: cargo test --release
 
   build-backend:
     needs: [changes, test-backend]
@@ -117,10 +137,35 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
 
+  build-game-engine:
+    needs: [changes, test-game-engine]
+    if: needs.changes.outputs.game-engine == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./game-engine
+          push: true
+          tags: |
+            ${{ env.GAME_ENGINE_IMAGE }}:${{ github.sha }}
+            ${{ env.GAME_ENGINE_IMAGE }}:latest
+          cache-from: type=gha,scope=game-engine
+          cache-to: type=gha,scope=game-engine,mode=max
+
   deploy:
-    needs: [changes, build-backend, build-frontend]
+    needs: [changes, build-backend, build-frontend, build-game-engine]
     # Run if anything changed — skipped builds are treated as successful
-    if: always() && !failure() && !cancelled() && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true')
+    if: always() && !failure() && !cancelled() && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.game-engine == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,6 +205,16 @@ jobs:
               echo "frontend_tag=latest" >> "$GITHUB_OUTPUT"
             fi
           fi
+          if [ "${{ needs.changes.outputs.game-engine }}" == "true" ]; then
+            echo "game_engine_tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            CURRENT=$(kubectl -n meeple get deployment meeple-game-engine -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+            if [ -n "$CURRENT" ]; then
+              echo "game_engine_tag=${CURRENT##*:}" >> "$GITHUB_OUTPUT"
+            else
+              echo "game_engine_tag=latest" >> "$GITHUB_OUTPUT"
+            fi
+          fi
 
       - name: Helm upgrade
         run: |
@@ -169,6 +224,7 @@ jobs:
             -f /tmp/values-prod.yaml \
             --set backend.image=${{ env.BACKEND_IMAGE }}:${{ steps.images.outputs.backend_tag }} \
             --set frontend.image=${{ env.FRONTEND_IMAGE }}:${{ steps.images.outputs.frontend_tag }} \
+            --set gameEngine.image=${{ env.GAME_ENGINE_IMAGE }}:${{ steps.images.outputs.game_engine_tag }} \
             --wait --timeout 5m
 
       - name: Verify rollout
@@ -178,6 +234,9 @@ jobs:
           fi
           if [ "${{ needs.changes.outputs.frontend }}" == "true" ]; then
             kubectl -n meeple rollout status deployment/meeple-frontend --timeout=120s
+          fi
+          if [ "${{ needs.changes.outputs.game-engine }}" == "true" ]; then
+            kubectl -n meeple rollout status deployment/meeple-game-engine --timeout=120s || true
           fi
 
       - name: Cleanup

@@ -66,6 +66,10 @@ spec:
               value: "https://{{ .Values.domain }}"
             - name: MEEPLE_BASE_URL
               value: "https://{{ .Values.domain }}"
+            {{- if .Values.gameEngine.enabled }}
+            - name: MEEPLE_GAME_ENGINE_GRPC_URL
+              value: "{{ include "meeple.fullname" . }}-game-engine:{{ .Values.gameEngine.port }}"
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /ready

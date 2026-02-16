@@ -1,0 +1,20 @@
+{{- if .Values.gameEngine.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "meeple.fullname" . }}-game-engine
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "meeple.labels" . | nindent 4 }}
+    app.kubernetes.io/component: game-engine
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.gameEngine.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "meeple.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: game-engine
+{{- end }}
