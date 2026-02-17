@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWebSocket } from './useWebSocket';
 import { useGameStore } from '@/stores/gameStore';
 import type { ServerMessage, ActionMessage, CommandWindowEntry } from '@/lib/types';
@@ -25,6 +26,7 @@ export function useGameConnection(
   token?: string
 ): GameConnectionReturn {
 
+  const router = useRouter();
   const setConnected = useGameStore((state) => state.setConnected);
   const setView = useGameStore((state) => state.setView);
   const setGameOver = useGameStore((state) => state.setGameOver);
@@ -164,10 +166,14 @@ export function useGameConnection(
     // Don't set connected=true yet, wait for 'connected' message from server
   }, []);
 
-  const handleDisconnect = useCallback(() => {
+  const handleDisconnect = useCallback((code?: number) => {
     console.log('WebSocket disconnected');
     setConnected(false);
-  }, [setConnected]);
+    // Redirect to lobby on permanent failures (match gone, not authorized, etc.)
+    if (code === 4004 || code === 4001 || code === 4003) {
+      router.replace('/lobby');
+    }
+  }, [setConnected, router]);
 
   const { sendAction, sendPing, close } = useWebSocket({
     matchId,

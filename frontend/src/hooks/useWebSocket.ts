@@ -9,7 +9,7 @@ export interface UseWebSocketOptions {
   token?: string; // Legacy Bearer token for guests
   onMessage: (message: ServerMessage) => void;
   onConnect?: () => void;
-  onDisconnect?: () => void;
+  onDisconnect?: (code?: number) => void;
 }
 
 interface WebSocketReturn {
@@ -20,6 +20,13 @@ interface WebSocketReturn {
 
 const MIN_RECONNECT_DELAY = 1000; // 1 second
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds
+
+// Close codes that indicate permanent failures — retrying won't help
+const NON_RETRYABLE_CLOSE_CODES = new Set([
+  4001, // Authentication failed
+  4003, // Player not in match
+  4004, // Match not found
+]);
 
 export function useWebSocket(options: UseWebSocketOptions): WebSocketReturn {
   const { matchId, token, onMessage, onConnect, onDisconnect } = options;
@@ -98,16 +105,22 @@ export function useWebSocket(options: UseWebSocketOptions): WebSocketReturn {
       console.error('WebSocket error:', error);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (!isMountedRef.current) {
         return;
       }
 
-      console.log('WebSocket disconnected');
+      console.log(`WebSocket disconnected (code: ${event.code})`);
       wsRef.current = null;
 
       if (onDisconnect) {
-        onDisconnect();
+        onDisconnect(event.code);
+      }
+
+      // Don't retry permanent failures
+      if (NON_RETRYABLE_CLOSE_CODES.has(event.code)) {
+        console.log(`Not reconnecting: server rejected with code ${event.code}`);
+        return;
       }
 
       // Attempt to reconnect if not manually closed

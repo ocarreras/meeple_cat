@@ -35,6 +35,7 @@ async def game_websocket(
             user_id, _display_name = result
             player_id = PlayerId(user_id)
         else:
+            await ws.accept()
             await ws.close(code=4001, reason="Invalid or expired ticket")
             return
     elif token:
@@ -43,9 +44,11 @@ async def game_websocket(
             player_id = PlayerId(token_data.user_id)
         except Exception as e:
             logger.warning(f"Authentication failed: {e}")
+            await ws.accept()
             await ws.close(code=4001, reason="Authentication failed")
             return
     else:
+        await ws.accept()
         await ws.close(code=4001, reason="No authentication provided")
         return
 
@@ -54,6 +57,7 @@ async def game_websocket(
     session = session_manager.get_session(match_id)
     if session is None:
         logger.warning(f"Match {match_id} not found")
+        await ws.accept()
         await ws.close(code=4004, reason="Match not found")
         return
 
@@ -61,6 +65,7 @@ async def game_websocket(
     player_ids = [p.player_id for p in session.state.players]
     if player_id not in player_ids:
         logger.warning(f"Player {player_id} not in match {match_id}")
+        await ws.accept()
         await ws.close(code=4003, reason="Player not in match")
         return
 
