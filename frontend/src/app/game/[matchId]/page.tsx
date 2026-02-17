@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback } from 'react';
+import { Suspense, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
@@ -11,6 +11,7 @@ import EinsteinDojoRenderer from '@/components/games/einstein_dojo/EinsteinDojoR
 import GameHeader from '@/components/game/GameHeader';
 import ConnectionStatus from '@/components/game/ConnectionStatus';
 import DisconnectBanner from '@/components/game/DisconnectBanner';
+import CommandWindow from '@/components/game/CommandWindow';
 import type { ActionPayload, CarcassonneGameData, EinsteinDojoGameData } from '@/lib/types';
 
 function LoadingSpinner() {
@@ -42,6 +43,14 @@ function GamePageContent() {
   const handleAction = useCallback((actionType: string, payload: Record<string, unknown>) => {
     sendAction({ action_type: actionType, payload: payload as unknown as ActionPayload });
   }, [sendAction]);
+
+  const panHandlerRef = useRef<((tiles: string[]) => void) | null>(null);
+  const handleRegisterPan = useCallback((handler: (tiles: string[]) => void) => {
+    panHandlerRef.current = handler;
+  }, []);
+  const handlePanToTiles = useCallback((tiles: string[]) => {
+    panHandlerRef.current?.(tiles);
+  }, []);
 
   if (!view) {
     return <LoadingSpinner />;
@@ -87,6 +96,7 @@ function GamePageContent() {
         onAction={handleAction}
         isMyTurn={isMyTurn}
         phase={currentPhase.name}
+        onRegisterPanHandler={handleRegisterPan}
       />
     );
   };
@@ -105,6 +115,7 @@ function GamePageContent() {
       <div className="flex-1 overflow-hidden">
         {renderGame()}
       </div>
+      <CommandWindow onPanToTiles={handlePanToTiles} />
     </div>
   );
 }

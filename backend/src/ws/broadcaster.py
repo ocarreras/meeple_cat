@@ -72,6 +72,18 @@ class Broadcaster:
         )
         await self.connection_manager.broadcast_to_match(match_id, message)
 
+    async def send_game_events(
+        self, match_id: MatchId, events: list[dict]
+    ) -> None:
+        """Broadcast game events (scoring, etc.) to all players and spectators."""
+        if not events:
+            return
+        message = ServerMessage(
+            type=ServerMessageType.GAME_EVENTS,
+            payload={"events": events},
+        )
+        await self.connection_manager.broadcast_to_match(match_id, message)
+
     async def send_player_forfeited(
         self, match_id: MatchId, player_id: PlayerId
     ) -> None:

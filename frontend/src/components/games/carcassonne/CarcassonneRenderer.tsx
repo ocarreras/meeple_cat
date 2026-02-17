@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlayerView, CarcassonneGameData, TilePlacement, ValidAction, isTilePlacementAction, isMeeplePlacementAction, isSkipAction } from '@/lib/types';
 import { getValidMeepleSpots, MeepleSpotInfo } from '@/lib/meeplePlacements';
 import { useGameStore } from '@/stores/gameStore';
-import CarcassonneBoard from './CarcassonneBoard';
+import CarcassonneBoard, { type CarcassonneBoardRef } from './CarcassonneBoard';
 import TilePreview from './TilePreview';
 import MeepleSupply from './MeepleSupply';
 import ScoreBoard from '../../game/ScoreBoard';
@@ -20,6 +20,7 @@ interface CarcassonneRendererProps {
   onAction: (actionType: string, payload: Record<string, unknown>) => void;
   isMyTurn: boolean;
   phase: string;
+  onRegisterPanHandler?: (handler: (tiles: string[]) => void) => void;
 }
 
 export default function CarcassonneRenderer({
@@ -27,6 +28,7 @@ export default function CarcassonneRenderer({
   onAction,
   isMyTurn,
   phase,
+  onRegisterPanHandler,
 }: CarcassonneRendererProps) {
   const { t } = useTranslation();
   const [selectedCell, setSelectedCell] = useState<{ x: number; y: number } | null>(null);
@@ -38,6 +40,26 @@ export default function CarcassonneRenderer({
   // Track the tile placement that was confirmed (for meeple overlay positioning)
   const [confirmedPlacement, setConfirmedPlacement] = useState<TilePlacement | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const [showGameOverModal, setShowGameOverModal] = useState(true);
+
+  const boardRef = useRef<CarcassonneBoardRef>(null);
+
+  const handlePanToTiles = useCallback((tiles: string[]) => {
+    if (!boardRef.current || tiles.length === 0) return;
+    let sumX = 0, sumY = 0;
+    for (const t of tiles) {
+      const [x, y] = t.split(',').map(Number);
+      sumX += x;
+      sumY += y;
+    }
+    boardRef.current.panTo(sumX / tiles.length, sumY / tiles.length);
+  }, []);
+
+  useEffect(() => {
+    if (onRegisterPanHandler) {
+      onRegisterPanHandler(handlePanToTiles);
+    }
+  }, [onRegisterPanHandler, handlePanToTiles]);
 
   const gameData = view.game_data as CarcassonneGameData;
   const gameOver = useGameStore((state) => state.gameOver);
@@ -270,6 +292,7 @@ export default function CarcassonneRenderer({
       {/* Board area */}
       <div className="flex-1 relative min-h-0">
         <CarcassonneBoard
+          ref={boardRef}
           gameData={gameData}
           players={view.players}
           validCells={validCells}
@@ -300,12 +323,13 @@ export default function CarcassonneRenderer({
             rotation: confirmedPlacement.rotation,
           } : null}
         />
-        {isGameOver && (
+        {isGameOver && showGameOverModal && (
           <GameOverSummary
             players={view.players}
             finalScores={gameOver?.final_scores ?? gameData.scores}
             winners={gameOver?.winners ?? []}
             breakdown={gameData.end_game_breakdown}
+            onClose={() => setShowGameOverModal(false)}
           />
         )}
       </div>
@@ -369,6 +393,15 @@ export default function CarcassonneRenderer({
               <span className="text-lg font-bold">{gameData.tiles_remaining || 0}</span>
             </div>
           </div>
+
+          {isGameOver && !showGameOverModal && (
+            <button
+              className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium px-3 py-2 rounded border border-yellow-300 w-full"
+              onClick={() => setShowGameOverModal(true)}
+            >
+              {t('gameOver.showResults')}
+            </button>
+          )}
 
           <button
             className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs px-3 py-2 rounded border"

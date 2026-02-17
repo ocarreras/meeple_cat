@@ -135,6 +135,8 @@
   "gameOver.cities": "Cities",
   "gameOver.roads": "Roads",
   "gameOver.monasteries": "Monasteries",
+  "gameOver.inGame": "In-Game",
+  "gameOver.showResults": "Show Results",
 
   "profile.title": "Profile",
   "profile.guestAccount": "Guest account",
@@ -148,5 +150,12 @@
   "meepleType.monastery": "Monastery",
   "meepleType.city": "City",
   "meepleType.road": "Road",
-  "meepleType.field": "Field"
+  "meepleType.field": "Field",
+
+  "commandWindow.title": "Event Log",
+  "commandWindow.placeholder": "Game events will appear here...",
+  "commandWindow.inputPlaceholder": "Type /help for commands...",
+  "commandWindow.helpResponse": "Commands are in development.",
+  "commandWindow.unknownCommand": "Unknown command. Type /help for available commands.",
+  "commandWindow.empty": "No events yet."
 }

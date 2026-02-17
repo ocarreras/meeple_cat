@@ -3,14 +3,16 @@
 import { useCallback } from 'react';
 import { useWebSocket } from './useWebSocket';
 import { useGameStore } from '@/stores/gameStore';
-import type { ServerMessage, ActionMessage } from '@/lib/types';
+import type { ServerMessage, ActionMessage, CommandWindowEntry } from '@/lib/types';
 import {
   isStateUpdatePayload,
   isErrorPayload,
   isConnectedPayload,
   isGameOverPayload,
   isPlayerDisconnectedPayload,
+  isGameEventsPayload,
 } from '@/lib/types';
+import { formatGameEvent } from '@/lib/eventFormatters';
 
 interface GameConnectionReturn {
   sendAction: (action: ActionMessage) => void;
@@ -27,6 +29,7 @@ export function useGameConnection(
   const setView = useGameStore((state) => state.setView);
   const setGameOver = useGameStore((state) => state.setGameOver);
   const setError = useGameStore((state) => state.setError);
+  const addEvents = useGameStore((state) => state.addEvents);
   const addDisconnectNotification = useGameStore((state) => state.addDisconnectNotification);
   const removeDisconnectNotification = useGameStore((state) => state.removeDisconnectNotification);
   const connected = useGameStore((state) => state.connected);
@@ -63,11 +66,34 @@ export function useGameConnection(
           break;
         }
 
+        case 'game_events': {
+          if (isGameEventsPayload(message.payload)) {
+            const view = useGameStore.getState().view;
+            const entries = message.payload.events
+              .map((event) => formatGameEvent(event, view))
+              .filter((e): e is CommandWindowEntry => e !== null);
+            if (entries.length > 0) {
+              addEvents(entries);
+            }
+          }
+          break;
+        }
+
         case 'game_over': {
           if (isGameOverPayload(message.payload)) {
             console.log('Game over:', message.payload);
             setGameOver(message.payload);
             setError(null);
+            const view = useGameStore.getState().view;
+            const winnerNames = message.payload.winners
+              .map((id) => view?.players.find((p) => p.player_id === id)?.display_name ?? id)
+              .join(' & ');
+            addEvents([{
+              id: `sys-gameover-${Date.now()}`,
+              timestamp: Date.now(),
+              type: 'system',
+              text: `Game Over! Winner: ${winnerNames}`,
+            }]);
           }
           break;
         }
@@ -130,7 +156,7 @@ export function useGameConnection(
         }
       }
     },
-    [setConnected, setView, setGameOver, setError, addDisconnectNotification, removeDisconnectNotification]
+    [setConnected, setView, setGameOver, setError, addEvents, addDisconnectNotification, removeDisconnectNotification]
   );
 
   const handleConnect = useCallback(() => {

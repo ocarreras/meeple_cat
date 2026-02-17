@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { PlayerView, GameOverPayload } from '@/lib/types';
+import type { PlayerView, GameOverPayload, CommandWindowEntry } from '@/lib/types';
 
 export interface DisconnectNotification {
   playerId: string;
@@ -24,6 +24,7 @@ export interface GameStore {
   // UI state
   submitting: boolean;
   disconnectNotifications: DisconnectNotification[];
+  eventLog: CommandWindowEntry[];
 
   // Actions
   setConnected: (connected: boolean, matchId?: string, playerId?: string) => void;
@@ -33,6 +34,7 @@ export interface GameStore {
   setSubmitting: (submitting: boolean) => void;
   addDisconnectNotification: (notification: DisconnectNotification) => void;
   removeDisconnectNotification: (playerId: string) => void;
+  addEvents: (entries: CommandWindowEntry[]) => void;
   reset: () => void;
 }
 
@@ -45,6 +47,7 @@ const initialState = {
   error: null,
   submitting: false,
   disconnectNotifications: [] as DisconnectNotification[],
+  eventLog: [] as CommandWindowEntry[],
 };
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -93,6 +96,11 @@ export const useGameStore = create<GameStore>((set) => ({
       disconnectNotifications: state.disconnectNotifications.filter(
         (n) => n.playerId !== playerId
       ),
+    })),
+
+  addEvents: (entries) =>
+    set((state) => ({
+      eventLog: [...state.eventLog, ...entries].slice(-200),
     })),
 
   reset: () => set(initialState),

@@ -135,6 +135,8 @@
   "gameOver.cities": "Ciutats",
   "gameOver.roads": "Camins",
   "gameOver.monasteries": "Monestirs",
+  "gameOver.inGame": "En joc",
+  "gameOver.showResults": "Veure resultats",
 
   "profile.title": "Perfil",
   "profile.guestAccount": "Compte de convidat",
@@ -148,5 +150,12 @@
   "meepleType.monastery": "Monestir",
   "meepleType.city": "Ciutat",
   "meepleType.road": "Camí",
-  "meepleType.field": "Camp"
+  "meepleType.field": "Camp",
+
+  "commandWindow.title": "Registre d'events",
+  "commandWindow.placeholder": "Els events del joc apareixeran aquí...",
+  "commandWindow.inputPlaceholder": "Escriu /help per a comandes...",
+  "commandWindow.helpResponse": "Les comandes estan en desenvolupament.",
+  "commandWindow.unknownCommand": "Comanda desconeguda. Escriu /help per veure les comandes disponibles.",
+  "commandWindow.empty": "Encara no hi ha events."
 }

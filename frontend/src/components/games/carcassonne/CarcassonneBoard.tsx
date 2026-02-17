@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CarcassonneGameData, TilePlacement, Player } from '@/lib/types';
 import { preloadTileImages } from '@/lib/tileImages';
@@ -44,6 +44,10 @@ const SPOT_COLORS: Record<number, string> = {
 
 const BUTTON_SIZE = 48;
 
+export interface CarcassonneBoardRef {
+  panTo: (gridX: number, gridY: number) => void;
+}
+
 interface Camera {
   x: number;
   y: number;
@@ -56,28 +60,32 @@ function getTouchDistance(t1: Touch, t2: Touch): number {
   );
 }
 
-export default function CarcassonneBoard({
-  gameData,
-  players,
-  validCells,
-  selectedCell,
-  currentPreview,
-  onCellClicked,
-  isMyTurn,
-  phase,
-  showConfirmButton,
-  onConfirmTile,
-  meeplePlacementMode,
-  meepleSpots,
-  selectedMeepleSpot,
-  onMeepleSpotClick,
-  onConfirmMeeple,
-  onSkipMeeple,
-  lastPlacedPosition,
-  playerMeepleImage,
-  playerSeatIndex,
-  confirmedTile,
-}: CarcassonneBoardProps) {
+const CarcassonneBoard = forwardRef<CarcassonneBoardRef, CarcassonneBoardProps>(
+  function CarcassonneBoard(
+    {
+      gameData,
+      players,
+      validCells,
+      selectedCell,
+      currentPreview,
+      onCellClicked,
+      isMyTurn,
+      phase,
+      showConfirmButton,
+      onConfirmTile,
+      meeplePlacementMode,
+      meepleSpots,
+      selectedMeepleSpot,
+      onMeepleSpotClick,
+      onConfirmMeeple,
+      onSkipMeeple,
+      lastPlacedPosition,
+      playerMeepleImage,
+      playerSeatIndex,
+      confirmedTile,
+    }: CarcassonneBoardProps,
+    ref,
+  ) {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -97,6 +105,16 @@ export default function CarcassonneBoard({
   const pinchDistRef = useRef<number | null>(null);
   const pinchZoomStartRef = useRef<number>(1);
   const touchMovedRef = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    panTo: (gridX: number, gridY: number) => {
+      setCamera((prev) => ({
+        ...prev,
+        x: -(gridX * TILE_SIZE + TILE_SIZE / 2) * prev.zoom,
+        y: -(-gridY * TILE_SIZE + TILE_SIZE / 2) * prev.zoom,
+      }));
+    },
+  }));
 
   // Refs for tap detection callbacks (avoid stale closures)
   const isMyTurnRef = useRef(isMyTurn);
@@ -686,4 +704,7 @@ export default function CarcassonneBoard({
       </div>
     </div>
   );
-}
+  },
+);
+
+export default CarcassonneBoard;

@@ -169,6 +169,16 @@ class GameSession:
         # Save hot state
         await self._state_store.save_state(self.state)
 
+        # Forward interesting events via WebSocket
+        _FORWARDED_EVENTS = {"feature_scored", "end_game_points"}
+        forward = [
+            e.model_dump(mode="json")
+            for e in result.events
+            if e.event_type in _FORWARDED_EVENTS
+        ]
+        if forward and self._broadcaster:
+            await self._broadcaster.send_game_events(self.match_id, forward)
+
         # Broadcast
         await self._broadcast_views()
 

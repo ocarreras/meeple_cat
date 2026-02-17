@@ -159,7 +159,8 @@ export type ServerMessageType =
   | "action_committed"
   | "player_disconnected"
   | "player_reconnected"
-  | "player_forfeited";
+  | "player_forfeited"
+  | "game_events";
 
 export interface ConnectedPayload {
   match_id: MatchId;
@@ -303,6 +304,28 @@ export interface StartRoomResponse {
   tokens: Record<string, string>;
 }
 
+// Game events (streamed via WebSocket)
+export interface GameEvent {
+  event_type: string;
+  player_id: string | null;
+  payload: Record<string, unknown>;
+}
+
+export interface GameEventsPayload {
+  events: GameEvent[];
+}
+
+// Command window entry (rendered in the event log)
+export interface CommandWindowEntry {
+  id: string;
+  timestamp: number;
+  type: 'event' | 'system' | 'command_response';
+  text: string;
+  playerColor?: string;
+  tiles?: string[];
+  featureType?: string;
+}
+
 // UI-specific types
 export interface TilePlacement {
   x: number;
@@ -371,6 +394,15 @@ export function isPlayerForfeitedPayload(payload: unknown): payload is PlayerFor
     typeof payload === 'object' &&
     payload !== null &&
     'player_id' in payload
+  );
+}
+
+export function isGameEventsPayload(payload: unknown): payload is GameEventsPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'events' in payload &&
+    Array.isArray((payload as GameEventsPayload).events)
   );
 }
 
