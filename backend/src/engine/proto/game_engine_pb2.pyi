@@ -331,7 +331,7 @@ class OnPlayerForfeitResponse(_message.Message):
     def __init__(self, result: _Optional[_Union[TransitionResult, _Mapping]] = ...) -> None: ...
 
 class MctsSearchRequest(_message.Message):
-    __slots__ = ("game_id", "game_data_json", "phase", "player_id", "players", "num_simulations", "time_limit_ms", "exploration_constant", "num_determinizations", "eval_profile", "pw_c", "pw_alpha", "use_rave", "rave_k", "max_amaf_depth", "rave_fpu", "tile_aware_amaf")
+    __slots__ = ("game_id", "game_data_json", "phase", "player_id", "players", "num_simulations", "time_limit_ms", "exploration_constant", "num_determinizations", "eval_profile", "pw_c", "pw_alpha", "use_rave", "rave_k", "max_amaf_depth", "rave_fpu", "tile_aware_amaf", "bot_profile")
     GAME_ID_FIELD_NUMBER: _ClassVar[int]
     GAME_DATA_JSON_FIELD_NUMBER: _ClassVar[int]
     PHASE_FIELD_NUMBER: _ClassVar[int]
@@ -349,6 +349,7 @@ class MctsSearchRequest(_message.Message):
     MAX_AMAF_DEPTH_FIELD_NUMBER: _ClassVar[int]
     RAVE_FPU_FIELD_NUMBER: _ClassVar[int]
     TILE_AWARE_AMAF_FIELD_NUMBER: _ClassVar[int]
+    BOT_PROFILE_FIELD_NUMBER: _ClassVar[int]
     game_id: str
     game_data_json: bytes
     phase: Phase
@@ -366,7 +367,8 @@ class MctsSearchRequest(_message.Message):
     max_amaf_depth: int
     rave_fpu: bool
     tile_aware_amaf: bool
-    def __init__(self, game_id: _Optional[str] = ..., game_data_json: _Optional[bytes] = ..., phase: _Optional[_Union[Phase, _Mapping]] = ..., player_id: _Optional[str] = ..., players: _Optional[_Iterable[_Union[Player, _Mapping]]] = ..., num_simulations: _Optional[int] = ..., time_limit_ms: _Optional[float] = ..., exploration_constant: _Optional[float] = ..., num_determinizations: _Optional[int] = ..., eval_profile: _Optional[str] = ..., pw_c: _Optional[float] = ..., pw_alpha: _Optional[float] = ..., use_rave: bool = ..., rave_k: _Optional[float] = ..., max_amaf_depth: _Optional[int] = ..., rave_fpu: bool = ..., tile_aware_amaf: bool = ...) -> None: ...
+    bot_profile: str
+    def __init__(self, game_id: _Optional[str] = ..., game_data_json: _Optional[bytes] = ..., phase: _Optional[_Union[Phase, _Mapping]] = ..., player_id: _Optional[str] = ..., players: _Optional[_Iterable[_Union[Player, _Mapping]]] = ..., num_simulations: _Optional[int] = ..., time_limit_ms: _Optional[float] = ..., exploration_constant: _Optional[float] = ..., num_determinizations: _Optional[int] = ..., eval_profile: _Optional[str] = ..., pw_c: _Optional[float] = ..., pw_alpha: _Optional[float] = ..., use_rave: bool = ..., rave_k: _Optional[float] = ..., max_amaf_depth: _Optional[int] = ..., rave_fpu: bool = ..., tile_aware_amaf: bool = ..., bot_profile: _Optional[str] = ...) -> None: ...
 
 class MctsSearchResponse(_message.Message):
     __slots__ = ("action_json", "iterations_run", "elapsed_ms")
@@ -482,3 +484,44 @@ class ArenaScoreStats(_message.Message):
     ci_95_lo: float
     ci_95_hi: float
     def __init__(self, avg: _Optional[float] = ..., stddev: _Optional[float] = ..., win_rate: _Optional[float] = ..., ci_95_lo: _Optional[float] = ..., ci_95_hi: _Optional[float] = ...) -> None: ...
+
+class ListBotProfilesRequest(_message.Message):
+    __slots__ = ("game_id",)
+    GAME_ID_FIELD_NUMBER: _ClassVar[int]
+    game_id: str
+    def __init__(self, game_id: _Optional[str] = ...) -> None: ...
+
+class BotProfileInfo(_message.Message):
+    __slots__ = ("name", "description", "strategy_type", "num_simulations", "time_limit_ms", "num_determinizations", "eval_profile", "use_rave")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    STRATEGY_TYPE_FIELD_NUMBER: _ClassVar[int]
+    NUM_SIMULATIONS_FIELD_NUMBER: _ClassVar[int]
+    TIME_LIMIT_MS_FIELD_NUMBER: _ClassVar[int]
+    NUM_DETERMINIZATIONS_FIELD_NUMBER: _ClassVar[int]
+    EVAL_PROFILE_FIELD_NUMBER: _ClassVar[int]
+    USE_RAVE_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    description: str
+    strategy_type: str
+    num_simulations: int
+    time_limit_ms: float
+    num_determinizations: int
+    eval_profile: str
+    use_rave: bool
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., strategy_type: _Optional[str] = ..., num_simulations: _Optional[int] = ..., time_limit_ms: _Optional[float] = ..., num_determinizations: _Optional[int] = ..., eval_profile: _Optional[str] = ..., use_rave: bool = ...) -> None: ...
+
+class ListBotProfilesResponse(_message.Message):
+    __slots__ = ("profiles", "production_mapping")
+    class ProductionMappingEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    PROFILES_FIELD_NUMBER: _ClassVar[int]
+    PRODUCTION_MAPPING_FIELD_NUMBER: _ClassVar[int]
+    profiles: _containers.RepeatedCompositeFieldContainer[BotProfileInfo]
+    production_mapping: _containers.ScalarMap[str, str]
+    def __init__(self, profiles: _Optional[_Iterable[_Union[BotProfileInfo, _Mapping]]] = ..., production_mapping: _Optional[_Mapping[str, str]] = ...) -> None: ...

@@ -46,12 +46,20 @@ logger = __import__("logging").getLogger(__name__)
 
 
 class GrpcMctsStrategy:
-    """Delegates MCTS search to the Rust game engine via a single gRPC call."""
+    """Delegates MCTS search to the Rust game engine via a single gRPC call.
+
+    When *bot_profile* is set, the Rust engine loads all MCTS params and eval
+    weights from the named profile in ``bot_profiles.toml``.  The individual
+    param fields are then ignored.  This is the preferred way to configure bots
+    in production — just pass ``bot_profile="hard"`` and let the engine handle
+    the rest.
+    """
 
     def __init__(
         self,
         grpc_address: str,
         game_id: str,
+        bot_profile: str = "",
         num_simulations: int = 500,
         time_limit_ms: float = 2000,
         exploration_constant: float = 1.41,
@@ -72,6 +80,7 @@ class GrpcMctsStrategy:
         self._pb2 = _pb2
         self._stub = _pb2_grpc.GameEngineServiceStub(_grpc.insecure_channel(grpc_address))
         self._game_id = game_id
+        self.bot_profile = bot_profile
         self.num_simulations = num_simulations
         self.time_limit_ms = time_limit_ms
         self.exploration_constant = exploration_constant
@@ -123,6 +132,7 @@ class GrpcMctsStrategy:
                 phase=_phase_to_proto(phase),
                 player_id=player_id,
                 players=proto_players,
+                bot_profile=self.bot_profile,
                 num_simulations=self.num_simulations,
                 time_limit_ms=self.time_limit_ms,
                 exploration_constant=self.exploration_constant,
@@ -137,9 +147,10 @@ class GrpcMctsStrategy:
                 tile_aware_amaf=self.tile_aware_amaf,
             )
         )
+        profile_label = self.bot_profile or self.eval_profile or "default"
         logger.info(
-            "MCTS search: player=%s iters=%d elapsed=%.0fms eval=%s",
-            player_id, resp.iterations_run, resp.elapsed_ms, self.eval_profile,
+            "MCTS search: player=%s iters=%d elapsed=%.0fms profile=%s",
+            player_id, resp.iterations_run, resp.elapsed_ms, profile_label,
         )
         return json.loads(resp.action_json)
 

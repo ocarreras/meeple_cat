@@ -69,11 +69,21 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     logger.info(f"Loaded {len(registry.list_games())} game plugins")
 
-    # Register MCTS bot strategy backed by Rust engine
+    # Register difficulty-tier MCTS bot strategies backed by Rust engine.
+    # Each difficulty maps to a named profile in bot_profiles.toml on the Rust side.
     from src.engine.bot_strategy import register_strategy, GrpcMctsStrategy
     grpc_url = settings.game_engine_grpc_url
-    register_strategy("mcts", lambda game_id="carcassonne", **kwargs: GrpcMctsStrategy(
-        grpc_address=grpc_url, game_id=game_id, eval_profile="default", **kwargs,
+
+    for difficulty in ("easy", "medium", "hard"):
+        def _make_factory(diff: str) -> object:
+            return lambda game_id="carcassonne", **kw: GrpcMctsStrategy(
+                grpc_address=grpc_url, game_id=game_id, bot_profile=diff, **kw,
+            )
+        register_strategy(f"mcts-{difficulty}", _make_factory(difficulty))
+
+    # Backward compat: "mcts" → hard profile
+    register_strategy("mcts", lambda game_id="carcassonne", **kw: GrpcMctsStrategy(
+        grpc_address=grpc_url, game_id=game_id, bot_profile="hard", **kw,
     ))
 
     # Initialize connection manager and broadcaster

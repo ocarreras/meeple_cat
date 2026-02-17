@@ -1,0 +1,92 @@
+# Bot profile definitions for Carcassonne
+#
+# Each profile bundles MCTS parameters + evaluator configuration.
+# Used by the arena CLI and gRPC server.
+#
+# Workflow:
+#   1. Add/edit a profile below
+#   2. Test:  cargo run --release --bin arena -- --games 100 --p1-profile hard --p2-profile <new>
+#   3. Promote to production by updating [production] mapping
+#   4. Deploy: git push (CI rebuilds game-engine image)
+
+# ---------------------------------------------------------------------------
+# Difficulty tiers
+# ---------------------------------------------------------------------------
+
+[profiles.easy]
+description = "Easy bot — no heuristic eval, score-diff only"
+strategy_type = "mcts"
+num_simulations = 100
+time_limit_ms = 1000
+num_determinizations = 2
+eval_profile = ""
+
+[profiles.medium]
+description = "Medium difficulty — v1 evaluator with default weights"
+strategy_type = "mcts"
+num_simulations = 300
+time_limit_ms = 3000
+num_determinizations = 3
+eval_profile = "default"
+
+[profiles.hard]
+description = "Hard — v2 evaluator (unified score space), no RAVE"
+strategy_type = "mcts"
+num_simulations = 800
+time_limit_ms = 5000
+num_determinizations = 5
+# V2 evaluator: negative score_scale activates unified score space mode.
+# All signals combined in raw points before single final sigmoid.
+# Arena-validated: 57% win rate vs medium over 200 games [CI: 50.1%-63.7%].
+[profiles.hard.eval_weights]
+score_scale = -10.0
+score_base = 0.0
+score_delta = 0.0
+potential_base = 0.0
+potential_delta = 0.0
+potential_scale = 0.0
+meeple_base = 0.0
+meeple_delta = 0.0
+meeple_hoard_threshold = 0
+meeple_hoard_penalty = 0.0
+meeple_hoard_progress_gate = 0.0
+field_base = 0.0
+field_delta = 0.0
+field_scale = 0.0
+
+# ---------------------------------------------------------------------------
+# Experimental profiles (for arena evaluation)
+# ---------------------------------------------------------------------------
+
+# Example: test a different v2 scale
+# [profiles.exp_v2_scale15]
+# description = "V2 eval, scale=15"
+# strategy_type = "mcts"
+# num_simulations = 800
+# time_limit_ms = 5000
+# num_determinizations = 5
+# [profiles.exp_v2_scale15.eval_weights]
+# score_scale = -15.0
+# score_base = 0.0
+# score_delta = 0.0
+# potential_base = 0.0
+# potential_delta = 0.0
+# potential_scale = 0.0
+# meeple_base = 0.0
+# meeple_delta = 0.0
+# meeple_hoard_threshold = 0
+# meeple_hoard_penalty = 0.0
+# meeple_hoard_progress_gate = 0.0
+# field_base = 0.0
+# field_delta = 0.0
+# field_scale = 0.0
+
+# ---------------------------------------------------------------------------
+# Production mapping: difficulty tier -> profile name
+# ---------------------------------------------------------------------------
+
+[production]
+easy = "easy"
+medium = "medium"
+hard = "hard"
+default = "hard"

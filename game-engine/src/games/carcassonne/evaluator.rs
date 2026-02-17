@@ -7,7 +7,7 @@ use crate::games::carcassonne::scoring::get_adjacent_completed_cities;
 use crate::games::carcassonne::types::{CarcassonneState, FeatureType, PlacedMeeple, Position};
 
 /// Tunable parameters for the Carcassonne heuristic evaluator.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
 pub struct EvalWeights {
     pub score_base: f64,
     pub score_delta: f64,
@@ -23,6 +23,30 @@ pub struct EvalWeights {
     pub field_base: f64,
     pub field_delta: f64,
     pub field_scale: f64,
+
+    // --- Enhanced heuristic fields (default 0.0 = disabled) ---
+    /// Multiplier for features with exactly 1 open edge (near completion).
+    /// Suggested: 1.5-3.0. The potential of near-complete features is multiplied by this.
+    #[serde(default)]
+    pub near_completion_multiplier: f64,
+    /// Weight for trapped meeple penalty. Meeples on features with <10% completion
+    /// probability after game_progress > 0.5 are penalized.
+    /// Suggested: 2.0-5.0 (points of penalty per trapped meeple).
+    #[serde(default)]
+    pub trapped_meeple_weight: f64,
+    /// Exponent for city tile count in potential calculation.
+    /// 1.0 = linear (default), >1.0 rewards larger cities more.
+    /// Suggested: 1.0-1.3.
+    #[serde(default = "one")]
+    pub city_size_exponent: f64,
+    /// Bonus weight for features where player has sole majority.
+    /// Suggested: 0.0-0.3 (added to potential for uncontested features).
+    #[serde(default)]
+    pub dominance_bonus: f64,
+}
+
+fn one() -> f64 {
+    1.0
 }
 
 impl Default for EvalWeights {
@@ -46,6 +70,10 @@ pub static AGGRESSIVE_WEIGHTS: EvalWeights = EvalWeights {
     field_base: 0.15,
     field_delta: 0.10,
     field_scale: 10.0,
+    near_completion_multiplier: 0.0,
+    trapped_meeple_weight: 0.0,
+    city_size_exponent: 1.0,
+    dominance_bonus: 0.0,
 };
 
 pub static FIELD_HEAVY_WEIGHTS: EvalWeights = EvalWeights {
@@ -63,6 +91,10 @@ pub static FIELD_HEAVY_WEIGHTS: EvalWeights = EvalWeights {
     field_base: 0.25,
     field_delta: 0.15,
     field_scale: 8.0,
+    near_completion_multiplier: 0.0,
+    trapped_meeple_weight: 0.0,
+    city_size_exponent: 1.0,
+    dominance_bonus: 0.0,
 };
 
 pub static DEFAULT_WEIGHTS: EvalWeights = EvalWeights {
@@ -80,6 +112,10 @@ pub static DEFAULT_WEIGHTS: EvalWeights = EvalWeights {
     field_base: 0.10,
     field_delta: 0.10,
     field_scale: 10.0,
+    near_completion_multiplier: 0.0,
+    trapped_meeple_weight: 0.0,
+    city_size_exponent: 1.0,
+    dominance_bonus: 0.0,
 };
 
 pub static CONSERVATIVE_WEIGHTS: EvalWeights = EvalWeights {
@@ -97,15 +133,44 @@ pub static CONSERVATIVE_WEIGHTS: EvalWeights = EvalWeights {
     field_base: 0.15,
     field_delta: 0.05,
     field_scale: 10.0,
+    near_completion_multiplier: 0.0,
+    trapped_meeple_weight: 0.0,
+    city_size_exponent: 1.0,
+    dominance_bonus: 0.0,
 };
 
-/// Create an evaluation function parameterised by `weights`.
+/// Create an evaluation function parameterised by `weights` (static reference).
+/// If score_scale is negative, uses the v2 evaluator (unified score space).
 pub fn make_carcassonne_eval(
     weights: &'static EvalWeights,
 ) -> Box<dyn Fn(&CarcassonneState, &Phase, &str, &[Player]) -> f64 + Send + Sync> {
-    Box::new(move |state, phase, player_id, players| {
-        evaluate(state, phase, player_id, players, weights)
-    })
+    if weights.score_scale < 0.0 {
+        let scale = weights.score_scale.abs();
+        Box::new(move |state, phase, player_id, players| {
+            evaluate_v2(state, phase, player_id, players, scale)
+        })
+    } else {
+        Box::new(move |state, phase, player_id, players| {
+            evaluate(state, phase, player_id, players, weights)
+        })
+    }
+}
+
+/// Create an evaluation function that captures `weights` by value (for runtime-loaded weights).
+/// If score_scale is negative, uses the v2 evaluator (unified score space).
+pub fn make_carcassonne_eval_owned(
+    weights: EvalWeights,
+) -> Box<dyn Fn(&CarcassonneState, &Phase, &str, &[Player]) -> f64 + Send + Sync> {
+    if weights.score_scale < 0.0 {
+        let scale = weights.score_scale.abs();
+        Box::new(move |state, phase, player_id, players| {
+            evaluate_v2(state, phase, player_id, players, scale)
+        })
+    } else {
+        Box::new(move |state, phase, player_id, players| {
+            evaluate(state, phase, player_id, players, &weights)
+        })
+    }
 }
 
 fn evaluate(
@@ -138,6 +203,7 @@ fn evaluate(
     let mut my_potential = 0.0_f64;
     let mut opp_potential = 0.0_f64;
     let mut wasted_meeple_penalty = 0.0_f64;
+    let mut my_trapped_meeples = 0.0_f64;
 
     for (_fid, feat) in &state.features {
         if feat.is_complete {
@@ -150,29 +216,49 @@ fn evaluate(
             continue;
         }
 
-        let potential = raw_feature_potential(
+        let open_edges = feat.open_edges.len();
+        let mut potential = raw_feature_potential(
             feat.feature_type,
             feat.tiles.len(),
-            feat.open_edges.len(),
+            open_edges,
             feat.pennants as i64,
             tiles_remaining,
             state,
             &feat.tiles,
+            w.city_size_exponent,
         );
 
+        // Enhanced: near-completion bonus
+        if w.near_completion_multiplier > 0.0 && open_edges == 1 {
+            potential *= w.near_completion_multiplier;
+        }
+
         let (my_count, max_count) = meeple_counts(&feat.meeples, player_id);
+
+        // Enhanced: trapped meeple detection
+        if w.trapped_meeple_weight > 0.0 && my_count > 0 && game_progress > 0.4 {
+            let cp = completion_probability(open_edges, tiles_remaining);
+            if cp < 0.15 {
+                my_trapped_meeples += my_count as f64;
+            }
+        }
 
         if my_count == 0 {
             opp_potential += potential;
         } else if my_count >= max_count {
             my_potential += potential;
+            // Enhanced: dominance bonus for uncontested features
+            if w.dominance_bonus > 0.0 && max_count == 0 {
+                my_potential += potential * w.dominance_bonus;
+            }
         } else {
             opp_potential += potential;
             wasted_meeple_penalty += my_count as f64 * 1.5;
         }
     }
 
-    let potential_diff = my_potential - opp_potential - wasted_meeple_penalty;
+    let trapped_penalty = my_trapped_meeples * w.trapped_meeple_weight;
+    let potential_diff = my_potential - opp_potential - wasted_meeple_penalty - trapped_penalty;
     let potential_component = sigmoid(potential_diff, w.potential_scale);
 
     // 3. Meeple economy
@@ -229,6 +315,144 @@ fn evaluate(
     value.clamp(0.0, 1.0)
 }
 
+/// V2 evaluator: all signals combined in raw points, single final sigmoid.
+/// Eliminates double-sigmoid compression that makes the original eval too flat.
+/// Controlled by `score_scale` field: when negative, indicates v2 mode.
+/// Usage: set score_scale to a negative value (e.g. -20.0) to activate v2.
+/// The absolute value is used as the final sigmoid scale.
+fn evaluate_v2(
+    state: &CarcassonneState,
+    _phase: &Phase,
+    player_id: &str,
+    players: &[Player],
+    scale: f64,
+) -> f64 {
+    let tiles_remaining = state.tile_bag.len() as i64;
+    let board_size = state.board.tiles.len() as i64;
+    let total_tiles = board_size + tiles_remaining;
+    let game_progress = 1.0 - (tiles_remaining as f64 / total_tiles.max(1) as f64);
+
+    // 1. Current score differential (raw points)
+    let my_score = state.scores.get(player_id).copied().unwrap_or(0) as f64;
+    let mut max_opp_score = 0.0_f64;
+    for (pid, &s) in &state.scores {
+        if pid != player_id {
+            let sf = s as f64;
+            if sf > max_opp_score {
+                max_opp_score = sf;
+            }
+        }
+    }
+    let score_diff = my_score - max_opp_score;
+
+    // 2. Expected future points from incomplete features (raw points)
+    let mut my_expected = 0.0_f64;
+    let mut opp_expected = 0.0_f64;
+    let mut my_stuck_meeples = 0i64;
+
+    for (_fid, feat) in &state.features {
+        if feat.is_complete || feat.feature_type == FeatureType::Field || feat.meeples.is_empty() {
+            continue;
+        }
+
+        let open = feat.open_edges.len();
+        let cp = completion_probability(open, tiles_remaining);
+        let tc = feat.tiles.len() as f64;
+        let pen = feat.pennants as f64;
+
+        // Expected points: completed value × probability + incomplete value × (1 - probability)
+        let expected = match feat.feature_type {
+            FeatureType::City => cp * (tc * 2.0 + pen * 2.0) + (1.0 - cp) * (tc + pen),
+            FeatureType::Road => cp * tc + (1.0 - cp) * tc, // roads score same either way
+            FeatureType::Monastery => {
+                if feat.tiles.is_empty() {
+                    0.0
+                } else {
+                    let pos = Position::from_key(&feat.tiles[0]);
+                    let neighbors: usize = pos
+                        .all_surrounding()
+                        .iter()
+                        .filter(|p| state.board.tiles.contains_key(&(p.x, p.y)))
+                        .count();
+                    let mcp = completion_probability(8 - neighbors, tiles_remaining);
+                    mcp * 9.0 + (1.0 - mcp) * (1.0 + neighbors as f64)
+                }
+            }
+            _ => 0.0,
+        };
+
+        let (my_count, max_opp_count) = meeple_counts(&feat.meeples, player_id);
+
+        if my_count == 0 {
+            opp_expected += expected;
+        } else if my_count >= max_opp_count {
+            my_expected += expected;
+        } else {
+            // Minority: opponent gets the points, our meeple is stuck
+            opp_expected += expected;
+            my_stuck_meeples += my_count as i64;
+        }
+
+        // Track stuck meeples on hopeless features
+        if my_count > 0 && cp < 0.15 && game_progress > 0.4 {
+            my_stuck_meeples += my_count as i64;
+        }
+    }
+
+    let potential_diff = my_expected - opp_expected;
+
+    // 3. Meeple economy (convert to point equivalent)
+    // Each available meeple ≈ 3-5 expected future points (opportunity to claim features)
+    let my_meeples = state.meeple_supply.get(player_id).copied().unwrap_or(0) as f64;
+    let mut avg_opp_meeples = 0.0_f64;
+    let mut opp_count = 0;
+    for p in players {
+        if p.player_id != player_id {
+            avg_opp_meeples +=
+                state.meeple_supply.get(&p.player_id).copied().unwrap_or(0) as f64;
+            opp_count += 1;
+        }
+    }
+    if opp_count > 0 {
+        avg_opp_meeples /= opp_count as f64;
+    }
+
+    // Meeple value decreases as game progresses (fewer tiles = fewer opportunities)
+    let meeple_point_value = 4.0 * (1.0 - game_progress * 0.7);
+    let meeple_diff = (my_meeples - avg_opp_meeples) * meeple_point_value;
+
+    // Stuck meeple penalty: each stuck meeple is a lost opportunity
+    let stuck_penalty = my_stuck_meeples as f64 * meeple_point_value * 0.5;
+
+    // 4. Field scoring differential (raw points, already in points from estimate_field_value)
+    let my_field = estimate_field_value(state, player_id, tiles_remaining);
+    let mut max_opp_field = 0.0_f64;
+    for p in players {
+        if p.player_id != player_id {
+            let f = estimate_field_value(state, &p.player_id, tiles_remaining);
+            if f > max_opp_field {
+                max_opp_field = f;
+            }
+        }
+    }
+    let field_diff = my_field - max_opp_field;
+
+    // Game-progress weighting: early game values potential more, late game values score more
+    let score_weight = 0.35 + 0.15 * game_progress; // 0.35 → 0.50
+    let potential_weight = 0.35 - 0.15 * game_progress; // 0.35 → 0.20
+    let field_weight = 0.10 + 0.10 * game_progress; // 0.10 → 0.20
+    let meeple_weight = 0.20 - 0.10 * game_progress; // 0.20 → 0.10
+
+    let total_advantage = score_weight * score_diff
+        + potential_weight * potential_diff
+        + field_weight * field_diff
+        + meeple_weight * meeple_diff
+        - stuck_penalty * 0.1;
+
+    // Single sigmoid over total point advantage
+    sigmoid(total_advantage, scale).clamp(0.0, 1.0)
+}
+
 fn sigmoid(x: f64, scale: f64) -> f64 {
     1.0 / (1.0 + (-x / scale.max(1e-9)).exp())
 }
@@ -262,12 +486,14 @@ fn raw_feature_potential(
     tiles_remaining: i64,
     state: &CarcassonneState,
     tiles: &[String],
+    city_size_exponent: f64,
 ) -> f64 {
     match feature_type {
         FeatureType::City => {
             let cp = completion_probability(open_edge_count, tiles_remaining);
-            cp * (tile_count as f64 * 2.0 + pennants as f64 * 2.0)
-                + (1.0 - cp) * (tile_count as f64 + pennants as f64)
+            let size = (tile_count as f64).powf(city_size_exponent);
+            cp * (size * 2.0 + pennants as f64 * 2.0)
+                + (1.0 - cp) * (size + pennants as f64)
         }
         FeatureType::Road => tile_count as f64,
         FeatureType::Monastery => {
@@ -403,6 +629,7 @@ mod tests {
             let potential = raw_feature_potential(
                 feat.feature_type, feat.tiles.len(), feat.open_edges.len(),
                 feat.pennants as i64, tiles_remaining, &state, &feat.tiles,
+                w.city_size_exponent,
             );
             let (my_count, max_count) = meeple_counts(&feat.meeples, player_id);
             if my_count == 0 {

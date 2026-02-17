@@ -12,6 +12,7 @@ use crate::engine::plugin::TypedGamePlugin;
 use crate::engine::simulator::{apply_action_and_resolve, SimulationState};
 
 /// MCTS search parameters.
+#[derive(Clone)]
 pub struct MctsParams {
     pub num_simulations: usize,
     pub time_limit_ms: f64,

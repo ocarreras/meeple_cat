@@ -150,22 +150,29 @@ export default function RoomDetail({
           <div className="space-y-2">
             {isInRoom ? (
               <>
-                {/* Creator: add bot */}
+                {/* Creator: add bot with difficulty */}
                 {isCreator && hasEmptySeat && (
                   <div className="flex gap-2">
                     <button
-                      onClick={() => onAddBot('random')}
+                      onClick={() => onAddBot('mcts-easy')}
                       disabled={loading}
-                      className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
+                      className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
                     >
-                      {t('room.addRandomBot')}
+                      {t('room.addEasyBot')}
                     </button>
                     <button
-                      onClick={() => onAddBot('mcts')}
+                      onClick={() => onAddBot('mcts-medium')}
                       disabled={loading}
-                      className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
+                      className="flex-1 px-4 py-2.5 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
                     >
-                      {t('room.addMctsBot')}
+                      {t('room.addMediumBot')}
+                    </button>
+                    <button
+                      onClick={() => onAddBot('mcts-hard')}
+                      disabled={loading}
+                      className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition text-sm"
+                    >
+                      {t('room.addHardBot')}
                     </button>
                   </div>
                 )}

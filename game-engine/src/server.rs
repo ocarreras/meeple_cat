@@ -9,13 +9,14 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use crate::engine::arena::run_arena;
+use crate::engine::bot_profiles::{load_default_profiles, load_profiles, BotProfilesFile};
 use crate::engine::bot_strategy::{BotStrategy, MctsStrategy, RandomStrategy};
 use crate::engine::mcts::{mcts_search, MctsParams};
 use crate::engine::models;
 use crate::engine::plugin::{GamePlugin, TypedGamePlugin};
 use crate::games::carcassonne::evaluator::{
-    make_carcassonne_eval, AGGRESSIVE_WEIGHTS, CONSERVATIVE_WEIGHTS, DEFAULT_WEIGHTS,
-    FIELD_HEAVY_WEIGHTS,
+    make_carcassonne_eval, make_carcassonne_eval_owned, AGGRESSIVE_WEIGHTS, CONSERVATIVE_WEIGHTS,
+    DEFAULT_WEIGHTS, FIELD_HEAVY_WEIGHTS,
 };
 use crate::games::carcassonne::plugin::CarcassonnePlugin;
 use crate::games::carcassonne::types::CarcassonneState;
@@ -31,13 +32,24 @@ use proto::*;
 /// The gRPC service implementation.
 pub struct GameEngineServer {
     registry: Arc<GameRegistry>,
+    profiles: Arc<BotProfilesFile>,
 }
 
 impl GameEngineServer {
     pub fn new(registry: GameRegistry) -> Self {
+        let profiles = load_default_profiles();
         Self {
             registry: Arc::new(registry),
+            profiles: Arc::new(profiles),
         }
+    }
+
+    pub fn with_profiles(registry: GameRegistry, profiles_path: &std::path::Path) -> Result<Self, String> {
+        let profiles = load_profiles(profiles_path)?;
+        Ok(Self {
+            registry: Arc::new(registry),
+            profiles: Arc::new(profiles),
+        })
     }
 
     fn get_plugin(&self, game_id: &str) -> Result<&dyn GamePlugin, Status> {
@@ -563,26 +575,50 @@ impl GameEngineService for GameEngineServer {
             ));
         }
 
-        let params = build_mcts_params(
-            req.num_simulations,
-            req.time_limit_ms,
-            req.exploration_constant,
-            req.num_determinizations,
-            req.pw_c,
-            req.pw_alpha,
-            req.use_rave,
-            req.rave_k,
-            req.max_amaf_depth,
-            req.rave_fpu,
-            req.tile_aware_amaf,
-        );
+        // If bot_profile is set, load params + eval from the named profile
+        let (params, eval_profile_str) = if !req.bot_profile.is_empty() {
+            let profile = self.profiles.profiles.get(&req.bot_profile).ok_or_else(|| {
+                Status::invalid_argument(format!(
+                    "unknown bot_profile: '{}'. Available: {:?}",
+                    req.bot_profile,
+                    self.profiles.profiles.keys().collect::<Vec<_>>()
+                ))
+            })?;
+            (profile.to_mcts_params(), profile.effective_eval_profile().to_string())
+        } else {
+            let params = build_mcts_params(
+                req.num_simulations,
+                req.time_limit_ms,
+                req.exploration_constant,
+                req.num_determinizations,
+                req.pw_c,
+                req.pw_alpha,
+                req.use_rave,
+                req.rave_k,
+                req.max_amaf_depth,
+                req.rave_fpu,
+                req.tile_aware_amaf,
+            );
+            (params, req.eval_profile.clone())
+        };
+
+        // Resolve eval: custom weights from profile take priority, then named preset
+        let custom_weights = if !req.bot_profile.is_empty() {
+            self.profiles.profiles.get(&req.bot_profile).and_then(|p| p.eval_weights)
+        } else {
+            None
+        };
 
         let t0 = Instant::now();
 
         let (action, iterations_run) = match req.game_id.as_str() {
             "carcassonne" => {
                 let plugin = CarcassonnePlugin;
-                let eval_fn = resolve_eval_fn(&req.eval_profile);
+                let eval_fn = if let Some(w) = custom_weights {
+                    Some(make_carcassonne_eval_owned(w))
+                } else {
+                    resolve_eval_fn(&eval_profile_str)
+                };
                 let state = plugin.decode_state(&game_data);
                 let eval_ref = eval_fn.as_ref().map(|f| {
                     f.as_ref()
@@ -751,5 +787,38 @@ impl GameEngineService for GameEngineServer {
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    // --- ListBotProfiles ---
+    async fn list_bot_profiles(
+        &self,
+        _request: Request<ListBotProfilesRequest>,
+    ) -> Result<Response<ListBotProfilesResponse>, Status> {
+        let mut profiles = Vec::new();
+        for (name, profile) in &self.profiles.profiles {
+            let params = profile.to_mcts_params();
+            profiles.push(BotProfileInfo {
+                name: name.clone(),
+                description: profile.description.clone().unwrap_or_default(),
+                strategy_type: profile.strategy_type.clone(),
+                num_simulations: params.num_simulations as i32,
+                time_limit_ms: params.time_limit_ms,
+                num_determinizations: params.num_determinizations as i32,
+                eval_profile: profile.effective_eval_profile().to_string(),
+                use_rave: params.use_rave,
+            });
+        }
+
+        let mut production_mapping = HashMap::new();
+        let prod = &self.profiles.production;
+        if let Some(v) = &prod.easy { production_mapping.insert("easy".to_string(), v.clone()); }
+        if let Some(v) = &prod.medium { production_mapping.insert("medium".to_string(), v.clone()); }
+        if let Some(v) = &prod.hard { production_mapping.insert("hard".to_string(), v.clone()); }
+        if let Some(v) = &prod.default { production_mapping.insert("default".to_string(), v.clone()); }
+
+        Ok(Response::new(ListBotProfilesResponse {
+            profiles,
+            production_mapping,
+        }))
     }
 }

@@ -101,6 +101,11 @@ class GameEngineServiceStub(object):
                 request_serializer=meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.RunArenaRequest.SerializeToString,
                 response_deserializer=meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ArenaProgressUpdate.FromString,
                 _registered_method=True)
+        self.ListBotProfiles = channel.unary_unary(
+                '/meeple.game_engine.v1.GameEngineService/ListBotProfiles',
+                request_serializer=meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ListBotProfilesRequest.SerializeToString,
+                response_deserializer=meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ListBotProfilesResponse.FromString,
+                _registered_method=True)
 
 
 class GameEngineServiceServicer(object):
@@ -186,6 +191,12 @@ class GameEngineServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListBotProfiles(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GameEngineServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -253,6 +264,11 @@ def add_GameEngineServiceServicer_to_server(servicer, server):
                     servicer.RunArena,
                     request_deserializer=meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.RunArenaRequest.FromString,
                     response_serializer=meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ArenaProgressUpdate.SerializeToString,
+            ),
+            'ListBotProfiles': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListBotProfiles,
+                    request_deserializer=meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ListBotProfilesRequest.FromString,
+                    response_serializer=meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ListBotProfilesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -608,6 +624,33 @@ class GameEngineService(object):
             '/meeple.game_engine.v1.GameEngineService/RunArena',
             meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.RunArenaRequest.SerializeToString,
             meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ArenaProgressUpdate.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListBotProfiles(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/meeple.game_engine.v1.GameEngineService/ListBotProfiles',
+            meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ListBotProfilesRequest.SerializeToString,
+            meeple_dot_game__engine_dot_v1_dot_game__engine__pb2.ListBotProfilesResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -1,0 +1,15 @@
+{{- if .Values.gameEngine.enabled }}
+{{- if .Values.gameEngine.botProfiles }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "meeple.fullname" . }}-bot-profiles
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "meeple.labels" . | nindent 4 }}
+    app.kubernetes.io/component: game-engine
+data:
+  bot_profiles.toml: |
+    {{- .Values.gameEngine.botProfiles | nindent 4 }}
+{{- end }}
+{{- end }}

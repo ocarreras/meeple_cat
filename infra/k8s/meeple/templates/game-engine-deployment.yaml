@@ -35,6 +35,17 @@ spec:
               value: {{ .Values.gameEngine.port | quote }}
             - name: RUST_LOG
               value: "info"
+            {{- if .Values.gameEngine.botProfiles }}
+            - name: MEEPLE_BOT_PROFILES
+              value: "/etc/meeple/bot_profiles.toml"
+            {{- end }}
+          {{- if .Values.gameEngine.botProfiles }}
+          volumeMounts:
+            - name: bot-profiles
+              mountPath: /etc/meeple/bot_profiles.toml
+              subPath: bot_profiles.toml
+              readOnly: true
+          {{- end }}
           readinessProbe:
             tcpSocket:
               port: {{ .Values.gameEngine.port }}
@@ -49,4 +60,10 @@ spec:
             failureThreshold: 3
           resources:
             {{- toYaml .Values.gameEngine.resources | nindent 12 }}
+      {{- if .Values.gameEngine.botProfiles }}
+      volumes:
+        - name: bot-profiles
+          configMap:
+            name: {{ include "meeple.fullname" . }}-bot-profiles
+      {{- end }}
 {{- end }}

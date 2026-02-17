@@ -15,6 +15,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/meeple-game-engine /usr/local/bin/meeple-game-engine
+COPY bot_profiles.toml /etc/meeple/bot_profiles.toml
 
 EXPOSE 50051
 

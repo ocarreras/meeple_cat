@@ -59,6 +59,8 @@ services:
     container_name: meeple_game_engine
     ports:
       - "50051:50051"
+    volumes:
+      - ./game-engine/bot_profiles.toml:/etc/meeple/bot_profiles.toml:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "true"]

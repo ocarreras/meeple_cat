@@ -73,6 +73,7 @@ service GameEngineService {
   rpc OnPlayerForfeit(OnPlayerForfeitRequest) returns (OnPlayerForfeitResponse);
   rpc MctsSearch(MctsSearchRequest) returns (MctsSearchResponse);
   rpc RunArena(RunArenaRequest) returns (stream ArenaProgressUpdate);
+  rpc ListBotProfiles(ListBotProfilesRequest) returns (ListBotProfilesResponse);
 }
 
 // --- Requests/Responses ---
@@ -218,6 +219,8 @@ message MctsSearchRequest {
   int32 max_amaf_depth = 19;
   bool rave_fpu = 20;
   bool tile_aware_amaf = 21;
+  // Named bot profile from bot_profiles.toml. When set, overrides individual param fields.
+  string bot_profile = 22;
 }
 
 message MctsSearchResponse {
@@ -271,4 +274,26 @@ message ArenaScoreStats {
   double win_rate = 3;
   double ci_95_lo = 4;
   double ci_95_hi = 5;
+}
+
+// --- Bot profiles ---
+
+message ListBotProfilesRequest {
+  string game_id = 1;
+}
+
+message BotProfileInfo {
+  string name = 1;
+  string description = 2;
+  string strategy_type = 3;
+  int32 num_simulations = 4;
+  double time_limit_ms = 5;
+  int32 num_determinizations = 6;
+  string eval_profile = 7;
+  bool use_rave = 8;
+}
+
+message ListBotProfilesResponse {
+  repeated BotProfileInfo profiles = 1;
+  map<string, string> production_mapping = 2;
 }
