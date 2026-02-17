@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
     from src.engine.bot_strategy import register_strategy, GrpcMctsStrategy
     grpc_url = settings.game_engine_grpc_url
     register_strategy("mcts", lambda game_id="carcassonne", **kwargs: GrpcMctsStrategy(
-        grpc_address=grpc_url, game_id=game_id, **kwargs,
+        grpc_address=grpc_url, game_id=game_id, eval_profile="default", **kwargs,
     ))
 
     # Initialize connection manager and broadcaster

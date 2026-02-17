@@ -40,6 +40,9 @@ class RandomStrategy:
         return self._rng.choice(valid)
 
 
+logger = __import__("logging").getLogger(__name__)
+
+
 class GrpcMctsStrategy:
     """Delegates MCTS search to the Rust game engine via a single gRPC call."""
 
@@ -111,6 +114,10 @@ class GrpcMctsStrategy:
                 rave_fpu=self.rave_fpu,
                 tile_aware_amaf=self.tile_aware_amaf,
             )
+        )
+        logger.info(
+            "MCTS search: player=%s iters=%d elapsed=%.0fms eval=%s",
+            player_id, resp.iterations_run, resp.elapsed_ms, self.eval_profile,
         )
         return json.loads(resp.action_json)
 
