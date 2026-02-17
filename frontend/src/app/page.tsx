@@ -14,23 +14,20 @@ import {
   addBot,
   startRoom,
   getRoom,
-  getToken,
-  createMatch,
 } from '@/lib/api';
 import RoomCard from '@/components/lobby/RoomCard';
 import RoomDetail from '@/components/lobby/RoomDetail';
 import CreateRoomModal from '@/components/lobby/CreateRoomModal';
+import PlayAgainstAIModal from '@/components/lobby/PlayAgainstAIModal';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import type { Room } from '@/lib/types';
-
-const MAX_TILES = 71;
 
 export default function LobbyPage() {
   const router = useRouter();
   const { t } = useTranslation();
 
   // Auth state from authStore
-  const { user, token: authToken, initialized, logout: authLogout, setUser, setToken } = useAuthStore();
+  const { user, token: authToken, initialized, logout: authLogout } = useAuthStore();
 
   // Lobby state
   const {
@@ -47,13 +44,7 @@ export default function LobbyPage() {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingRoom, setViewingRoom] = useState<Room | null>(null);
-
-  // Quick Play state
-  const [showQuickPlay, setShowQuickPlay] = useState(false);
-  const [playerName, setPlayerName] = useState('');
-  const [tileCount, setTileCount] = useState(MAX_TILES);
-  const [quickPlayLoading, setQuickPlayLoading] = useState(false);
-  const [quickPlayError, setQuickPlayError] = useState<string | null>(null);
+  const [showPlayAI, setShowPlayAI] = useState(false);
 
   // Derived values
   const userId = user?.userId ?? null;
@@ -203,57 +194,6 @@ export default function LobbyPage() {
     router.push('/login');
   }, [authLogout, router]);
 
-  const handleQuickPlay = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setQuickPlayLoading(true);
-    setQuickPlayError(null);
-
-    try {
-      let qpToken = authToken;
-      let qpDisplayName = user?.displayName;
-
-      // If not authenticated, do guest login with entered name
-      if (!user) {
-        if (!playerName.trim()) return;
-        const resp = await getToken(playerName.trim());
-        qpToken = resp.token;
-        qpDisplayName = playerName.trim();
-        setToken(qpToken);
-        setUser({
-          userId: resp.user_id,
-          displayName: qpDisplayName,
-          avatarUrl: null,
-          isGuest: true,
-        });
-        localStorage.setItem(
-          'meeple_lobby_user',
-          JSON.stringify({
-            userId: resp.user_id,
-            displayName: qpDisplayName,
-            token: qpToken,
-          })
-        );
-      }
-
-      const config: Record<string, unknown> = {};
-      if (tileCount < MAX_TILES) {
-        config.tile_count = tileCount;
-      }
-
-      const { match_id } = await createMatch(
-        qpToken!,
-        'carcassonne',
-        [qpDisplayName!, 'Bot (Random)'],
-        { botSeats: [1], config }
-      );
-
-      router.push(`/game/${match_id}?token=${qpToken}`);
-    } catch (err) {
-      setQuickPlayError(err instanceof Error ? err.message : t('quickPlay.failed'));
-      setQuickPlayLoading(false);
-    }
-  };
-
   // Which room to show in the detail modal?
   const detailRoom = currentRoom || viewingRoom;
   const isInDetailRoom = !!currentRoom && detailRoom?.room_id === currentRoom.room_id;
@@ -295,10 +235,10 @@ export default function LobbyPage() {
               {t('lobby.profile')}
             </button>
             <button
-              onClick={() => setShowQuickPlay(true)}
+              onClick={() => setShowPlayAI(true)}
               className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition text-sm border border-gray-300"
             >
-              {t('lobby.quickPlay')}
+              {t('lobby.playAgainstAI')}
             </button>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -393,66 +333,9 @@ export default function LobbyPage() {
         />
       )}
 
-      {/* Quick Play modal */}
-      {showQuickPlay && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800">
-                {t('quickPlay.title')}
-              </h2>
-              <button
-                onClick={() => setShowQuickPlay(false)}
-                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-              >
-                &times;
-              </button>
-            </div>
-
-            <form onSubmit={handleQuickPlay} className="space-y-6">
-              <p className="text-gray-600">
-                {t('quickPlay.playingAs', { name: user.displayName })}
-              </p>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    {t('quickPlay.tiles')}
-                  </label>
-                  <span className="text-sm text-gray-500">
-                    {tileCount} / {MAX_TILES}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={4}
-                  max={MAX_TILES}
-                  value={tileCount}
-                  onChange={(e) => setTileCount(Number(e.target.value))}
-                  className="w-full accent-blue-600"
-                />
-                <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>4</span>
-                  <span>{t('quickPlay.fullGame', { count: MAX_TILES })}</span>
-                </div>
-              </div>
-
-              {quickPlayError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                  {quickPlayError}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={quickPlayLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-4 rounded-lg transition"
-              >
-                {quickPlayLoading ? t('quickPlay.starting') : t('quickPlay.playVsBot')}
-              </button>
-            </form>
-          </div>
-        </div>
+      {/* Play against AI modal */}
+      {showPlayAI && (
+        <PlayAgainstAIModal onClose={() => setShowPlayAI(false)} />
       )}
     </div>
   );

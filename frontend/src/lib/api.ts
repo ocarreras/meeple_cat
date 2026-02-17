@@ -185,6 +185,7 @@ export async function createMatch(
   options?: {
     randomSeed?: number;
     botSeats?: number[];
+    botId?: string;
     config?: Record<string, unknown>;
   },
 ): Promise<CreateMatchResponse> {
@@ -193,6 +194,7 @@ export async function createMatch(
     player_display_names: string[];
     random_seed?: number;
     bot_seats?: number[];
+    bot_id?: string;
     config?: Record<string, unknown>;
   } = {
     game_id: gameId,
@@ -204,6 +206,9 @@ export async function createMatch(
   }
   if (options?.botSeats && options.botSeats.length > 0) {
     body.bot_seats = options.botSeats;
+  }
+  if (options?.botId) {
+    body.bot_id = options.botId;
   }
   if (options?.config && Object.keys(options.config).length > 0) {
     body.config = options.config;

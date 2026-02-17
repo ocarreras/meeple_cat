@@ -23,6 +23,7 @@ class CreateMatchRequest(BaseModel):
     config: dict = {}
     random_seed: int | None = None
     bot_seats: list[int] = []
+    bot_id: str = "random"
 
 
 class MatchResponse(BaseModel):
@@ -101,7 +102,7 @@ async def create_match(
             user_id=user.id,
             seat_index=seat_index,
             is_bot=is_bot,
-            bot_id="random" if is_bot else None,
+            bot_id=request_body.bot_id if is_bot else None,
         )
         db.add(match_player)
         match_players.append(match_player)
