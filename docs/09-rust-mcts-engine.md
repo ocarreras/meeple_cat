@@ -38,12 +38,12 @@ Rust is stronger because it uses value-based tie-breaking at the root (selecting
 Python backend (FastAPI)
   |
   |-- gRPC (protobuf) --> Rust game engine (tonic)
-  |                          |-- MCTS search (rayon parallel determinizations)
-  |                          |-- TypedGamePlugin (no JSON in hot path)
-  |                          |-- NodeArena (cache-friendly node allocation)
-  |
-  |-- Python MCTS (fallback, no gRPC dependency)
+                            |-- MCTS search (rayon parallel determinizations)
+                            |-- TypedGamePlugin (no JSON in hot path)
+                            |-- NodeArena (cache-friendly node allocation)
 ```
+
+All game logic and MCTS execution runs exclusively in the Rust engine. The Python backend delegates all game operations via `GrpcGamePlugin`, which translates `GamePlugin` protocol calls into gRPC requests.
 
 ### Key Files
 
@@ -88,17 +88,16 @@ cd game-engine && cargo test --release
 # Quick unit tests only (~10s)
 cd game-engine && cargo test --release --lib -- --skip arena --skip mcts_per_game
 
-# Cross-engine comparison (requires both engines, ~30 min for 50 games)
-cd backend && NUM_GAMES=50 uv run python cross_engine_arena.py
-
 # TicTacToe isolation test (verifies MCTS correctness on solved game)
-cd backend && uv run python cross_engine_tictactoe.py
+cd game-engine && cargo test --release -- tictactoe
 ```
 
 ## Game Logic Equivalence
 
-Rust and Python Carcassonne implementations produce identical game states:
+The Rust Carcassonne implementation was validated against the original Python implementation before the Python game logic was removed:
 
 - Replay comparison test: 71-turn game trace, 0 divergences
 - Board fuzz test: 50 random games, 7000+ moves, all edge-consistent
 - Evaluator comparison: 15 mid-game states, 0.000000 difference
+
+The Python game logic and MCTS have since been removed — the Rust engine is the sole implementation.

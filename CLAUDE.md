@@ -10,14 +10,15 @@ Domain: `play.meeple.cat`
 
 ```
 meeple/
-├── backend/              Python (FastAPI) — REST API, WebSocket, game engine
+├── backend/              Python (FastAPI) — REST API, WebSocket, game orchestration
+├── game-engine/          Rust — game logic, MCTS bot AI (gRPC server)
 ├── frontend/             TypeScript (Next.js 16, React 19) — web client
 ├── infra/
 │   ├── terraform/        Hetzner VPS + Route 53 DNS (IaC)
 │   └── k8s/meeple/       Helm chart (k8s manifests)
 ├── .github/workflows/    CI (pytest, tsc, lint) + CD (build, push, helm upgrade)
-├── docs/                 Design documents (00-08) — READ THESE FIRST
-└── docker-compose.yml    Local dev only (postgres + redis + backend + frontend)
+├── docs/                 Design documents (00-09) — READ THESE FIRST
+└── docker-compose.yml    Local dev (postgres + redis + backend + game-engine + frontend)
 ```
 
 ## Tech stack
@@ -25,6 +26,7 @@ meeple/
 | Layer | Technology |
 |-------|-----------|
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2 (async), Pydantic 2 |
+| Game Engine | Rust, tonic (gRPC), rayon (parallelism) — game logic + MCTS |
 | Database | PostgreSQL 16, Redis 7 |
 | Frontend | Next.js 16 (App Router, standalone output), React 19, TypeScript 5, Tailwind 4, Zustand 5 |
 | Auth | Google OIDC → JWT (HttpOnly cookies) |
@@ -39,6 +41,11 @@ meeple/
 # Start postgres + redis
 docker compose up -d postgres redis
 
+# Rust game engine (from repo root)
+cd game-engine
+cargo run --release
+# Listens on localhost:50051
+
 # Backend (from repo root)
 cd backend
 uv sync
@@ -50,7 +57,9 @@ npm install
 npm run dev
 ```
 
-Backend runs on http://localhost:8000, frontend on http://localhost:3000.
+Backend runs on http://localhost:8000, game engine on gRPC localhost:50051, frontend on http://localhost:3000.
+
+The backend connects to the Rust game engine at startup (configured via `MEEPLE_GAME_ENGINE_GRPC_URL`, default `localhost:50051`). It will retry connection up to 30 times with 2s delay.
 
 All backend settings use `MEEPLE_` env prefix (see `backend/src/config.py`).
 
@@ -58,28 +67,32 @@ All backend settings use `MEEPLE_` env prefix (see `backend/src/config.py`).
 
 ### Game engine (the heart of the platform)
 
-The engine is in `backend/src/engine/` and uses a **plugin-based, phase-based state machine** with event sourcing:
+Game logic runs in a dedicated **Rust engine** (`game-engine/`) that communicates with the Python backend via **gRPC**. The Python backend handles orchestration (session management, event sourcing, WebSocket broadcasting), while all game rules and MCTS AI run in Rust for performance.
 
-- **`protocol.py`** — `GamePlugin` protocol that every game must implement
+**Python orchestration layer** (`backend/src/engine/`):
+- **`protocol.py`** — `GamePlugin` protocol (type contract)
+- **`grpc_plugin.py`** — `GrpcGamePlugin` adapter that translates protocol calls to gRPC
 - **`session.py`** — `GameSession` orchestrates a single active game
 - **`session_manager.py`** — manages all active sessions, handles recovery
 - **`state_store.py`** — Redis for hot game state
 - **`event_store.py`** — Postgres append-only event log
-- **`registry.py`** — auto-discovers game plugins from `backend/src/games/`
+- **`registry.py`** — discovers games from Rust engine via `ListGames` gRPC call
+- **`bot_runner.py`** / **`bot_strategy.py`** — built-in bot execution (MCTS via gRPC)
 
-Key flow: client sends action via WebSocket → `GameSession.apply_action()` validates → updates state in Redis → appends event to Postgres → broadcasts `PlayerView` to all connected clients.
+Key flow: client sends action via WebSocket → `GameSession.handle_action()` validates envelope → delegates to Rust via gRPC for rule validation and state transition → persists events to Postgres → updates state in Redis → broadcasts `PlayerView` to all connected clients.
 
-### Game plugins
+### Game plugins (Rust)
 
-Games live in `backend/src/games/<game_name>/`. Each must implement `GamePlugin` protocol from `engine/protocol.py`.
+Games are implemented in `game-engine/src/games/<game_name>/` using the `TypedGamePlugin` Rust trait. The Python backend discovers games automatically via gRPC at startup — no Python code changes needed to add a new game.
 
-Currently implemented: **Carcassonne** (`backend/src/games/carcassonne/`)
-- `plugin.py` — main plugin class
-- `tiles.py` — 72 tile definitions
-- `board.py` — board representation
-- `features.py` — feature tracking and merging (cities, roads, fields, monasteries)
-- `scoring.py` — in-game and end-game scoring
-- `meeples.py` — meeple placement validation
+Currently implemented: **Carcassonne** (`game-engine/src/games/carcassonne/`)
+- `plugin.rs` — main plugin implementing `TypedGamePlugin`
+- `tiles.rs` — 72 tile definitions
+- `board.rs` — board representation and placement validation
+- `features.rs` — feature tracking and merging (cities, roads, fields, monasteries)
+- `scoring.rs` — in-game and end-game scoring
+- `meeples.rs` — meeple placement validation
+- `evaluator.rs` — heuristic evaluation for MCTS
 
 ### API structure
 
@@ -131,8 +144,11 @@ uv run pytest
 # Backend tests with verbose output
 uv run pytest -v
 
-# Specific test file
-uv run pytest tests/games/carcassonne/test_scoring.py
+# Rust game engine tests (from game-engine/)
+cargo test --release
+
+# Quick Rust tests (skip slow arena tests)
+cargo test --release --lib -- --skip arena --skip mcts_per_game
 ```
 
 No frontend tests yet.
@@ -186,6 +202,7 @@ helm upgrade --install meeple ./infra/k8s/meeple \
 
 Components deployed:
 - Backend Deployment (rolling update, `maxUnavailable: 0`, readiness/liveness probes)
+- Game Engine Deployment (Rust gRPC server on port 50051)
 - Frontend Deployment (rolling update, standalone Next.js)
 - PostgreSQL StatefulSet (10Gi PVC)
 - Redis Deployment (256MB maxmemory, allkeys-lru)
@@ -228,15 +245,18 @@ The `docs/` directory contains comprehensive design specs. **Read these before m
 | `03-frontend.md` | Frontend architecture, components, state |
 | `04-infra.md` | Infrastructure design (historical — actual setup is k3s/Terraform/Helm, see above) |
 | `05-auth.md` | OIDC flow, JWT, account linking |
-| `06-bot-api.md` | Bot integration (webhook + sandbox) |
+| `06-bot-api.md` | Bot integration (webhook + sandbox) — design spec, not yet implemented |
 | `07-replay-rankings.md` | Event sourcing replays, Glicko-2 rankings |
-| `08-carcassonne.md` | Carcassonne implementation spec |
+| `08-carcassonne.md` | Carcassonne implementation spec (canonical impl now in Rust) |
+| `09-rust-mcts-engine.md` | Rust game engine architecture, MCTS, performance benchmarks |
 
 ## Current status (Feb 2025)
 
 ### Done
-- Core game engine with plugin protocol
-- Carcassonne: full game logic, tiles, scoring, meeple placement
+- Core game engine with plugin protocol (Python orchestration + Rust game logic via gRPC)
+- Rust game engine: all game logic, MCTS bot AI (~20x faster than Python)
+- Carcassonne: full game logic, tiles, scoring, meeple placement (Rust)
+- Built-in bots: Random + MCTS (Rust) with progressive widening, RAVE
 - Backend: FastAPI app, REST API, WebSocket game connection, health endpoints
 - Auth: Google OIDC with JWT
 - Frontend: lobby system, game UI with canvas rendering, responsive layout
@@ -261,8 +281,9 @@ The `docs/` directory contains comprehensive design specs. **Read these before m
 ## Code conventions
 
 - Backend: Python 3.12+, type hints everywhere, async/await for I/O
+- Game engine: Rust, typed game plugins via `TypedGamePlugin` trait
 - Frontend: TypeScript strict mode, functional components, Tailwind for styling
-- Game plugins must implement the `GamePlugin` protocol — see `engine/protocol.py`
+- Game plugins implement the `TypedGamePlugin` trait in Rust — see `game-engine/src/engine/plugin.rs`
 - All env vars use `MEEPLE_` prefix on the backend
 - API routes are versioned under `/api/v1/`
 - WebSocket messages follow the schema in `ws/messages.py`

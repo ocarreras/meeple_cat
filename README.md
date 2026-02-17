@@ -11,10 +11,16 @@ A board game platform where you play against humans or AI in real-time. Built as
 │  Next.js    │    │  FastAPI    │    │  PostgreSQL  │
 │  (React 19) │◄──►│  (Python)   │◄──►│  + Redis     │
 │  Frontend   │ WS │  Backend    │    │              │
-└─────────────┘    └─────────────┘    └──────────────┘
+└─────────────┘    └──────┬──────┘    └──────────────┘
+                          │ gRPC
+                   ┌──────┴──────┐
+                   │ Rust Game   │
+                   │ Engine      │
+                   └─────────────┘
 ```
 
-- **Backend**: Python 3.12, FastAPI, SQLAlchemy (async), Pydantic
+- **Backend**: Python 3.12, FastAPI, SQLAlchemy (async), Pydantic — orchestration, API, WebSocket
+- **Game Engine**: Rust, tonic (gRPC), rayon — game logic, MCTS bot AI
 - **Frontend**: Next.js 16 (App Router), TypeScript, Tailwind CSS, Zustand
 - **Database**: PostgreSQL 16 (persistent data) + Redis 7 (hot game state, sessions)
 - **Auth**: Google OIDC → JWT
@@ -23,7 +29,7 @@ A board game platform where you play against humans or AI in real-time. Built as
 
 ## Game engine
 
-The platform uses a **plugin-based game engine** where each game implements a standard protocol:
+The platform uses a **plugin-based game engine** where each game implements the `TypedGamePlugin` trait in Rust. The Python backend communicates with the Rust engine via gRPC, using a `GrpcGamePlugin` adapter that implements the `GamePlugin` protocol:
 
 ```python
 class GamePlugin(Protocol):
@@ -36,7 +42,7 @@ class GamePlugin(Protocol):
 
 Games are phase-based state machines with event sourcing. The server is authoritative — it validates all actions, filters hidden information per player, and broadcasts updates via WebSocket.
 
-Game plugins live in `backend/src/games/` and are auto-discovered at startup.
+Game plugins are implemented in Rust (`game-engine/src/games/`) and discovered via gRPC at startup.
 
 ## Quick start
 
@@ -52,7 +58,11 @@ Game plugins live in `backend/src/games/` and are auto-discovered at startup.
 # Start database services
 docker compose up -d postgres redis
 
-# Backend
+# Rust game engine (in a terminal)
+cd game-engine
+cargo run --release
+
+# Backend (in another terminal)
 cd backend
 uv sync
 uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
@@ -89,6 +99,7 @@ Key settings:
 | `MEEPLE_GOOGLE_CLIENT_SECRET` | *(empty)* | Google OIDC client secret |
 | `MEEPLE_FRONTEND_URL` | `http://localhost:3000` | Frontend URL for CORS/redirects |
 | `MEEPLE_BASE_URL` | `http://localhost:8000` | Backend public URL |
+| `MEEPLE_GAME_ENGINE_GRPC_URL` | `localhost:50051` | Rust game engine gRPC address |
 
 ## Project structure
 
@@ -100,17 +111,23 @@ meeple/
 │   │   ├── config.py            # Settings (MEEPLE_ env vars)
 │   │   ├── api/                 # REST endpoints (auth, games, rooms, matches, users)
 │   │   ├── auth/                # OIDC login, JWT, cookie handling
-│   │   ├── engine/              # Core game engine
-│   │   │   ├── protocol.py      # GamePlugin interface
+│   │   ├── engine/              # Game orchestration
+│   │   │   ├── protocol.py      # GamePlugin interface (type contract)
+│   │   │   ├── grpc_plugin.py   # GrpcGamePlugin adapter (delegates to Rust)
 │   │   │   ├── session.py       # Single game session
 │   │   │   ├── session_manager.py
+│   │   │   ├── bot_runner.py    # Bot move scheduling
+│   │   │   ├── bot_strategy.py  # Bot strategies (Random, MCTS via gRPC)
 │   │   │   ├── state_store.py   # Redis state persistence
 │   │   │   └── event_store.py   # Postgres event log
-│   │   ├── games/
-│   │   │   └── carcassonne/     # Carcassonne plugin (tiles, board, scoring, meeples)
 │   │   ├── models/              # SQLAlchemy models
 │   │   └── ws/                  # WebSocket handler, broadcaster
 │   └── tests/
+├── game-engine/                 # Rust game engine (gRPC server)
+│   └── src/
+│       ├── engine/              # MCTS, arena, simulator, plugin trait
+│       ├── games/               # Game implementations (carcassonne, tictactoe)
+│       └── server.rs            # gRPC server (tonic)
 ├── frontend/
 │   ├── src/
 │   │   ├── app/                 # Next.js pages (lobby, game, login, profile)
@@ -121,17 +138,21 @@ meeple/
 │   ├── terraform/               # Hetzner VPS + Route 53 DNS (IaC)
 │   └── k8s/meeple/              # Helm chart for k3s deployment
 ├── .github/workflows/           # CI + CD pipelines
-├── docs/                        # Design documents (9 files, ~150KB)
+├── docs/                        # Design documents (10 files, ~150KB)
 └── docker-compose.yml           # Local development
 ```
 
 ## Tests
 
 ```bash
+# Backend (Python)
 cd backend
 uv run pytest          # all tests
 uv run pytest -v       # verbose
-uv run pytest tests/games/carcassonne/  # carcassonne tests only
+
+# Game engine (Rust)
+cd game-engine
+cargo test --release   # full suite (~3 min)
 ```
 
 ## Deployment
@@ -168,7 +189,8 @@ The `docs/` directory contains comprehensive design documents covering every sub
 | 05 | Auth | OIDC flow, JWT, account linking |
 | 06 | Bot API | AI/bot integration (webhook + sandbox) |
 | 07 | Replay & Rankings | Event sourcing replays, Glicko-2 ratings |
-| 08 | Carcassonne | Complete game implementation spec |
+| 08 | Carcassonne | Complete game implementation spec (canonical impl now in Rust) |
+| 09 | Rust MCTS Engine | Rust game engine architecture, performance benchmarks |
 
 ## License
 

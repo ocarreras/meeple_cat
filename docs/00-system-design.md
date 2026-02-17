@@ -8,13 +8,21 @@ and UI components, not infrastructure changes.
 
 First game: **Carcassonne**.
 
+> **Architecture update (Feb 2025):** Game logic and MCTS bot AI now run in a
+> dedicated Rust engine (`game-engine/`) communicating with the Python backend
+> via gRPC. The Python backend handles orchestration (sessions, event sourcing,
+> WebSocket broadcasting, auth, lobby). This document was the original design
+> spec — see `docs/09-rust-mcts-engine.md` for the Rust engine details and
+> `CLAUDE.md` for current architecture.
+
 ---
 
 ## Decision Log
 
 | Domain | Decision |
 |---|---|
-| Backend | Python (FastAPI) |
+| Backend | Python (FastAPI) — orchestration, API, WebSocket |
+| Game Engine | Rust (tonic gRPC) — game logic, MCTS AI |
 | Frontend | TypeScript (Next.js / React) |
 | Real-time | WebSocket (direct, no broker) |
 | Hosting | Self-hosted VPS (Docker Compose) |
@@ -50,20 +58,28 @@ First game: **Carcassonne**.
            ▼                   ▼                      ▼
 ┌─────────────────┐  ┌─────────────────┐  ┌────────────────────┐
 │   Next.js SSR   │  │  Game Server    │  │   Bot API Gateway  │
-│   (frontend)    │  │  (FastAPI +     │  │   (FastAPI)        │
+│   (frontend)    │  │  (FastAPI +     │  │   (future)         │
 │                 │  │   WebSocket)    │  │                    │
 └─────────────────┘  └────────┬────────┘  └────────┬───────────┘
                               │                     │
-                    ┌─────────┴─────────┐           │
-                    ▼                   ▼           ▼
-              ┌──────────┐      ┌────────────┐  ┌──────────────┐
-              │PostgreSQL│      │   Redis     │  │  Sandboxed   │
-              │          │      │(game state, │  │  Bot Runner  │
-              │ users    │      │ sessions,   │  │  (future)    │
-              │ games    │      │ pub/sub)    │  │              │
-              │ events   │      │             │  │              │
-              │ rankings │      │             │  │              │
-              └──────────┘      └─────────────┘  └──────────────┘
+                    ┌─────────┼─────────┐           │
+                    ▼         │         ▼           ▼
+              ┌──────────┐    │   ┌────────────┐  ┌──────────────┐
+              │PostgreSQL│    │   │   Redis     │  │  Sandboxed   │
+              │          │    │   │(game state, │  │  Bot Runner  │
+              │ users    │    │   │ sessions,   │  │  (future)    │
+              │ games    │    │   │ pub/sub)    │  │              │
+              │ events   │    │   │             │  │              │
+              │ rankings │    │   │             │  │              │
+              └──────────┘    │   └─────────────┘  └──────────────┘
+                              │ gRPC
+                              ▼
+                    ┌─────────────────┐
+                    │  Rust Game      │
+                    │  Engine         │
+                    │ (game logic,   │
+                    │  MCTS bot AI)  │
+                    └─────────────────┘
 ```
 
 ---
@@ -89,15 +105,15 @@ meeple/
 │   │   ├── auth/              # OIDC auth module
 │   │   ├── api/               # REST endpoints
 │   │   ├── ws/                # WebSocket handlers
-│   │   ├── engine/            # Core game engine (abstract)
-│   │   ├── games/             # Game plugin implementations
-│   │   │   └── carcassonne/
-│   │   ├── bot/               # Bot API gateway + sandbox
-│   │   ├── matchmaking/       # Lobby, matchmaking, timers
-│   │   ├── replay/            # Event sourcing & replay
-│   │   ├── ranking/           # ELO / ranking system
+│   │   ├── engine/            # Game orchestration (sessions, gRPC adapter, bots)
 │   │   └── models/            # SQLAlchemy / Pydantic models
 │   └── tests/
+├── game-engine/               # Rust game engine (gRPC server)
+│   ├── src/
+│   │   ├── engine/            # MCTS, arena, simulator, plugin trait
+│   │   ├── games/             # Game implementations (carcassonne, tictactoe)
+│   │   └── server.rs          # gRPC server (tonic)
+│   └── Cargo.toml
 ├── frontend/
 │   ├── package.json
 │   ├── src/
@@ -524,7 +540,8 @@ game_room_seats (room_id FK, seat_index, user_id FK, is_bot, bot_id, is_ready)
 services:
   nginx:        # Reverse proxy, TLS termination, static files
   frontend:     # Next.js (SSR + static)
-  backend:      # FastAPI (REST + WebSocket)
+  backend:      # FastAPI (REST + WebSocket + game orchestration)
+  game-engine:  # Rust gRPC server (game logic + MCTS)
   postgres:     # Database
   redis:        # Hot game state, sessions, pub/sub
   # Future:
@@ -557,4 +574,4 @@ Total estimated cost: **$15-25/month** for the core platform.
 The following documents should be created by deep-diving into each subsystem.
 Each can be designed independently using this document as the shared context.
 
-See: `docs/01-game-engine.md` through `docs/08-carcassonne.md`
+See: `docs/01-game-engine.md` through `docs/09-rust-mcts-engine.md`

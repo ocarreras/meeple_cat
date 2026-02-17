@@ -4,6 +4,15 @@ Two bot modes: external webhooks (user-hosted) and sandboxed uploaded bots
 (future). Both implement the same request/response contract. Built-in AI
 also uses the same interface internally.
 
+> **Implementation status (Feb 2025):** The external webhook bot API and
+> adapter layer described in this document are **not yet implemented**.
+> Currently, only built-in bots run in-game via `BotRunner` +
+> `BotStrategy` (`backend/src/engine/bot_runner.py`, `bot_strategy.py`).
+> Built-in bots include `RandomStrategy` (random valid action) and
+> `GrpcMctsStrategy` (delegates MCTS search to the Rust engine via gRPC).
+> All game logic calls (e.g. `state_to_ai_view`, `get_valid_actions`,
+> `parse_ai_action`) are routed through `GrpcGamePlugin` to the Rust engine.
+
 ---
 
 ## 1. Bot API Contract
@@ -491,6 +500,7 @@ users choose appropriately difficult opponents.
 
 ## 9. Module Structure
 
+**Planned (webhook/sandbox bots — not yet implemented):**
 ```
 backend/src/bot/
 ├── __init__.py
@@ -502,4 +512,16 @@ backend/src/bot/
 ├── health.py            # Periodic health check task
 ├── testing.py           # Bot test endpoint logic
 └── sandbox.py           # SandboxBotAdapter (stub for future)
+```
+
+**Current built-in bot implementation:**
+```
+backend/src/engine/
+├── bot_runner.py        # Schedules bot moves (checks if next player is a bot)
+└── bot_strategy.py      # BotStrategy protocol + RandomStrategy + GrpcMctsStrategy
+
+game-engine/src/engine/
+├── mcts.rs              # MCTS search (called via MctsSearch gRPC)
+├── bot_strategy.rs      # Rust-side strategy trait
+└── arena.rs             # Bot-vs-bot arena runner
 ```

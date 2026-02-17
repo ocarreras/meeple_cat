@@ -31,33 +31,44 @@ Three key improvements turned RAVE from losing 65-30% to winning 52-48%:
 
 ### Architecture
 
+All game logic and MCTS run in the Rust game engine (`game-engine/`), communicating with the Python backend via gRPC.
+
 ```
 backend/src/engine/
 ├── bot_strategy.py      # BotStrategy protocol + registry (get_strategy, register_strategy)
 ├── bot_runner.py         # Live server integration (async, uses bot_strategy by bot_id)
-├── mcts.py               # Game-agnostic MCTS (determinization, UCT, heuristic eval)
-├── game_simulator.py     # Synchronous state advancement (used by MCTS + Arena)
-├── arena.py              # Bot-vs-bot arena runner (ArenaResult with stats + CIs)
-└── arena_cli.py          # CLI: uv run python -m src.engine.arena_cli
+└── grpc_plugin.py        # GrpcGamePlugin adapter (delegates all game calls to Rust)
 
-backend/src/games/carcassonne/
-└── evaluator.py          # Carcassonne heuristic evaluation function
+game-engine/src/
+├── engine/
+│   ├── mcts.rs           # Game-agnostic MCTS (determinization, UCT, PW, RAVE)
+│   ├── simulator.rs      # State advancement (used by MCTS + Arena)
+│   ├── arena.rs          # Bot-vs-bot arena runner
+│   ├── bot_strategy.rs   # Strategy trait, MctsStrategy, RandomStrategy
+│   ├── evaluator.rs      # Heuristic evaluator trait
+│   └── plugin.rs         # TypedGamePlugin trait
+├── games/carcassonne/
+│   └── evaluator.rs      # Carcassonne heuristic evaluation function
+└── server.rs             # gRPC server (tonic)
 ```
+
+**Built-in bots**: `GrpcMctsStrategy` delegates MCTS search to the Rust engine via a single `MctsSearch` gRPC call. `RandomStrategy` picks uniformly from valid actions (valid actions fetched via gRPC).
 
 **Adding a new bot**: implement `BotStrategy.choose_action(game_data, phase, player_id, plugin) -> dict`, register with `register_strategy("my_bot", factory)`, then test via arena.
 
-### MCTS implementation details
+### MCTS implementation details (Rust engine)
 
 - **Algorithm**: UCT with heuristic leaf evaluation (no random rollouts)
 - **Progressive widening**: Limits tree width proportional to visit count (`max_children = pw_c * visits^pw_alpha`). Actions sorted by heuristic priority (city placements > monastery > road > field > skip). Default: pw_c=2.0, pw_alpha=0.5 (at 100 visits → 20 children max)
-- **Stochasticity handling**: Determinization — shuffle the tile bag N times, run independent MCTS trees per determinization, aggregate root visit counts
+- **Stochasticity handling**: Determinization — shuffle the tile bag N times, run independent MCTS trees per determinization (parallelized via rayon), aggregate root visit counts
 - **Two-phase turns**: `place_tile` and `place_meeple` are separate tree levels
-- **Leaf evaluation**: Heuristic function, not rollouts. Rollouts cost ~63ms and are very noisy; heuristic eval costs <0.1ms
-- **Performance**: ~1000 MCTS iterations/second at mid-game (~0.3ms deepcopy + ~1ms apply_action)
+- **Leaf evaluation**: Heuristic function, not rollouts. Heuristic eval is sub-microsecond in Rust
+- **Performance**: ~20x faster than the original Python implementation (3.4-4.6s per self-play game vs 81.3s)
 - **RAVE / AMAF**: Optional blending of UCT Q-value with AMAF statistics (`β = sqrt(k / (3N + k))`). Enabled via `use_rave=True`. Depth-limited AMAF (default 4 plies = 2 turns) + first-play urgency (AMAF as prior for unvisited children). Default rave_k=100
-- **Default params**: 200 sims, 1s time limit, C=1.41, 3 determinizations, pw_c=2.0, pw_alpha=0.5
+- **Root selection**: Value-based tie-breaking (highest avg value when visit counts tie) — critical for play quality with wide progressive widening
+- **Default params**: 800 sims, 5s time limit, C=1.41, 4 determinizations, pw_c=2.0, pw_alpha=0.5
 
-### Heuristic evaluator (evaluator.py)
+### Heuristic evaluator (game-engine/src/games/carcassonne/evaluator.rs)
 
 Configurable via `EvalWeights` dataclass. Returns value in [0, 1] with four components whose weights shift during the game:
 
@@ -74,36 +85,19 @@ Named weight presets for arena experimentation:
 - `field_heavy` — emphasises field scoring potential
 - `conservative` — prioritises meeple economy
 
-### Arena CLI usage
+### Arena testing
+
+Arena tests now run in the Rust engine via `cargo test`:
 
 ```bash
-# Random vs random baseline (~6s for 100 games)
-uv run python -m src.engine.arena_cli --p1 random --p2 random --games 100
+# Full test suite including arena tests (~3 min in release)
+cd game-engine && cargo test --release
 
-# MCTS vs random
-uv run python -m src.engine.arena_cli --p1 random --p2 mcts --games 50
-
-# Compare evaluator profiles
-uv run python -m src.engine.arena_cli --p1 mcts --p1-eval default \
-    --p2 mcts --p2-eval aggressive --games 100
-
-# Control progressive widening
-uv run python -m src.engine.arena_cli --p1 random --p2 mcts \
-    --pw-c 2.0 --pw-alpha 0.5 --games 50
-
-# MCTS vs MCTS+RAVE
-uv run python -m src.engine.arena_cli --p1 mcts --p2 mcts --p2-rave --games 50
-
-# MCTS+RAVE with custom rave_k
-uv run python -m src.engine.arena_cli --p1 mcts --p1-rave --p2 mcts --p2-rave \
-    --rave-k 50 --games 50
-
-# Tune MCTS parameters
-uv run python -m src.engine.arena_cli --p1 mcts --p2 mcts --games 50 \
-    --mcts-sims 500 --mcts-time-ms 2000 --mcts-dets 5
-
-# Output includes: win rates, 95% Wilson CIs, avg scores +/- stddev, game duration
+# Quick unit tests only (~10s)
+cd game-engine && cargo test --release --lib -- --skip arena --skip mcts_per_game
 ```
+
+The `RunArena` gRPC call also supports running arena matches from the Python backend. See `docs/09-rust-mcts-engine.md` for details.
 
 ---
 

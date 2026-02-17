@@ -736,7 +736,7 @@ def create_app() -> FastAPI:
         app.state.db = await init_db()
         app.state.redis = await init_redis()
         app.state.plugin_registry = PluginRegistry()
-        app.state.plugin_registry.auto_discover()
+        app.state.plugin_registry.connect_grpc(settings.game_engine_grpc_url)
         app.state.session_manager = GameSessionManager(...)
         app.state.connection_manager = ConnectionManager()
         # Recover active games from Redis

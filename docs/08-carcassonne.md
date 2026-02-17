@@ -4,6 +4,13 @@ Carcassonne is the first game implemented on meeple.cat. It serves as the
 validation that the game engine abstraction (01-game-engine.md) works for a
 real, non-trivial board game.
 
+> **Note (Feb 2025):** The canonical implementation is now in Rust at
+> `game-engine/src/games/carcassonne/`. The Python code in this document
+> served as the original design spec and was used to validate the Rust
+> port (see `docs/09-rust-mcts-engine.md` for equivalence testing).
+> The Python game plugin has been removed — all game logic runs in the
+> Rust engine via gRPC.
+
 **Game summary**: Players take turns drawing a tile, placing it on the board
 (edges must match), optionally placing a meeple on a feature of the placed
 tile, and scoring completed features. The game ends when all tiles are placed.
@@ -121,7 +128,7 @@ TILE_CATALOG = [
 ]
 ```
 
-The complete catalog will live in `backend/src/games/carcassonne/tiles.py`.
+The complete catalog lives in `game-engine/src/games/carcassonne/tiles.rs`.
 
 ---
 
@@ -1205,22 +1212,19 @@ the valid_actions list.
 
 ## 12. File Structure
 
+> **Note:** The canonical implementation is in Rust. The Python file structure
+> below was the original design; see `game-engine/src/games/carcassonne/` for
+> the current Rust implementation.
+
 ```
-backend/src/games/carcassonne/
-├── __init__.py          # Exports `plugin = CarcassonnePlugin()`
-├── plugin.py            # CarcassonnePlugin class
-├── tiles.py             # Complete tile catalog (24 types, 72 tiles)
-├── board.py             # Board state, placement validation, open positions
-├── features.py          # Feature tracking, merging, completion detection
-├── scoring.py           # Scoring logic (during-game + end-game)
-├── meeples.py           # Meeple placement and return logic
-├── types.py             # Carcassonne-specific Pydantic models
-├── ai_view.py           # AI state serialization
-└── tests/
-    ├── test_tiles.py
-    ├── test_placement.py
-    ├── test_features.py
-    ├── test_scoring.py
-    ├── test_full_game.py  # End-to-end game simulation
-    └── fixtures/          # Known board states for testing
+game-engine/src/games/carcassonne/
+├── mod.rs               # Module exports
+├── plugin.rs            # CarcassonnePlugin implementing TypedGamePlugin
+├── types.rs             # Carcassonne-specific types (state, tile, feature)
+├── tiles.rs             # Complete tile catalog (24 types, 72 tiles)
+├── board.rs             # Board state, placement validation, open positions
+├── features.rs          # Feature tracking, merging, completion detection
+├── scoring.rs           # Scoring logic (during-game + end-game)
+├── meeples.rs           # Meeple placement and return logic
+└── evaluator.rs         # Heuristic evaluation for MCTS bot AI
 ```

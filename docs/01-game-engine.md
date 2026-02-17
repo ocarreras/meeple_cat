@@ -9,6 +9,15 @@ a new game feels natural, not bureaucratic.
 timeouts, event recording, view filtering). The game plugin owns the *rules*
 (what's legal, what happens when you do X, who wins).
 
+> **Architecture note (Feb 2025):** Game logic now runs in a dedicated Rust
+> engine (`game-engine/`) that communicates with the Python backend via gRPC.
+> The `GamePlugin` protocol defined below remains the contract — the Python
+> `GrpcGamePlugin` adapter (`backend/src/engine/grpc_plugin.py`) implements
+> it by translating each method call into a gRPC request to the Rust engine.
+> The data models, session orchestration, event sourcing, and view
+> broadcasting all remain in Python. See `docs/09-rust-mcts-engine.md` for
+> the Rust engine architecture.
+
 ---
 
 ## 1. Core Data Models
@@ -1197,34 +1206,31 @@ On server restart:
 
 ## 7. Game Plugin Registration & Discovery
 
-### 7.1 Plugin Registry
+### 7.1 Plugin Registry (gRPC-based)
+
+Game plugins are implemented in the Rust engine and discovered at startup
+via gRPC. The Python `PluginRegistry` connects to the Rust engine, calls
+`ListGames()`, and registers a `GrpcGamePlugin` adapter for each game.
 
 ```python
 class PluginRegistry:
-    """
-    Discovers and registers game plugins. Plugins are Python modules
-    in the games/ directory that export a class implementing GamePlugin.
-    """
+    """Registers game plugins provided by the Rust engine via gRPC."""
 
     def __init__(self):
-        self._plugins: dict[GameId, GamePlugin] = {}
+        self._plugins: dict[str, GamePlugin] = {}
 
     def register(self, plugin: GamePlugin) -> None:
-        """Register a game plugin."""
-        if not isinstance(plugin, GamePlugin):
-            raise TypeError(f"{plugin} does not implement GamePlugin protocol")
-        if plugin.game_id in self._plugins:
-            raise ValueError(f"Game '{plugin.game_id}' already registered")
-        self._plugins[plugin.game_id] = plugin
+        game_id = plugin.game_id
+        if game_id in self._plugins:
+            raise ValueError(f"Game '{game_id}' already registered")
+        self._plugins[game_id] = plugin
 
-    def get(self, game_id: GameId) -> GamePlugin:
-        """Get a registered plugin by game ID."""
+    def get(self, game_id: str) -> GamePlugin:
         if game_id not in self._plugins:
             raise KeyError(f"Unknown game: {game_id}")
         return self._plugins[game_id]
 
     def list_games(self) -> list[dict]:
-        """Return metadata for all registered games."""
         return [
             {
                 "game_id": p.game_id,
@@ -1236,31 +1242,43 @@ class PluginRegistry:
             for p in self._plugins.values()
         ]
 
-    def auto_discover(self, package: str = "src.games") -> None:
-        """
-        Auto-discover plugins by scanning the games package.
-        Each game is a sub-package with a module that exports a plugin instance.
+    def connect_grpc(self, address: str, max_retries: int = 30, retry_delay: float = 2.0) -> None:
+        """Connect to the Rust game engine via gRPC and register all available games.
 
-        Convention:
-          src/games/carcassonne/__init__.py  →  exports `plugin = CarcassonnePlugin()`
+        Retries on failure to handle the case where the game engine is still starting up.
         """
-        import importlib
-        import pkgutil
+        from src.engine.grpc_plugin import connect_grpc
 
-        pkg = importlib.import_module(package)
-        for importer, modname, ispkg in pkgutil.iter_modules(pkg.__path__):
-            if ispkg:
-                try:
-                    mod = importlib.import_module(f"{package}.{modname}")
-                    if hasattr(mod, "plugin"):
-                        self.register(mod.plugin)
-                except Exception as e:
-                    logger.warning(f"Failed to load game plugin '{modname}': {e}")
+        for attempt in range(1, max_retries + 1):
+            try:
+                plugins = connect_grpc(address)
+                for plugin in plugins:
+                    self.register(plugin)
+                return
+            except Exception as e:
+                if attempt == max_retries:
+                    raise
+                time.sleep(retry_delay)
 ```
 
-### 7.2 Plugin Validation
+The `GrpcGamePlugin` adapter implements the `GamePlugin` protocol by
+delegating every method call to the Rust engine via gRPC. Game state is
+serialized as JSON across the boundary. See `backend/src/engine/grpc_plugin.py`.
 
-On registration, the engine validates the plugin:
+### 7.2 Adding a New Game
+
+To add a new game to the platform:
+
+1. **Implement the `TypedGamePlugin` trait in Rust** (`game-engine/src/games/<game_name>/`)
+2. **Register the game in the Rust gRPC server** (`game-engine/src/server.rs`)
+3. **Add frontend components** (`frontend/src/components/games/<game_name>/`)
+
+The Python backend requires no changes — new games are discovered automatically
+via the `ListGames` gRPC call at startup.
+
+### 7.3 Plugin Validation
+
+On registration, the engine can validate the plugin via `validation.py`:
 
 ```python
 def validate_plugin(plugin: GamePlugin) -> list[str]:
@@ -1268,44 +1286,9 @@ def validate_plugin(plugin: GamePlugin) -> list[str]:
     Run sanity checks on a plugin to catch common errors early.
     Returns list of warnings/errors.
     """
-    errors = []
-
-    # Check required attributes
-    for attr in ("game_id", "display_name", "min_players", "max_players"):
-        if not hasattr(plugin, attr):
-            errors.append(f"Missing attribute: {attr}")
-
-    # Test create_initial_state with min players
-    try:
-        players = [
-            Player(player_id=PlayerId(f"test-{i}"), display_name=f"Test {i}", seat_index=i)
-            for i in range(plugin.min_players)
-        ]
-        config = GameConfig(random_seed=42)
-        game_data, phase, events = plugin.create_initial_state(players, config)
-
-        # Verify phase has expected_actions
-        if not phase.auto_resolve and not phase.expected_actions:
-            errors.append("First phase is not auto_resolve but has no expected_actions")
-
-        # Verify get_valid_actions works
-        for p in players:
-            actions = plugin.get_valid_actions(game_data, phase, p.player_id)
-            # Just check it doesn't crash
-
-        # Verify get_player_view works
-        for p in players:
-            view = plugin.get_player_view(game_data, phase, p.player_id, players)
-
-        # Verify determinism: same seed produces same state
-        game_data2, phase2, events2 = plugin.create_initial_state(players, config)
-        if game_data != game_data2:
-            errors.append("create_initial_state is not deterministic with same seed")
-
-    except Exception as e:
-        errors.append(f"create_initial_state failed: {e}")
-
-    return errors
+    # Checks required attributes, tests create_initial_state with min players,
+    # verifies get_valid_actions and get_player_view don't crash,
+    # and verifies determinism (same seed → same state).
 ```
 
 ---
@@ -1430,15 +1413,33 @@ AND it's a multi-player game (not vs AI):
 backend/src/engine/
 ├── __init__.py
 ├── models.py          # All data models (GameState, Phase, Action, Event, etc.)
-├── protocol.py        # GamePlugin protocol definition
+├── protocol.py        # GamePlugin protocol definition (contract for gRPC adapter)
+├── grpc_plugin.py     # GrpcGamePlugin — adapter delegating to Rust via gRPC
 ├── session.py         # GameSession orchestrator
-├── registry.py        # PluginRegistry
-├── timer.py           # TimerManager
-├── event_store.py     # EventStore (Postgres interface)
-├── state_store.py     # StateStore (Redis interface)
-├── broadcaster.py     # Broadcaster (WebSocket message distribution)
+├── session_manager.py # Manages all active sessions, handles recovery
+├── registry.py        # PluginRegistry (discovers games from Rust engine via gRPC)
+├── event_store.py     # EventStore (Postgres append-only event log)
+├── state_store.py     # StateStore (Redis hot state cache)
+├── bot_runner.py      # Schedules and executes bot moves
+├── bot_strategy.py    # BotStrategy protocol + RandomStrategy + GrpcMctsStrategy
 ├── errors.py          # Error types
-└── validation.py      # Plugin validation utilities
+├── validation.py      # Plugin validation utilities
+└── proto/             # Generated protobuf/gRPC stubs
+    ├── game_engine_pb2.py
+    └── game_engine_pb2_grpc.py
+
+game-engine/src/       # Rust game engine (gRPC server)
+├── engine/
+│   ├── mcts.rs        # Game-agnostic MCTS (UCT, progressive widening, RAVE)
+│   ├── simulator.rs   # Action application and auto-resolve loop
+│   ├── arena.rs       # Bot-vs-bot arena runner
+│   ├── bot_strategy.rs # Strategy trait, MctsStrategy, RandomStrategy
+│   ├── evaluator.rs   # Heuristic evaluator trait
+│   └── plugin.rs      # TypedGamePlugin trait
+├── games/
+│   ├── carcassonne/   # Carcassonne (board, tiles, features, scoring, evaluator)
+│   └── tictactoe/     # TicTacToe (MCTS isolation testing)
+└── server.rs          # gRPC server (tonic)
 ```
 
 ---
