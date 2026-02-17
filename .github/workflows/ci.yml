@@ -20,6 +20,20 @@ jobs:
       - run: uv sync --extra dev
       - run: uv run pytest -v
 
+  game-engine-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: game-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: game-engine
+      - run: cargo test --release --lib
+
   frontend-checks:
     runs-on: ubuntu-latest
     defaults:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import random as _random
 from typing import Callable, Protocol
 
-from src.engine.models import Phase, PlayerId
+from src.engine.models import Phase, Player, PlayerId
 from src.engine.protocol import GamePlugin
 
 
@@ -18,6 +18,7 @@ class BotStrategy(Protocol):
         phase: Phase,
         player_id: PlayerId,
         plugin: GamePlugin,
+        players: list[Player] | None = None,
     ) -> dict:
         """Return the chosen action payload (same shape as get_valid_actions items)."""
         ...
@@ -35,6 +36,7 @@ class RandomStrategy:
         phase: Phase,
         player_id: PlayerId,
         plugin: GamePlugin,
+        players: list[Player] | None = None,
     ) -> dict:
         valid = plugin.get_valid_actions(game_data, phase, player_id)
         return self._rng.choice(valid)
@@ -89,18 +91,38 @@ class GrpcMctsStrategy:
         phase: Phase,
         player_id: PlayerId,
         plugin: GamePlugin,
+        players: list[Player] | None = None,
     ) -> dict:
         import json
 
-        from src.engine.grpc_plugin import _phase_to_proto
+        from src.engine.grpc_plugin import _phase_to_proto, _player_to_proto
 
+        if not players:
+            raise ValueError(
+                "GrpcMctsStrategy requires non-empty `players` list. "
+                "Without players, MCTS cannot determine correct player ordering."
+            )
+        player_ids = {p.player_id for p in players}
+        if player_id not in player_ids:
+            raise ValueError(
+                f"MCTS searching player '{player_id}' not in players: {sorted(player_ids)}"
+            )
+        for i, p in enumerate(players):
+            if p.seat_index != i:
+                raise ValueError(
+                    f"Players not ordered by seat_index: '{p.player_id}' at "
+                    f"position {i} has seat_index {p.seat_index}. "
+                    f"This will cause MCTS to optimize for the wrong player."
+                )
+
+        proto_players = [_player_to_proto(p) for p in players]
         resp = self._stub.MctsSearch(
             self._pb2.MctsSearchRequest(
                 game_id=self._game_id,
                 game_data_json=json.dumps(game_data).encode(),
                 phase=_phase_to_proto(phase),
                 player_id=player_id,
-                players=[],  # Not needed for MCTS search RPC — Rust reconstructs from game_data
+                players=proto_players,
                 num_simulations=self.num_simulations,
                 time_limit_ms=self.time_limit_ms,
                 exploration_constant=self.exploration_constant,

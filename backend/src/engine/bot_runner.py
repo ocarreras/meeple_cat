@@ -56,6 +56,10 @@ class BotRunner:
         # Find the player object and check if it's a bot
         for p in session.state.players:
             if p.player_id == expected_player_id and p.is_bot:
+                logger.info(
+                    "Scheduling bot move: player=%s phase=%s bot_id=%s",
+                    p.player_id, phase.name, p.bot_id,
+                )
                 asyncio.create_task(
                     self._execute_bot_move(session, p.player_id)
                 )
@@ -90,10 +94,16 @@ class BotRunner:
             cache_key = f"{bot_id}:{game_id}"
             if cache_key not in self._strategies:
                 self._strategies[cache_key] = get_strategy(bot_id, game_id=game_id)
+                logger.info("Created strategy %s for cache_key=%s", type(self._strategies[cache_key]).__name__, cache_key)
             strategy = self._strategies[cache_key]
 
+            logger.info(
+                "Bot %s executing %s with strategy=%s (bot_id=%s)",
+                player_id, phase.name, type(strategy).__name__, bot_id,
+            )
             chosen = strategy.choose_action(
-                session.state.game_data, phase, player_id, session.plugin
+                session.state.game_data, phase, player_id, session.plugin,
+                players=session.state.players,
             )
             action_type = phase.expected_actions[0].action_type
 

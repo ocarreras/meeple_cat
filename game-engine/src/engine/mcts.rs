@@ -212,6 +212,23 @@ pub fn mcts_search<P: TypedGamePlugin>(
     params: &MctsParams,
     eval_fn: Option<&(dyn Fn(&P::State, &Phase, &str, &[Player]) -> f64 + Sync)>,
 ) -> (serde_json::Value, usize) {
+    // Validate player ordering invariants — zero cost in release builds
+    debug_assert!(
+        !players.is_empty(),
+        "MCTS: players list must not be empty"
+    );
+    debug_assert!(
+        players.iter().enumerate().all(|(i, p)| p.seat_index == i as i32),
+        "MCTS: players must be ordered by seat_index. Got: {:?}",
+        players.iter().map(|p| (&p.player_id, p.seat_index)).collect::<Vec<_>>()
+    );
+    debug_assert!(
+        players.iter().any(|p| p.player_id == player_id),
+        "MCTS: searching player_id '{}' not found in players: {:?}",
+        player_id,
+        players.iter().map(|p| &p.player_id).collect::<Vec<_>>()
+    );
+
     let valid_actions = plugin.get_valid_actions(state, phase, player_id);
     if valid_actions.len() <= 1 {
         return (valid_actions.into_iter().next().unwrap_or(serde_json::json!({})), 0);
@@ -531,6 +548,12 @@ fn get_acting_player(phase: &Phase, players: &[Player]) -> Option<String> {
     if let Some(pi) = phase.metadata.get("player_index").and_then(|v| v.as_u64()) {
         let idx = pi as usize;
         if idx < players.len() {
+            debug_assert_eq!(
+                players[idx].seat_index, idx as i32,
+                "get_acting_player: player at index {} has seat_index {}, expected {}. \
+                 Players may be misordered.",
+                idx, players[idx].seat_index, idx
+            );
             return Some(players[idx].player_id.clone());
         }
     }
@@ -1067,5 +1090,119 @@ mod tests {
             }
             println!("  Best action: {}", best_action);
         }
+    }
+
+    /// CI smoke test: 2 short games (10 tiles, 50 sims).
+    /// Uses UUID-like IDs where alphabetical sort != seat order,
+    /// so player-ordering bugs cause MCTS to lose.
+    #[test]
+    fn test_mcts_beats_random_smoke() {
+        use crate::engine::simulator::{apply_action_and_resolve, SimulationState};
+        use crate::games::carcassonne::evaluator::{make_carcassonne_eval, DEFAULT_WEIGHTS};
+        use rand::seq::SliceRandom;
+
+        let plugin = CarcassonnePlugin;
+        let eval_fn = make_carcassonne_eval(&DEFAULT_WEIGHTS);
+
+        let params = MctsParams {
+            num_simulations: 50,
+            time_limit_ms: 999999.0,
+            num_determinizations: 2,
+            ..Default::default()
+        };
+
+        let mut mcts_total = 0.0;
+        let mut random_total = 0.0;
+
+        for seed in [42u64, 123] {
+            // "zzz" at seat 0, "aaa" at seat 1 — alphabetical sort would swap these
+            let players = vec![
+                Player {
+                    player_id: "zzz-mcts-bot".into(),
+                    display_name: "MCTS".into(),
+                    seat_index: 0,
+                    is_bot: true,
+                    bot_id: None,
+                },
+                Player {
+                    player_id: "aaa-random".into(),
+                    display_name: "Random".into(),
+                    seat_index: 1,
+                    is_bot: false,
+                    bot_id: None,
+                },
+            ];
+
+            let config = GameConfig {
+                random_seed: Some(seed),
+                options: serde_json::json!({"tile_count": 10}),
+            };
+            let (state, phase, _) = plugin.create_initial_state(&players, &config);
+            let mut sim = SimulationState {
+                state,
+                phase,
+                players: players.clone(),
+                scores: players.iter().map(|p| (p.player_id.clone(), 0.0)).collect(),
+                game_over: None,
+            };
+
+            for _ in 0..200 {
+                if sim.game_over.is_some() { break; }
+                while sim.phase.auto_resolve && sim.game_over.is_none() {
+                    let phase_name = sim.phase.name.clone();
+                    let pid = sim.phase.metadata.get("player_index")
+                        .and_then(|v| v.as_u64())
+                        .and_then(|i| sim.players.get(i as usize))
+                        .map(|p| p.player_id.clone())
+                        .unwrap_or_else(|| "system".into());
+                    apply_action_and_resolve(&plugin, &mut sim, &Action {
+                        action_type: phase_name,
+                        player_id: pid,
+                        payload: serde_json::json!({}),
+                    });
+                }
+                if sim.game_over.is_some() || sim.phase.expected_actions.is_empty() { break; }
+
+                let acting_pid = sim.phase.expected_actions[0].player_id.clone();
+
+                let chosen = if acting_pid == "zzz-mcts-bot" {
+                    let eval_ref: Option<&(dyn Fn(&_, &Phase, &str, &[Player]) -> f64 + Sync)> =
+                        Some(eval_fn.as_ref());
+                    let (action, _) = mcts_search(
+                        &sim.state, &sim.phase, &acting_pid, &plugin,
+                        &players, &params, eval_ref,
+                    );
+                    action
+                } else {
+                    let valid = plugin.get_valid_actions(&sim.state, &sim.phase, &acting_pid);
+                    if valid.is_empty() { break; }
+                    valid.choose(&mut rand::thread_rng()).cloned().unwrap()
+                };
+
+                let action_type = sim.phase.expected_actions[0].action_type.clone();
+                apply_action_and_resolve(&plugin, &mut sim, &Action {
+                    action_type, player_id: acting_pid, payload: chosen,
+                });
+            }
+
+            mcts_total += sim.scores.get("zzz-mcts-bot").copied().unwrap_or(0.0);
+            random_total += sim.scores.get("aaa-random").copied().unwrap_or(0.0);
+        }
+
+        let avg_mcts = mcts_total / 2.0;
+        let avg_random = random_total / 2.0;
+
+        assert!(
+            avg_mcts > avg_random,
+            "MCTS avg ({:.1}) should beat Random avg ({:.1}). \
+             Check player ordering in mcts_search.",
+            avg_mcts, avg_random,
+        );
+        assert!(
+            avg_mcts >= 10.0,
+            "MCTS avg score {:.1} is suspiciously low (expected >= 10). \
+             May indicate player ordering or eval bugs.",
+            avg_mcts,
+        );
     }
 }

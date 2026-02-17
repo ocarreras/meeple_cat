@@ -556,23 +556,11 @@ impl GameEngineService for GameEngineServer {
             .as_ref()
             .map(proto_to_phase)
             .ok_or_else(|| Status::invalid_argument("phase is required"))?;
-        let mut players = proto_to_players(&req.players);
-
-        // Reconstruct players from game_data scores if not provided
+        let players = proto_to_players(&req.players);
         if players.is_empty() {
-            if let Some(scores) = game_data.get("scores").and_then(|s| s.as_object()) {
-                let mut pids: Vec<&String> = scores.keys().collect();
-                pids.sort();
-                for (i, pid) in pids.iter().enumerate() {
-                    players.push(models::Player {
-                        player_id: pid.to_string(),
-                        display_name: pid.to_string(),
-                        seat_index: i as i32,
-                        is_bot: true,
-                        bot_id: None,
-                    });
-                }
-            }
+            return Err(Status::invalid_argument(
+                "MctsSearch requires non-empty `players` with correct seat ordering"
+            ));
         }
 
         let params = build_mcts_params(

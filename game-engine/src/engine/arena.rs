@@ -183,6 +183,12 @@ fn play_one_game<P: TypedGamePlugin>(
     config: &GameConfig,
     pid_to_strategy: &HashMap<String, &dyn BotStrategy<P>>,
 ) -> Option<GameResult> {
+    debug_assert!(
+        players.iter().enumerate().all(|(i, p)| p.seat_index == i as i32),
+        "Arena: players not ordered by seat_index: {:?}",
+        players.iter().map(|p| (&p.player_id, p.seat_index)).collect::<Vec<_>>()
+    );
+
     let (state, phase, _) = plugin.create_initial_state(players, config);
 
     let mut sim = SimulationState {
