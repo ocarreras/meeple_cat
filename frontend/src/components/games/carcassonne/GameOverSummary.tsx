@@ -8,6 +8,7 @@ interface GameOverSummaryProps {
   finalScores: Record<PlayerId, number>;
   winners: PlayerId[];
   breakdown?: Record<PlayerId, Record<string, number>>;
+  onClose?: () => void;
 }
 
 const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
@@ -18,6 +19,7 @@ export default function GameOverSummary({
   finalScores,
   winners,
   breakdown,
+  onClose,
 }: GameOverSummaryProps) {
   const { t } = useTranslation();
 
@@ -37,7 +39,18 @@ export default function GameOverSummary({
 
   return (
     <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl p-4 md:p-6 max-w-lg w-full mx-4">
+      <div className="bg-white rounded-xl shadow-2xl p-4 md:p-6 max-w-lg w-full mx-4 relative">
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label={t('common.close')}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
         <h2 className="text-2xl font-bold text-center mb-1">{t('gameOver.title')}</h2>
         <p className="text-center text-lg mb-4">
           {winners.length === 1 ? (
@@ -52,6 +65,7 @@ export default function GameOverSummary({
           <thead>
             <tr className="border-b-2">
               <th className="text-left py-2 pr-2">{t('gameOver.player')}</th>
+              {breakdown && <th className="text-right py-2 px-1">{t('gameOver.inGame')}</th>}
               {breakdown && CATEGORIES.map(cat => (
                 <th key={cat} className="text-right py-2 px-1">{CATEGORY_LABELS[cat]}</th>
               ))}
@@ -65,6 +79,9 @@ export default function GameOverSummary({
               const playerBreakdown = breakdown?.[player.player_id];
               const endGameTotal = playerBreakdown
                 ? CATEGORIES.reduce((sum, cat) => sum + (playerBreakdown[cat] || 0), 0)
+                : null;
+              const inGameScore = endGameTotal !== null
+                ? (finalScores[player.player_id] || 0) - endGameTotal
                 : null;
 
               return (
@@ -82,6 +99,11 @@ export default function GameOverSummary({
                       {isWinner && <span className="text-yellow-600 text-xs">&#9733;</span>}
                     </div>
                   </td>
+                  {breakdown && (
+                    <td className="text-right py-2 px-1 tabular-nums">
+                      {inGameScore ?? 0}
+                    </td>
+                  )}
                   {breakdown && CATEGORIES.map(cat => (
                     <td key={cat} className="text-right py-2 px-1 tabular-nums">
                       {playerBreakdown?.[cat] || 0}
