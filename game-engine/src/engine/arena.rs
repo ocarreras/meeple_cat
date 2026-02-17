@@ -298,6 +298,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // slow (~60s) — runs in nightly CI
     fn test_arena_pw_comparison() {
         // Compare self-play scores with different PW settings — no gRPC, pure Rust
         let plugin = CarcassonnePlugin;
@@ -353,6 +354,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // slow (~60s) — runs in nightly CI
     fn test_mcts_per_game_trace() {
         // Play same-seed games with pw_c=1 vs pw_c=2, print per-game scores
         let plugin = CarcassonnePlugin;

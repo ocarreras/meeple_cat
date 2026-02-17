@@ -200,6 +200,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // slow (50 random games) — runs in nightly CI
     fn test_fuzz_board_consistency() {
         // Play 50 random games with different seeds, verify edge consistency at every step
         use crate::engine::models::*;

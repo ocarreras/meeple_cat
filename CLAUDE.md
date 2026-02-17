@@ -147,8 +147,8 @@ uv run pytest -v
 # Rust game engine tests (from game-engine/)
 cargo test --release
 
-# Quick Rust tests (skip slow arena tests)
-cargo test --release --lib -- --skip arena --skip mcts_per_game
+# Full Rust tests including slow #[ignore] tests (arena, fuzz)
+cargo test --release -- --include-ignored
 ```
 
 No frontend tests yet.

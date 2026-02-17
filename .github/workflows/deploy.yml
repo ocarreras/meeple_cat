@@ -83,7 +83,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: game-engine
-      - run: cargo test --release
+      - run: cargo test --release --lib
 
   build-backend:
     needs: [changes, test-backend]
