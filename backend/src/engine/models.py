@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import random
 from datetime import datetime
 from enum import Enum
 from typing import NewType
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # --- Identifiers ---
 PlayerId = NewType("PlayerId", str)
@@ -42,10 +43,20 @@ class TimerConfig(BaseModel):
     period_time_ms: int = 0
     timeout_behavior: TimeoutBehavior = TimeoutBehavior.LOSE_TURN
 
+def _random_seed() -> int:
+    return random.randint(0, 2**63 - 1)
+
 class GameConfig(BaseModel):
     timer: TimerConfig = Field(default_factory=TimerConfig)
     options: dict = Field(default_factory=dict)
-    random_seed: int | None = None
+    random_seed: int = Field(default_factory=_random_seed)
+
+    @field_validator("random_seed", mode="before")
+    @classmethod
+    def _coerce_none_seed(cls, v: object) -> object:
+        if v is None:
+            return _random_seed()
+        return v
 
 # --- Phase & Action Queue ---
 class ConcurrentMode(str, Enum):

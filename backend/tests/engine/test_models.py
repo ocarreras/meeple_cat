@@ -135,7 +135,7 @@ class TestGameConfig:
         config = GameConfig()
         assert isinstance(config.timer, TimerConfig)
         assert config.options == {}
-        assert config.random_seed is None
+        assert isinstance(config.random_seed, int)
 
     def test_game_config_with_options(self):
         config = GameConfig(
