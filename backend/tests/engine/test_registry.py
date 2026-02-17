@@ -1,8 +1,6 @@
 """Tests for plugin registry."""
 
 from typing import ClassVar
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from src.engine.models import (
@@ -240,76 +238,6 @@ class TestPluginRegistry:
         game_ids = [g["game_id"] for g in games]
         assert "mock-game" in game_ids
         assert "another-game" in game_ids
-
-    def test_auto_discover_success(self):
-        """Test auto-discovery of plugins."""
-        import src.engine.registry as reg_module
-
-        registry = PluginRegistry()
-
-        mock_module = MagicMock()
-        mock_plugin = MockPlugin()
-        mock_module.plugin = mock_plugin
-
-        with patch.object(reg_module.importlib, "import_module") as mock_import:
-            with patch.object(reg_module.pkgutil, "iter_modules") as mock_iter:
-                mock_import.side_effect = [
-                    MagicMock(__path__=["fake/path"]),  # Package import
-                    mock_module,  # Game module import
-                ]
-                mock_iter.return_value = [
-                    (None, "mock_game", True),  # One package found
-                ]
-
-                registry.auto_discover("src.games")
-
-                assert registry.get("mock-game") == mock_plugin
-
-    def test_auto_discover_handles_import_errors(self):
-        """Test auto-discovery handles import errors gracefully."""
-        import src.engine.registry as reg_module
-
-        registry = PluginRegistry()
-
-        with patch.object(reg_module.importlib, "import_module") as mock_import:
-            with patch.object(reg_module.pkgutil, "iter_modules") as mock_iter:
-                mock_import.side_effect = [
-                    MagicMock(__path__=["fake/path"]),  # Package import
-                    ImportError("Failed to import"),  # Game module import fails
-                ]
-                mock_iter.return_value = [
-                    (None, "broken_game", True),
-                ]
-
-                # Should not raise exception
-                registry.auto_discover("src.games")
-
-                # No plugins should be registered
-                assert registry.list_games() == []
-
-    def test_auto_discover_skips_modules_without_plugin(self):
-        """Test auto-discovery skips modules without 'plugin' attribute."""
-        import src.engine.registry as reg_module
-
-        registry = PluginRegistry()
-
-        mock_module = MagicMock(spec=[])  # No 'plugin' attribute
-
-        with patch.object(reg_module.importlib, "import_module") as mock_import:
-            with patch.object(reg_module.pkgutil, "iter_modules") as mock_iter:
-                mock_import.side_effect = [
-                    MagicMock(__path__=["fake/path"]),
-                    mock_module,
-                ]
-                mock_iter.return_value = [
-                    (None, "no_plugin_module", True),
-                ]
-
-                registry.auto_discover("src.games")
-
-                # No plugins should be registered
-                assert registry.list_games() == []
-
 
 class TestValidatePlugin:
     """Tests for validate_plugin function."""

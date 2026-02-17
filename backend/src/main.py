@@ -60,19 +60,19 @@ async def lifespan(app: FastAPI):
     redis = Redis.from_url(settings.redis_url, decode_responses=False)
     app.state.redis = redis
 
-    # Initialize plugin registry
+    # Initialize plugin registry (all game logic provided by Rust engine via gRPC)
     registry = PluginRegistry()
-    if settings.game_engine_grpc_url:
-        try:
-            registry.connect_grpc(settings.game_engine_grpc_url)
-            logger.info(f"Connected to Rust game engine at {settings.game_engine_grpc_url}")
-        except Exception as e:
-            logger.warning(f"Failed to connect to Rust game engine: {e}, falling back to Python plugins")
-            registry.auto_discover()
-    else:
-        registry.auto_discover()
+    registry.connect_grpc(settings.game_engine_grpc_url)
+    logger.info(f"Connected to Rust game engine at {settings.game_engine_grpc_url}")
     app.state.registry = registry
     logger.info(f"Loaded {len(registry.list_games())} game plugins")
+
+    # Register MCTS bot strategy backed by Rust engine
+    from src.engine.bot_strategy import register_strategy, GrpcMctsStrategy
+    grpc_url = settings.game_engine_grpc_url
+    register_strategy("mcts", lambda game_id="carcassonne", **kwargs: GrpcMctsStrategy(
+        grpc_address=grpc_url, game_id=game_id, **kwargs,
+    ))
 
     # Initialize connection manager and broadcaster
     cm = ConnectionManager()

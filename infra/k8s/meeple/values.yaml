@@ -51,7 +51,7 @@ redis:
       memory: 384Mi
 
 gameEngine:
-  enabled: false
+  enabled: true
   image: ghcr.io/ocarreras/meeple-game-engine:latest
   replicas: 1
   port: 50051

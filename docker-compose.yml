@@ -40,6 +40,7 @@ services:
     environment:
       MEEPLE_DATABASE_URL: postgresql+asyncpg://meeple:meeple_dev@postgres:5432/meeple
       MEEPLE_REDIS_URL: redis://redis:6379/0
+      MEEPLE_GAME_ENGINE_GRPC_URL: game-engine:50051
       MEEPLE_HOST: "0.0.0.0"
       MEEPLE_PORT: "8000"
       MEEPLE_DEBUG: "false"
@@ -48,6 +49,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      game-engine:
+        condition: service_started
     restart: unless-stopped
 
   game-engine:

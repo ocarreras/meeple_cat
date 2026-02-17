@@ -1,5 +1,4 @@
 pub mod carcassonne;
-pub mod tictactoe;
 
 use std::collections::HashMap;
 

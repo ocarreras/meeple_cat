@@ -115,73 +115,12 @@ class GrpcMctsStrategy:
         return json.loads(resp.action_json)
 
 
-class MCTSStrategy:
-    """Wraps the MCTS engine as a BotStrategy."""
-
-    def __init__(
-        self,
-        num_simulations: int = 500,
-        time_limit_ms: float = 2000,
-        exploration_constant: float = 1.41,
-        num_determinizations: int = 5,
-        eval_fn: Callable | None = None,
-        pw_c: float = 2.0,
-        pw_alpha: float = 0.5,
-        use_rave: bool = False,
-        rave_k: float = 100.0,
-        max_amaf_depth: int = 4,
-        rave_fpu: bool = True,
-        tile_aware_amaf: bool = False,
-    ) -> None:
-        self.num_simulations = num_simulations
-        self.time_limit_ms = time_limit_ms
-        self.exploration_constant = exploration_constant
-        self.num_determinizations = num_determinizations
-        self.eval_fn = eval_fn
-        self.pw_c = pw_c
-        self.pw_alpha = pw_alpha
-        self.use_rave = use_rave
-        self.rave_k = rave_k
-        self.max_amaf_depth = max_amaf_depth
-        self.rave_fpu = rave_fpu
-        self.tile_aware_amaf = tile_aware_amaf
-
-    def choose_action(
-        self,
-        game_data: dict,
-        phase: Phase,
-        player_id: PlayerId,
-        plugin: GamePlugin,
-    ) -> dict:
-        from src.engine.mcts import mcts_search
-
-        return mcts_search(
-            game_data=game_data,
-            phase=phase,
-            player_id=player_id,
-            plugin=plugin,
-            num_simulations=self.num_simulations,
-            time_limit_ms=self.time_limit_ms,
-            exploration_constant=self.exploration_constant,
-            num_determinizations=self.num_determinizations,
-            eval_fn=self.eval_fn,
-            pw_c=self.pw_c,
-            pw_alpha=self.pw_alpha,
-            use_rave=self.use_rave,
-            rave_k=self.rave_k,
-            max_amaf_depth=self.max_amaf_depth,
-            rave_fpu=self.rave_fpu,
-            tile_aware_amaf=self.tile_aware_amaf,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
 _STRATEGY_FACTORIES: dict[str, Callable[..., BotStrategy]] = {
-    "random": lambda **kwargs: RandomStrategy(**kwargs),
-    "mcts": lambda **kwargs: MCTSStrategy(**kwargs),
+    "random": lambda seed=None, **_kwargs: RandomStrategy(seed=seed),
 }
 
 

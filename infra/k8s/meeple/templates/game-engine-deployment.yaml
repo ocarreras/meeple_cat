@@ -36,13 +36,13 @@ spec:
             - name: RUST_LOG
               value: "info"
           readinessProbe:
-            grpc:
+            tcpSocket:
               port: {{ .Values.gameEngine.port }}
             initialDelaySeconds: 2
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
-            grpc:
+            tcpSocket:
               port: {{ .Values.gameEngine.port }}
             initialDelaySeconds: 5
             periodSeconds: 30

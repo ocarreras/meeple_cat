@@ -17,7 +17,7 @@ async def test_create_match(client: AsyncClient):
     response = await client.post(
         "/api/v1/matches",
         json={
-            "game_id": "carcassonne",
+            "game_id": "mock-game",
             "player_display_names": ["Alice", "Bob"],
             "config": {},
             "random_seed": 42,
@@ -29,7 +29,7 @@ async def test_create_match(client: AsyncClient):
     data = response.json()
 
     assert "match_id" in data
-    assert data["game_id"] == "carcassonne"
+    assert data["game_id"] == "mock-game"
     assert data["status"] == "active"
     assert len(data["players"]) == 2
 
@@ -48,7 +48,7 @@ async def test_get_match(client: AsyncClient):
     create_resp = await client.post(
         "/api/v1/matches",
         json={
-            "game_id": "carcassonne",
+            "game_id": "mock-game",
             "player_display_names": ["Charlie", "Dave"],
             "random_seed": 123,
         },
@@ -63,7 +63,7 @@ async def test_get_match(client: AsyncClient):
     data = response.json()
 
     assert data["match_id"] == match_id
-    assert data["game_id"] == "carcassonne"
+    assert data["game_id"] == "mock-game"
     assert data["status"] == "active"
     assert len(data["players"]) == 2
 
@@ -74,11 +74,11 @@ async def test_create_match_bad_player_count(client: AsyncClient):
     resp = await client.post("/api/v1/auth/token", json={"display_name": "Solo"})
     token = resp.json()["token"]
 
-    # Carcassonne requires 2-5 players, so 1 player should fail
+    # MockPlugin requires 2-4 players, so 1 player should fail
     response = await client.post(
         "/api/v1/matches",
         json={
-            "game_id": "carcassonne",
+            "game_id": "mock-game",
             "player_display_names": ["Solo"],
         },
         headers={"Authorization": f"Bearer {token}"},

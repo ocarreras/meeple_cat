@@ -8,7 +8,7 @@ from starlette.testclient import TestClient
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_websocket_game_e2e(app):
-    """End-to-end test of WebSocket game play with Carcassonne."""
+    """End-to-end test of WebSocket game play with MockPlugin."""
     # Create HTTP client for setup (async for REST calls)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Get tokens for two players
@@ -22,11 +22,11 @@ async def test_websocket_game_e2e(app):
         bob_token = bob_data["token"]
         bob_id = bob_data["user_id"]
 
-        # Create a Carcassonne match with fixed seed
+        # Create a match with MockPlugin
         create_resp = await client.post(
             "/api/v1/matches",
             json={
-                "game_id": "carcassonne",
+                "game_id": "mock-game",
                 "player_display_names": ["Alice", "Bob"],
                 "config": {},
                 "random_seed": 42,
@@ -53,43 +53,17 @@ async def test_websocket_game_e2e(app):
 
             # Check initial state
             view = alice_state1["payload"]["view"]
-            assert view["game_id"] == "carcassonne"
+            assert view["game_id"] == "mock-game"
             assert view["status"] == "active"
 
             # The game should be in a phase expecting an action
             current_phase = view["current_phase"]
-            assert current_phase["name"] in [
-                "draw_tile", "place_tile", "place_meeple", "next_turn",
-            ]
+            assert current_phase["name"] == "play"
 
             # Test PING/PONG
             alice_ws.send_json({"type": "ping", "payload": {}})
             pong = alice_ws.receive_json()
             assert pong["type"] == "pong"
-
-            # Play a move if we're in place_tile phase
-            expected_actions = current_phase.get("expected_actions", [])
-            if expected_actions:
-                expected_player_id = expected_actions[0].get("player_id")
-
-                # Only play if it's Alice's turn (the connected player)
-                if expected_player_id == alice_id:
-                    valid_actions = view.get("valid_actions", [])
-                    if current_phase["name"] == "place_tile" and valid_actions:
-                        # valid_actions are dicts like {"x": 0, "y": 1, "rotation": 0}
-                        placement = valid_actions[0]
-                        alice_ws.send_json({
-                            "type": "action",
-                            "payload": {
-                                "action_type": "place_tile",
-                                "payload": placement,
-                            },
-                        })
-
-                        # Should receive state update(s) — auto-resolve
-                        # may produce multiple updates
-                        alice_update = alice_ws.receive_json()
-                        assert alice_update["type"] == "state_update"
 
 
 @pytest.mark.slow
@@ -133,7 +107,7 @@ async def test_websocket_player_not_in_match(app):
         create_resp = await client.post(
             "/api/v1/matches",
             json={
-                "game_id": "carcassonne",
+                "game_id": "mock-game",
                 "player_display_names": ["Alice", "Bob"],
                 "random_seed": 42,
             },

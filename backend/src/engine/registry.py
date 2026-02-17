@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import importlib
 import logging
-import pkgutil
+import time
 from typing import TYPE_CHECKING
 
 from src.engine.models import GameId
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class PluginRegistry:
-    """Discovers and registers game plugins."""
+    """Registers game plugins provided by the Rust engine via gRPC."""
 
     def __init__(self) -> None:
         self._plugins: dict[str, GamePlugin] = {}
@@ -42,22 +41,26 @@ class PluginRegistry:
             for p in self._plugins.values()
         ]
 
-    def auto_discover(self, package: str = "src.games") -> None:
-        pkg = importlib.import_module(package)
-        for _importer, modname, ispkg in pkgutil.iter_modules(pkg.__path__):
-            if ispkg:
-                try:
-                    mod = importlib.import_module(f"{package}.{modname}")
-                    if hasattr(mod, "plugin"):
-                        self.register(mod.plugin)
-                except Exception as e:
-                    logger.warning(f"Failed to load game plugin '{modname}': {e}")
+    def connect_grpc(self, address: str, max_retries: int = 30, retry_delay: float = 2.0) -> None:
+        """Connect to the Rust game engine via gRPC and register all available games.
 
-    def connect_grpc(self, address: str) -> None:
-        """Connect to the Rust game engine via gRPC and register all available games."""
+        Retries on failure to handle the case where the game engine is still starting up.
+        """
         from src.engine.grpc_plugin import connect_grpc
 
-        plugins = connect_grpc(address)
-        for plugin in plugins:
-            self.register(plugin)
-        logger.info(f"Registered {len(plugins)} game plugins from gRPC at {address}")
+        for attempt in range(1, max_retries + 1):
+            try:
+                plugins = connect_grpc(address)
+                for plugin in plugins:
+                    self.register(plugin)
+                logger.info(f"Registered {len(plugins)} game plugins from gRPC at {address}")
+                return
+            except Exception as e:
+                if attempt == max_retries:
+                    logger.error(f"Failed to connect to game engine at {address} after {max_retries} attempts")
+                    raise
+                logger.warning(
+                    f"Game engine not ready at {address} (attempt {attempt}/{max_retries}): {e}. "
+                    f"Retrying in {retry_delay}s..."
+                )
+                time.sleep(retry_delay)

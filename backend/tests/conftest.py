@@ -89,9 +89,11 @@ def test_redis():
 
 @pytest.fixture
 def test_registry():
-    """Create a test plugin registry with auto-discovered games."""
+    """Create a test plugin registry with a mock game plugin."""
+    from tests.engine.test_registry import MockPlugin
+
     registry = PluginRegistry()
-    registry.auto_discover()
+    registry.register(MockPlugin())
     return registry
 
 

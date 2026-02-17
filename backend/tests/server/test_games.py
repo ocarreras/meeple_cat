@@ -15,9 +15,9 @@ async def test_list_games(client: AsyncClient):
     assert isinstance(games, list)
     assert len(games) > 0
 
-    # Check that carcassonne is in the list
+    # Check that mock-game is in the list
     game_ids = [g["game_id"] for g in games]
-    assert "carcassonne" in game_ids
+    assert "mock-game" in game_ids
 
     # Check structure of first game
     game = games[0]
@@ -30,13 +30,13 @@ async def test_list_games(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_get_game_details(client: AsyncClient):
-    """Test that GET /games/carcassonne returns game details."""
-    response = await client.get("/api/v1/games/carcassonne")
+    """Test that GET /games/mock-game returns game details."""
+    response = await client.get("/api/v1/games/mock-game")
 
     assert response.status_code == 200
     game = response.json()
 
-    assert game["game_id"] == "carcassonne"
+    assert game["game_id"] == "mock-game"
     assert "display_name" in game
     assert "min_players" in game
     assert "max_players" in game

@@ -86,9 +86,11 @@ class BotRunner:
                     bot_id = p.bot_id
                     break
 
-            if bot_id not in self._strategies:
-                self._strategies[bot_id] = get_strategy(bot_id)
-            strategy = self._strategies[bot_id]
+            game_id = session.state.game_id
+            cache_key = f"{bot_id}:{game_id}"
+            if cache_key not in self._strategies:
+                self._strategies[cache_key] = get_strategy(bot_id, game_id=game_id)
+            strategy = self._strategies[cache_key]
 
             chosen = strategy.choose_action(
                 session.state.game_data, phase, player_id, session.plugin

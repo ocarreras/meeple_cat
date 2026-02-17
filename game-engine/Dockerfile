@@ -1,4 +1,4 @@
-FROM rust:1.83-slim AS builder
+FROM rust:1.85-slim AS builder
 
 RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
@@ -6,6 +6,7 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock* build.rs ./
 COPY proto/ proto/
 COPY src/ src/
+COPY benches/ benches/
 
 RUN cargo build --release
 
