@@ -13,6 +13,9 @@ __pycache__/
 .venv/
 *.egg-info/
 
+# Rust
+target/
+
 # Node
 node_modules/
 .next/
