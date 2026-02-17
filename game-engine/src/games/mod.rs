@@ -1,4 +1,5 @@
 pub mod carcassonne;
+pub mod einstein_dojo;
 
 use std::collections::HashMap;
 
