@@ -19,6 +19,7 @@ use crate::games::carcassonne::evaluator::{
 };
 use crate::games::carcassonne::plugin::CarcassonnePlugin;
 use crate::games::carcassonne::types::CarcassonneState;
+use crate::games::tictactoe::TicTacToePlugin;
 use crate::games::GameRegistry;
 
 pub mod proto {
@@ -614,6 +615,19 @@ impl GameEngineService for GameEngineServer {
                     &players,
                     &params,
                     eval_ref,
+                )
+            }
+            "tictactoe" => {
+                let plugin = TicTacToePlugin;
+                let state = plugin.decode_state(&game_data);
+                mcts_search(
+                    &state,
+                    &phase,
+                    &req.player_id,
+                    &plugin,
+                    &players,
+                    &params,
+                    None::<&(dyn Fn(&crate::games::tictactoe::TicTacToeState, &models::Phase, &str, &[models::Player]) -> f64 + Sync)>,
                 )
             }
             _ => {

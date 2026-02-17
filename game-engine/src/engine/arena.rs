@@ -269,7 +269,9 @@ fn resolve_auto<P: TypedGamePlugin>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::bot_strategy::RandomStrategy;
+    use crate::engine::bot_strategy::{MctsStrategy, RandomStrategy};
+    use crate::engine::mcts::MctsParams;
+    use crate::games::carcassonne::evaluator::{make_carcassonne_eval, DEFAULT_WEIGHTS};
     use crate::games::carcassonne::plugin::CarcassonnePlugin;
 
     #[test]
@@ -293,5 +295,137 @@ mod tests {
         assert_eq!(result.num_games, 3);
         let total_outcomes = result.wins.values().sum::<usize>() + result.draws;
         assert_eq!(total_outcomes, 3);
+    }
+
+    #[test]
+    fn test_arena_pw_comparison() {
+        // Compare self-play scores with different PW settings — no gRPC, pure Rust
+        let plugin = CarcassonnePlugin;
+        let num_games = 5;
+
+        let pw_configs = [
+            ("pw_c=1", 1.0f64),
+            ("pw_c=2", 2.0),
+            ("pw_c=4", 4.0),
+        ];
+
+        for (label, pw_c) in &pw_configs {
+            let eval_fn_a = make_carcassonne_eval(&DEFAULT_WEIGHTS);
+            let eval_fn_b = make_carcassonne_eval(&DEFAULT_WEIGHTS);
+
+            let strat_a = MctsStrategy::<CarcassonnePlugin>::with_eval(
+                MctsParams {
+                    num_simulations: 500,
+                    time_limit_ms: 999999.0,
+                    num_determinizations: 5,
+                    pw_c: *pw_c,
+                    pw_alpha: 0.5,
+                    ..Default::default()
+                },
+                eval_fn_a,
+            );
+            let strat_b = MctsStrategy::<CarcassonnePlugin>::with_eval(
+                MctsParams {
+                    num_simulations: 500,
+                    time_limit_ms: 999999.0,
+                    num_determinizations: 5,
+                    pw_c: *pw_c,
+                    pw_alpha: 0.5,
+                    ..Default::default()
+                },
+                eval_fn_b,
+            );
+
+            let mut strategies: HashMap<String, Box<dyn BotStrategy<CarcassonnePlugin>>> = HashMap::new();
+            strategies.insert("A".into(), Box::new(strat_a));
+            strategies.insert("B".into(), Box::new(strat_b));
+
+            let t0 = std::time::Instant::now();
+            let result = run_arena(&plugin, &strategies, num_games, 42, 2, None, true, None);
+            let elapsed = t0.elapsed();
+
+            let avg_a = result.avg_score("A");
+            let avg_b = result.avg_score("B");
+            let total = avg_a + avg_b;
+            println!("{}: total={:.1} A={:.1} B={:.1} ({:.1}s/game)",
+                label, total, avg_a, avg_b, elapsed.as_secs_f64() / num_games as f64);
+        }
+    }
+
+    #[test]
+    fn test_mcts_per_game_trace() {
+        // Play same-seed games with pw_c=1 vs pw_c=2, print per-game scores
+        let plugin = CarcassonnePlugin;
+        let num_games = 5;
+
+        for pw_c in [1.0f64, 2.0, 100.0] {
+            println!("\n=== pw_c={} (1 det, 500 sims) ===", pw_c);
+            let eval_fn_a = make_carcassonne_eval(&DEFAULT_WEIGHTS);
+            let eval_fn_b = make_carcassonne_eval(&DEFAULT_WEIGHTS);
+
+            let strat_a = MctsStrategy::<CarcassonnePlugin>::with_eval(
+                MctsParams {
+                    num_simulations: 500,
+                    time_limit_ms: 999999.0,
+                    num_determinizations: 1,
+                    pw_c,
+                    pw_alpha: 0.5,
+                    ..Default::default()
+                },
+                eval_fn_a,
+            );
+            let strat_b = MctsStrategy::<CarcassonnePlugin>::with_eval(
+                MctsParams {
+                    num_simulations: 500,
+                    time_limit_ms: 999999.0,
+                    num_determinizations: 1,
+                    pw_c,
+                    pw_alpha: 0.5,
+                    ..Default::default()
+                },
+                eval_fn_b,
+            );
+
+            let mut strategies: HashMap<String, Box<dyn BotStrategy<CarcassonnePlugin>>> = HashMap::new();
+            strategies.insert("A".into(), Box::new(strat_a));
+            strategies.insert("B".into(), Box::new(strat_b));
+
+            let result = run_arena(&plugin, &strategies, num_games, 42, 2, None, true, None);
+
+            let scores_a = result.total_scores.get("A").unwrap();
+            let scores_b = result.total_scores.get("B").unwrap();
+            for i in 0..num_games {
+                let total = scores_a[i] + scores_b[i];
+                println!("  Game {}: A={:.0} B={:.0} total={:.0}", i, scores_a[i], scores_b[i], total);
+            }
+            let avg_a = result.avg_score("A");
+            let avg_b = result.avg_score("B");
+            println!("  Average: A={:.1} B={:.1} total={:.1}", avg_a, avg_b, avg_a + avg_b);
+        }
+    }
+
+    #[test]
+    fn test_random_play_scores() {
+        // Measure baseline: total scores for random play across 10 full games.
+        // Compare with Python to verify game logic equivalence.
+        let plugin = CarcassonnePlugin;
+        let num_games = 10;
+
+        let mut strategies: HashMap<String, Box<dyn BotStrategy<CarcassonnePlugin>>> = HashMap::new();
+        strategies.insert("A".into(), Box::new(RandomStrategy));
+        strategies.insert("B".into(), Box::new(RandomStrategy));
+
+        let result = run_arena(&plugin, &strategies, num_games, 42, 2, None, true, None);
+
+        println!("\nRandom play scores ({} games):", num_games);
+        let scores_a = result.total_scores.get("A").unwrap();
+        let scores_b = result.total_scores.get("B").unwrap();
+        for i in 0..num_games {
+            let total = scores_a[i] + scores_b[i];
+            println!("  Game {}: A={:.0} B={:.0} total={:.0}", i, scores_a[i], scores_b[i], total);
+        }
+        let avg_a = result.avg_score("A");
+        let avg_b = result.avg_score("B");
+        println!("  Average: A={:.1} B={:.1} total={:.1}", avg_a, avg_b, avg_a + avg_b);
     }
 }

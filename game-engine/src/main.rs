@@ -10,6 +10,7 @@ mod server;
 
 use engine::plugin::JsonAdapter;
 use games::carcassonne::plugin::CarcassonnePlugin;
+use games::tictactoe::TicTacToePlugin;
 use games::GameRegistry;
 use server::proto::game_engine_service_server::GameEngineServiceServer;
 use server::GameEngineServer;
@@ -32,6 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut registry = GameRegistry::new();
     registry.register(Box::new(JsonAdapter(CarcassonnePlugin)));
+    registry.register(Box::new(JsonAdapter(TicTacToePlugin)));
     tracing::info!(
         games = ?registry.list_game_ids(),
         "registered game plugins"

@@ -160,25 +160,35 @@ impl NodeArena {
     fn best_child_uct(&self, node_idx: usize, c: f64) -> usize {
         let node = &self.nodes[node_idx];
         let parent_visits = node.visit_count;
-        *node.children.iter()
-            .max_by(|&&a, &&b| {
-                let va = self.nodes[a].uct_value(parent_visits, c);
-                let vb = self.nodes[b].uct_value(parent_visits, c);
-                va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .unwrap()
+        // Use first-max (not last-max) to match Python's max() tie-breaking.
+        // This ensures the MCTS deepens the first-expanded (earliest) child
+        // when UCT values tie, producing deeper trees that reach terminal
+        // states faster.
+        let mut best_idx = node.children[0];
+        let mut best_val = self.nodes[best_idx].uct_value(parent_visits, c);
+        for &child_idx in &node.children[1..] {
+            let val = self.nodes[child_idx].uct_value(parent_visits, c);
+            if val > best_val {
+                best_val = val;
+                best_idx = child_idx;
+            }
+        }
+        best_idx
     }
 
     fn best_child_rave(&self, node_idx: usize, c: f64, rave_k: f64, rave_fpu: bool) -> usize {
         let node = &self.nodes[node_idx];
         let parent_visits = node.visit_count;
-        *node.children.iter()
-            .max_by(|&&a, &&b| {
-                let va = self.nodes[a].rave_value(parent_visits, c, rave_k, rave_fpu, Some(node));
-                let vb = self.nodes[b].rave_value(parent_visits, c, rave_k, rave_fpu, Some(node));
-                va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .unwrap()
+        let mut best_idx = node.children[0];
+        let mut best_val = self.nodes[best_idx].rave_value(parent_visits, c, rave_k, rave_fpu, Some(node));
+        for &child_idx in &node.children[1..] {
+            let val = self.nodes[child_idx].rave_value(parent_visits, c, rave_k, rave_fpu, Some(node));
+            if val > best_val {
+                best_val = val;
+                best_idx = child_idx;
+            }
+        }
+        best_idx
     }
 
 }
@@ -300,8 +310,17 @@ pub fn mcts_search<P: TypedGamePlugin>(
         return (valid_actions.into_iter().next().unwrap_or(serde_json::json!({})), total_iterations);
     }
 
+    // Find the max visit count, then break ties by highest average value.
+    // When many children have similar visit counts (common with wide PW),
+    // the average value provides better differentiation than alphabetical order.
+    let max_visits = action_visits.values().copied().max().unwrap_or(0);
     let best_key = action_visits.iter()
-        .max_by_key(|(_, &v)| v)
+        .filter(|(_, &v)| v == max_visits)
+        .max_by(|(a_key, _), (b_key, _)| {
+            let a_val = action_values.get(*a_key).copied().unwrap_or(0.0) / max_visits.max(1) as f64;
+            let b_val = action_values.get(*b_key).copied().unwrap_or(0.0) / max_visits.max(1) as f64;
+            a_val.partial_cmp(&b_val).unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|(k, _)| k.clone())
         .unwrap();
 
@@ -598,6 +617,180 @@ fn action_sort_key(action: &serde_json::Value) -> (i32, i64) {
     (5, 0)
 }
 
+/// Tree statistics for diagnostics.
+#[derive(Debug, Default)]
+pub struct TreeStats {
+    pub total_nodes: usize,
+    pub max_depth: usize,
+    pub root_children: usize,
+    pub root_visit_count: u32,
+    pub leaf_evals: usize,     // nodes with visit_count > 0 and no children
+    pub terminal_count: usize, // tracked via a counter during search
+    pub avg_leaf_depth: f64,
+    pub root_child_visits: Vec<(String, u32, f64)>, // (action_key, visits, avg_value)
+}
+
+fn collect_tree_stats(arena: &NodeArena, root_idx: usize) -> TreeStats {
+    let mut stats = TreeStats::default();
+    let root = arena.get(root_idx);
+    stats.root_visit_count = root.visit_count;
+    stats.root_children = root.children.len();
+
+    // Collect root children info
+    let mut child_info: Vec<(String, u32, f64)> = root.children.iter().map(|&ci| {
+        let c = arena.get(ci);
+        let key = action_key_from_opt(&c.action_taken);
+        let avg = if c.visit_count > 0 { c.total_value / c.visit_count as f64 } else { 0.0 };
+        (key, c.visit_count, avg)
+    }).collect();
+    child_info.sort_by(|a, b| b.1.cmp(&a.1)); // sort by visits desc
+    stats.root_child_visits = child_info;
+
+    // BFS to count nodes, depth, leaves
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back((root_idx, 0usize));
+    let mut leaf_depths = Vec::new();
+
+    while let Some((idx, depth)) = queue.pop_front() {
+        stats.total_nodes += 1;
+        if depth > stats.max_depth {
+            stats.max_depth = depth;
+        }
+        let node = arena.get(idx);
+        if node.children.is_empty() && node.visit_count > 0 {
+            stats.leaf_evals += 1;
+            leaf_depths.push(depth as f64);
+        }
+        for &ci in &node.children {
+            queue.push_back((ci, depth + 1));
+        }
+    }
+
+    if !leaf_depths.is_empty() {
+        stats.avg_leaf_depth = leaf_depths.iter().sum::<f64>() / leaf_depths.len() as f64;
+    }
+
+    stats
+}
+
+/// Like mcts_search but returns per-determinization tree stats for diagnostics.
+pub fn mcts_search_with_stats<P: TypedGamePlugin>(
+    state: &P::State,
+    phase: &Phase,
+    player_id: &str,
+    plugin: &P,
+    players: &[Player],
+    params: &MctsParams,
+    eval_fn: Option<&(dyn Fn(&P::State, &Phase, &str, &[Player]) -> f64 + Sync)>,
+) -> (serde_json::Value, usize, Vec<TreeStats>) {
+    let valid_actions = plugin.get_valid_actions(state, phase, player_id);
+    if valid_actions.len() <= 1 {
+        return (valid_actions.into_iter().next().unwrap_or(serde_json::json!({})), 0, vec![]);
+    }
+
+    let sims_per_det = (params.num_simulations / params.num_determinizations).max(1);
+    let total_deadline = Instant::now() + std::time::Duration::from_millis(params.time_limit_ms as u64);
+    let base_scores = plugin.get_scores(state);
+
+    let det_results: Vec<(DetResult, TreeStats)> = (0..params.num_determinizations)
+        .into_par_iter()
+        .map(|_det_idx| {
+            if Instant::now() >= total_deadline {
+                return (DetResult {
+                    visits: HashMap::new(),
+                    values: HashMap::new(),
+                    actions: HashMap::new(),
+                    iterations: 0,
+                }, TreeStats::default());
+            }
+
+            let mut det_state = state.clone();
+            plugin.determinize(&mut det_state);
+
+            let root_state = SimulationState {
+                state: det_state,
+                phase: phase.clone(),
+                players: players.to_vec(),
+                scores: base_scores.clone(),
+                game_over: None,
+            };
+
+            let mut arena = NodeArena::new();
+            let root_idx = arena.alloc(MctsNode::new(None, None));
+            let mut iterations = 0;
+
+            for _sim_i in 0..sims_per_det {
+                if Instant::now() >= total_deadline {
+                    break;
+                }
+                iterations += 1;
+                run_one_iteration(
+                    &mut arena, root_idx, &root_state,
+                    player_id, players, plugin, params, eval_fn,
+                );
+            }
+
+            let stats = collect_tree_stats(&arena, root_idx);
+
+            let mut visits = HashMap::new();
+            let mut values = HashMap::new();
+            let mut actions = HashMap::new();
+
+            let root = arena.get(root_idx);
+            for &child_idx in &root.children {
+                let child = arena.get(child_idx);
+                if let Some(ref action) = child.action_taken {
+                    let key = action_key(action);
+                    actions.entry(key.clone()).or_insert_with(|| action.clone());
+                    *visits.entry(key.clone()).or_insert(0) += child.visit_count;
+                    *values.entry(key).or_insert(0.0) += child.total_value;
+                }
+            }
+
+            (DetResult { visits, values, actions, iterations }, stats)
+        })
+        .collect();
+
+    let mut action_visits: HashMap<String, u32> = HashMap::new();
+    let mut action_values: HashMap<String, f64> = HashMap::new();
+    let mut action_map: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut total_iterations: usize = 0;
+    let mut all_stats = Vec::new();
+
+    for (det, stats) in det_results {
+        total_iterations += det.iterations;
+        all_stats.push(stats);
+        for (key, count) in &det.visits {
+            *action_visits.entry(key.clone()).or_insert(0) += count;
+            if !action_map.contains_key(key) {
+                if let Some(action) = det.actions.get(key) {
+                    action_map.insert(key.clone(), action.clone());
+                }
+            }
+        }
+        for (key, value) in &det.values {
+            *action_values.entry(key.clone()).or_insert(0.0) += value;
+        }
+    }
+
+    if action_visits.is_empty() {
+        return (valid_actions.into_iter().next().unwrap_or(serde_json::json!({})), total_iterations, all_stats);
+    }
+
+    let max_visits = action_visits.values().copied().max().unwrap_or(0);
+    let best_key = action_visits.iter()
+        .filter(|(_, &v)| v == max_visits)
+        .max_by(|(a_key, _), (b_key, _)| {
+            let a_val = action_values.get(*a_key).copied().unwrap_or(0.0) / max_visits.max(1) as f64;
+            let b_val = action_values.get(*b_key).copied().unwrap_or(0.0) / max_visits.max(1) as f64;
+            a_val.partial_cmp(&b_val).unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|(k, _)| k.clone())
+        .unwrap();
+
+    (action_map.remove(&best_key).unwrap_or(serde_json::json!({})), total_iterations, all_stats)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -672,5 +865,207 @@ mod tests {
 
         let params = MctsParams::default();
         let (_action, _iters) = mcts_search(&state, &phase, "p1", &plugin, &players, &params, None);
+    }
+
+    #[test]
+    fn test_save_eval_states() {
+        // Save several mid-game states with Rust evaluations for cross-language comparison.
+        use crate::games::carcassonne::evaluator::{make_carcassonne_eval, DEFAULT_WEIGHTS};
+        use crate::engine::simulator::{apply_action_and_resolve, SimulationState};
+        use crate::engine::plugin::TypedGamePlugin;
+
+        let plugin = CarcassonnePlugin;
+        let players = make_players(2);
+        let eval_fn = make_carcassonne_eval(&DEFAULT_WEIGHTS);
+
+        let mut results: Vec<serde_json::Value> = Vec::new();
+
+        for seed in [42u64, 123, 999, 7, 50] {
+            let config = GameConfig {
+                random_seed: Some(seed),
+                options: serde_json::json!({}),
+            };
+            let (state, phase, _) = plugin.create_initial_state(&players, &config);
+            let mut sim = SimulationState {
+                state,
+                phase,
+                players: players.clone(),
+                scores: players.iter().map(|p| (p.player_id.clone(), 0.0)).collect(),
+                game_over: None,
+            };
+
+            let mut rng = seed;
+            let mut step = 0;
+
+            loop {
+                if sim.game_over.is_some() { break; }
+                while sim.phase.auto_resolve && sim.game_over.is_none() {
+                    let at = sim.phase.name.clone();
+                    apply_action_and_resolve(&plugin, &mut sim, &Action {
+                        action_type: at, player_id: "system".into(),
+                        payload: serde_json::json!({}),
+                    });
+                }
+                if sim.game_over.is_some() { break; }
+
+                let acting_pid = sim.phase.expected_actions[0].player_id.clone();
+                let valid = plugin.get_valid_actions(&sim.state, &sim.phase, &acting_pid);
+                if valid.is_empty() { break; }
+
+                // Save state at certain checkpoints
+                if matches!(step, 5 | 10 | 15 | 20 | 25 | 30) && sim.phase.name == "place_tile" {
+                    let game_data = plugin.encode_state(&sim.state);
+                    let eval_p1 = eval_fn(&sim.state, &sim.phase, "p1", &players);
+                    let eval_p2 = eval_fn(&sim.state, &sim.phase, "p2", &players);
+
+                    results.push(serde_json::json!({
+                        "seed": seed,
+                        "step": step,
+                        "phase": sim.phase.name,
+                        "scores": sim.state.scores,
+                        "rust_eval_p1": eval_p1,
+                        "rust_eval_p2": eval_p2,
+                        "game_data": game_data,
+                    }));
+                }
+
+                step += 1;
+                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                let idx = (rng >> 33) as usize % valid.len();
+                let action = Action {
+                    action_type: sim.phase.expected_actions[0].action_type.clone(),
+                    player_id: acting_pid,
+                    payload: valid[idx].clone(),
+                };
+                apply_action_and_resolve(&plugin, &mut sim, &action);
+            }
+        }
+
+        let json = serde_json::to_string_pretty(&results).unwrap();
+        std::fs::write("/tmp/rust_eval_states.json", &json).unwrap();
+        println!("Saved {} states to /tmp/rust_eval_states.json", results.len());
+
+        for r in &results {
+            println!("  seed={} step={} scores={} eval_p1={:.6} eval_p2={:.6}",
+                r["seed"], r["step"], r["scores"],
+                r["rust_eval_p1"].as_f64().unwrap(),
+                r["rust_eval_p2"].as_f64().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_mcts_tree_stats_comparison() {
+        // Compare tree structure between pw_c=1 and pw_c=2 at a high-branching mid-game state
+        use crate::games::carcassonne::evaluator::{make_carcassonne_eval, DEFAULT_WEIGHTS};
+        use crate::engine::simulator::{apply_action_and_resolve, SimulationState};
+
+        let plugin = CarcassonnePlugin;
+        let players = make_players(2);
+
+        // Try multiple seeds to find a state with many valid actions
+        let mut best_sim: Option<SimulationState<_>> = None;
+        let mut best_count = 0;
+
+        for seed in 40..100 {
+            let config = GameConfig {
+                random_seed: Some(seed),
+                options: serde_json::json!({}),
+            };
+            let (state, phase, _) = plugin.create_initial_state(&players, &config);
+            let mut sim = SimulationState {
+                state,
+                phase,
+                players: players.clone(),
+                scores: players.iter().map(|p| (p.player_id.clone(), 0.0)).collect(),
+                game_over: None,
+            };
+
+            let mut rng = seed * 31337;
+            for _ in 0..200 {
+                if sim.game_over.is_some() { break; }
+                while sim.phase.auto_resolve && sim.game_over.is_none() {
+                    let at = sim.phase.name.clone();
+                    apply_action_and_resolve(&plugin, &mut sim, &Action {
+                        action_type: at, player_id: "system".into(),
+                        payload: serde_json::json!({}),
+                    });
+                }
+                if sim.game_over.is_some() { break; }
+
+                let acting_pid = sim.phase.expected_actions[0].player_id.clone();
+                let valid = plugin.get_valid_actions(&sim.state, &sim.phase, &acting_pid);
+                if valid.is_empty() { break; }
+
+                if sim.phase.name == "place_tile" && valid.len() > best_count {
+                    best_count = valid.len();
+                    best_sim = Some(sim.clone());
+                    if best_count >= 40 { break; }
+                }
+
+                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                let idx = (rng >> 33) as usize % valid.len();
+                let action = Action {
+                    action_type: sim.phase.expected_actions[0].action_type.clone(),
+                    player_id: acting_pid,
+                    payload: valid[idx].clone(),
+                };
+                apply_action_and_resolve(&plugin, &mut sim, &action);
+            }
+            if best_count >= 40 { break; }
+        }
+
+        let sim = best_sim.expect("Should find a state with many actions");
+        let acting_pid = sim.phase.expected_actions[0].player_id.clone();
+        let valid_actions = plugin.get_valid_actions(&sim.state, &sim.phase, &acting_pid);
+        println!("\nMid-game state: phase={} valid_actions={} acting={}",
+            sim.phase.name, valid_actions.len(), acting_pid);
+        println!("Scores: {:?}", sim.scores);
+
+        // Print the action sort order
+        let mut sorted_actions: Vec<_> = valid_actions.iter().collect();
+        sorted_actions.sort_by(|a, b| action_sort_key(a).cmp(&action_sort_key(b)));
+        println!("\nAction priority order (first 20):");
+        for (i, a) in sorted_actions.iter().take(20).enumerate() {
+            let key = action_key(a);
+            let sort = action_sort_key(a);
+            println!("  {:2}. {} sort_key={:?}", i, key, sort);
+        }
+
+        let eval_fn = make_carcassonne_eval(&DEFAULT_WEIGHTS);
+
+        let configs = [
+            ("pw_c=1", 1.0f64, 0.5f64),
+            ("pw_c=2", 2.0, 0.5),
+            ("pw_c=100 (no PW)", 100.0, 0.5),
+        ];
+
+        for (label, pw_c, pw_alpha) in &configs {
+            let params = MctsParams {
+                num_simulations: 500,
+                time_limit_ms: 999999.0,
+                num_determinizations: 1,
+                pw_c: *pw_c,
+                pw_alpha: *pw_alpha,
+                ..Default::default()
+            };
+
+            let (best_action, iters, stats) = mcts_search_with_stats(
+                &sim.state, &sim.phase, &acting_pid, &plugin, &players, &params,
+                Some(&|s, ph, pid, pl| eval_fn(s, ph, pid, pl)),
+            );
+
+            println!("\n=== {} (iters={}) ===", label, iters);
+            for (i, s) in stats.iter().enumerate() {
+                println!("  Det {}: nodes={} root_children={} max_depth={} avg_leaf_depth={:.1} leaf_evals={}",
+                    i, s.total_nodes, s.root_children, s.max_depth, s.avg_leaf_depth, s.leaf_evals);
+                println!("  Top-10 root children by visits:");
+                for (key, visits, avg) in s.root_child_visits.iter().take(10) {
+                    println!("    {} : visits={} avg_val={:.4}", key, visits, avg);
+                }
+                let total_visits: u32 = s.root_child_visits.iter().map(|x| x.1).sum();
+                println!("  Total children: {} total_visits: {}", s.root_child_visits.len(), total_visits);
+            }
+            println!("  Best action: {}", best_action);
+        }
     }
 }

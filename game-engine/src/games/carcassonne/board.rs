@@ -166,4 +166,102 @@ mod tests {
         // C (city on all sides) can only go next to all-city neighbors
         assert!(tile_has_valid_placement(&board, &open, tile_type_to_index("C")));
     }
+
+    /// Verify board edge consistency: every placed tile must have matching
+    /// edges with all its neighbors.
+    fn verify_board_edges(board: &HashMap<(i32, i32), PlacedTile>) -> Result<(), String> {
+        for (&(x, y), tile) in board.iter() {
+            let rot_idx = ((tile.rotation / 90) % 4) as usize;
+
+            for &(dx, dy, dir_idx, opp_idx) in &[
+                (0i32, 1i32, 0usize, 2usize),  // N→S
+                (1, 0, 1, 3),                    // E→W
+                (0, -1, 2, 0),                   // S→N
+                (-1, 0, 3, 1),                   // W→E
+            ] {
+                let nb = (x + dx, y + dy);
+                if let Some(nb_tile) = board.get(&nb) {
+                    let nb_rot = ((nb_tile.rotation / 90) % 4) as usize;
+                    let our_edge = ROTATED_EDGES[tile.tile_type_id as usize][rot_idx][dir_idx];
+                    let their_edge = ROTATED_EDGES[nb_tile.tile_type_id as usize][nb_rot][opp_idx];
+                    if our_edge != their_edge {
+                        return Err(format!(
+                            "Edge mismatch at ({},{}) dir={} tile={} rot={}: {:?} vs neighbor ({},{}) tile={} rot={}: {:?}",
+                            x, y, dir_idx,
+                            tile_index_to_type(tile.tile_type_id), tile.rotation, our_edge,
+                            nb.0, nb.1,
+                            tile_index_to_type(nb_tile.tile_type_id), nb_tile.rotation, their_edge,
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_fuzz_board_consistency() {
+        // Play 50 random games with different seeds, verify edge consistency at every step
+        use crate::engine::models::*;
+        use crate::engine::plugin::TypedGamePlugin;
+        use crate::engine::simulator::{apply_action_and_resolve, SimulationState};
+        use crate::games::carcassonne::plugin::CarcassonnePlugin;
+
+        let plugin = CarcassonnePlugin;
+        let players = vec![
+            Player { player_id: "p0".into(), display_name: "P0".into(), seat_index: 0, is_bot: true, bot_id: None },
+            Player { player_id: "p1".into(), display_name: "P1".into(), seat_index: 1, is_bot: true, bot_id: None },
+        ];
+
+        let mut total_moves = 0u64;
+        let mut rng = 99999u64;
+
+        for seed in 0..50 {
+            let config = GameConfig {
+                random_seed: Some(seed),
+                options: serde_json::json!({}),
+            };
+            let (state, phase, _) = plugin.create_initial_state(&players, &config);
+            let mut sim = SimulationState {
+                state, phase, players: players.clone(),
+                scores: players.iter().map(|p| (p.player_id.clone(), 0.0)).collect(),
+                game_over: None,
+            };
+
+            for _ in 0..300 {
+                if sim.game_over.is_some() { break; }
+
+                // Auto-resolve
+                while sim.phase.auto_resolve && sim.game_over.is_none() {
+                    let at = sim.phase.name.clone();
+                    apply_action_and_resolve(&plugin, &mut sim, &Action {
+                        action_type: at, player_id: "system".into(), payload: serde_json::json!({}),
+                    });
+                }
+                if sim.game_over.is_some() { break; }
+
+                // Verify board consistency
+                if let Err(msg) = verify_board_edges(&sim.state.board.tiles) {
+                    panic!("Seed {}: Board inconsistency after {} moves: {}", seed, total_moves, msg);
+                }
+
+                let acting_pid = sim.phase.expected_actions[0].player_id.clone();
+                let valid = plugin.get_valid_actions(&sim.state, &sim.phase, &acting_pid);
+                if valid.is_empty() { break; }
+
+                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(seed);
+                let idx = (rng >> 33) as usize % valid.len();
+                let chosen = valid[idx].clone();
+
+                let action = Action {
+                    action_type: sim.phase.expected_actions[0].action_type.clone(),
+                    player_id: acting_pid,
+                    payload: chosen,
+                };
+                apply_action_and_resolve(&plugin, &mut sim, &action);
+                total_moves += 1;
+            }
+        }
+        println!("Fuzz test passed: {} total moves across 50 games, all boards consistent", total_moves);
+    }
 }
