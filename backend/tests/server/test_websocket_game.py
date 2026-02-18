@@ -71,9 +71,10 @@ async def test_websocket_game_e2e(app):
 async def test_websocket_invalid_token(app):
     """Test that invalid token is rejected."""
     with TestClient(app) as tc:
-        with pytest.raises(Exception):
-            with tc.websocket_connect("/ws/game/fake-match?token=invalid") as ws:
-                pass
+        with tc.websocket_connect("/ws/game/fake-match?token=invalid") as ws:
+            msg = ws.receive()
+            assert msg["type"] == "websocket.close"
+            assert msg.get("code") == 4001
 
 
 @pytest.mark.slow
@@ -85,11 +86,12 @@ async def test_websocket_match_not_found(app):
         token = resp.json()["token"]
 
     with TestClient(app) as tc:
-        with pytest.raises(Exception):
-            with tc.websocket_connect(
-                f"/ws/game/non-existent-match-id?token={token}"
-            ) as ws:
-                pass
+        with tc.websocket_connect(
+            f"/ws/game/non-existent-match-id?token={token}"
+        ) as ws:
+            msg = ws.receive()
+            assert msg["type"] == "websocket.close"
+            assert msg.get("code") == 4004
 
 
 @pytest.mark.slow
@@ -116,8 +118,9 @@ async def test_websocket_player_not_in_match(app):
         match_id = create_resp.json()["match_id"]
 
     with TestClient(app) as tc:
-        with pytest.raises(Exception):
-            with tc.websocket_connect(
-                f"/ws/game/{match_id}?token={charlie_token}"
-            ) as ws:
-                pass
+        with tc.websocket_connect(
+            f"/ws/game/{match_id}?token={charlie_token}"
+        ) as ws:
+            msg = ws.receive()
+            assert msg["type"] == "websocket.close"
+            assert msg.get("code") == 4003
