@@ -24,6 +24,7 @@ export default function AuthCallbackPage() {
           displayName: userInfo.display_name,
           avatarUrl: userInfo.avatar_url,
           isGuest: userInfo.is_guest,
+          isAdmin: userInfo.is_admin,
         });
         router.replace('/');
       } catch (err) {

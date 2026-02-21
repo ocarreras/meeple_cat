@@ -16,3 +16,4 @@ class User(TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_guest: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

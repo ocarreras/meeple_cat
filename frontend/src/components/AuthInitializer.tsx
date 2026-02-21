@@ -23,6 +23,7 @@ export default function AuthInitializer({ children }: { children: React.ReactNod
               displayName,
               avatarUrl: null,
               isGuest: true,
+              isAdmin: false,
             });
             setInitialized(true);
             return;
@@ -41,6 +42,7 @@ export default function AuthInitializer({ children }: { children: React.ReactNod
           displayName: userInfo.display_name,
           avatarUrl: userInfo.avatar_url,
           isGuest: userInfo.is_guest,
+          isAdmin: userInfo.is_admin,
         });
       } catch {
         // Not authenticated — that's fine

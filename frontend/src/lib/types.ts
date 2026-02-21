@@ -245,6 +245,7 @@ export interface UserInfoResponse {
   email: string | null;
   avatar_url: string | null;
   is_guest: boolean;
+  is_admin: boolean;
 }
 
 export interface MatchHistoryEntry {

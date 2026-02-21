@@ -8,6 +8,7 @@ export interface AuthUser {
   displayName: string;
   avatarUrl: string | null;
   isGuest: boolean;
+  isAdmin: boolean;
 }
 
 export interface AuthStore {

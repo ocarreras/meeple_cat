@@ -43,6 +43,7 @@ class UserInfoResponse(BaseModel):
     email: str | None
     avatar_url: str | None
     is_guest: bool
+    is_admin: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +147,9 @@ async def oidc_callback(
     # Find or create user
     user = await _find_or_create_user(db, provider, provider_user_id, email, display_name, avatar_url)
 
+    if user.is_banned:
+        return RedirectResponse(f"{settings.frontend_url}/login?error=banned")
+
     # Issue JWT pair
     access_jwt = create_access_token(str(user.id), user.display_name)
     refresh_jwt = create_refresh_token(str(user.id))
@@ -188,6 +192,9 @@ async def refresh_token(
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(401, "User not found")
+
+    if user.is_banned:
+        raise HTTPException(403, "Account is banned")
 
     # Issue new token pair
     new_access = create_access_token(str(user.id), user.display_name)
@@ -235,6 +242,7 @@ async def get_me(
         email=user.email,
         avatar_url=user.avatar_url,
         is_guest=user.is_guest,
+        is_admin=(user.email == settings.admin_email),
     )
 
 

@@ -234,6 +234,14 @@ export default function LobbyPage() {
             >
               {t('lobby.profile')}
             </button>
+            {user.isAdmin && (
+              <button
+                onClick={() => router.push('/admin')}
+                className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 font-medium rounded-lg transition text-sm border border-red-300"
+              >
+                {t('admin.title')}
+              </button>
+            )}
             <button
               onClick={() => setShowPlayAI(true)}
               className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition text-sm border border-gray-300"

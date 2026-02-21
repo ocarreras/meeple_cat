@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 from sqlalchemy import text
 
+from src.api.admin import router as admin_router
 from src.api.auth import router as auth_router
 from src.api.health import router as health_router
 from src.api.games import router as games_router
@@ -46,10 +47,12 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
 
     # Migrate existing tables: add columns that create_all won't add to existing tables
+    # Uses IF NOT EXISTS to avoid aborting the transaction on already-existing columns
     async with engine.begin() as conn:
         for stmt in [
-            "ALTER TABLE users ADD COLUMN avatar_url VARCHAR(512)",
-            "ALTER TABLE users ADD COLUMN is_guest BOOLEAN DEFAULT true",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN DEFAULT true",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false",
         ]:
             try:
                 await conn.execute(text(stmt))
@@ -173,6 +176,7 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
+    app.include_router(admin_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(oidc_auth_router, prefix="/api/v1")
     app.include_router(games_router, prefix="/api/v1")

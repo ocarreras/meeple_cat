@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +37,9 @@ async def get_token(
         db.add(user)
         await db.commit()
         await db.refresh(user)
+
+    if user.is_banned:
+        raise HTTPException(403, "Account is banned")
 
     token = create_token(str(user.id), user.display_name)
 

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     disconnect_grace_period_seconds: int = 30
     game_engine_grpc_url: str = "localhost:50051"
 
+    # Admin
+    admin_email: str = "uri@str.cat"
+
     # Google OIDC (empty = disabled)
     google_client_id: str = ""
     google_client_secret: str = ""

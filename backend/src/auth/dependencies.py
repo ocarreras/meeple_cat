@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.jwt import decode_token
 from src.auth.schemas import TokenData
+from src.config import settings
+from src.models.database import get_db
+from src.models.user import User
 
 # auto_error=False so missing Bearer header doesn't reject cookie-authenticated users
 optional_bearer = HTTPBearer(auto_error=False)
@@ -31,6 +35,21 @@ async def get_current_user(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",
     )
+
+
+async def get_admin_user(
+    request: Request,
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TokenData:
+    """Require the authenticated user to be the admin. Raises 403 otherwise."""
+    user = await db.get(User, current_user.user_id)
+    if not user or user.email != settings.admin_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
 
 
 async def get_current_user_optional(

@@ -327,6 +327,85 @@ export async function getMatchHistory(
 }
 
 // ---------------------------------------------------------------------------
+// Admin API
+// ---------------------------------------------------------------------------
+
+export interface AdminPlayerInfo {
+  display_name: string;
+  user_id: string;
+  is_bot: boolean;
+  score: number | null;
+}
+
+export interface AdminMatchInfo {
+  match_id: string;
+  game_id: string;
+  status: string;
+  players: AdminPlayerInfo[];
+  started_at: string | null;
+  has_active_session: boolean;
+}
+
+export interface AdminRoomInfo {
+  room_id: string;
+  game_id: string;
+  status: string;
+  creator_name: string;
+  created_at: string;
+  player_count: number;
+  max_players: number;
+  match_id: string | null;
+}
+
+export interface AdminOverview {
+  active_matches: AdminMatchInfo[];
+  active_rooms: AdminRoomInfo[];
+}
+
+export interface AdminUserInfo {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  is_guest: boolean;
+  is_banned: boolean;
+  created_at: string;
+  games_played: number;
+}
+
+export async function getAdminOverview(): Promise<AdminOverview> {
+  return fetchJson<AdminOverview>(`${API_BASE_URL}/admin/overview`);
+}
+
+export async function adminForceFinish(matchId: string): Promise<{ ok: boolean }> {
+  return fetchJson<{ ok: boolean }>(`${API_BASE_URL}/admin/force-finish/${matchId}`, {
+    method: 'POST',
+  });
+}
+
+export async function adminDeleteRoom(roomId: string): Promise<{ ok: boolean }> {
+  return fetchJson<{ ok: boolean }>(`${API_BASE_URL}/admin/delete-room/${roomId}`, {
+    method: 'POST',
+  });
+}
+
+export async function getAdminUsers(search?: string): Promise<AdminUserInfo[]> {
+  const params = search ? `?search=${encodeURIComponent(search)}` : '';
+  return fetchJson<AdminUserInfo[]>(`${API_BASE_URL}/admin/users${params}`);
+}
+
+export async function adminBanUser(userId: string): Promise<{ ok: boolean }> {
+  return fetchJson<{ ok: boolean }>(`${API_BASE_URL}/admin/ban/${userId}`, {
+    method: 'POST',
+  });
+}
+
+export async function adminUnbanUser(userId: string): Promise<{ ok: boolean }> {
+  return fetchJson<{ ok: boolean }>(`${API_BASE_URL}/admin/unban/${userId}`, {
+    method: 'POST',
+  });
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket URL helper
 // ---------------------------------------------------------------------------
 

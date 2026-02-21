@@ -48,6 +48,7 @@ export default function LoginPage() {
         displayName: guestName.trim(),
         avatarUrl: null,
         isGuest: true,
+        isAdmin: false,
       });
       localStorage.setItem(
         'meeple_lobby_user',
