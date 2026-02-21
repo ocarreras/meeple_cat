@@ -18,11 +18,6 @@ interface RoomDetailProps {
   onClose: () => void;
 }
 
-const GAME_NAMES: Record<string, string> = {
-  carcassonne: 'Carcassonne',
-  einstein_dojo: 'Ein Stein Dojo',
-};
-
 function SeatRow({
   seat,
   isCurrentUser,
@@ -114,7 +109,7 @@ export default function RoomDetail({
           <div className="flex justify-between items-start mb-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-800">
-                {GAME_NAMES[room.game_id] ?? room.game_id}
+                {t(`gameName.${room.game_id}`, room.game_id)}
               </h2>
               <p className="text-sm text-gray-500">
                 {t('room.hostedBy', { name: room.creator_name })}

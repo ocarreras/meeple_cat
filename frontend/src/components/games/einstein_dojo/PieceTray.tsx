@@ -149,7 +149,7 @@ export default function PieceTray({
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-semibold">{t('game.yourPiece', 'Your Piece')}</span>
         <span className="text-xs text-gray-500">
-          {chirality === 'A' ? 'Hat' : 'Shirt'} · R{rotation}
+          {chirality === 'A' ? t('game.hat') : t('game.shirt')} · R{rotation}
         </span>
       </div>
 

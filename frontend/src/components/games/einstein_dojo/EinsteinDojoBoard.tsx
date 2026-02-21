@@ -737,7 +737,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
             background: 'none',
             padding: 0,
           }}
-          title="Place mark"
+          title={t('einstein.placeMark')}
         >
           <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
         </button>
@@ -759,7 +759,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
             background: 'none',
             padding: 0,
           }}
-          title="Resolve conflict"
+          title={t('einstein.resolveConflict')}
         >
           <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
         </button>

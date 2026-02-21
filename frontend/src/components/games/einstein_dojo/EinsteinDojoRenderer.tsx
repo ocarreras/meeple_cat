@@ -300,14 +300,14 @@ export default function EinsteinDojoRenderer({
   const getMobileStatus = (): string => {
     if (isGameOver) return t('game.status.gameOver');
     if (phase === 'choose_main_conflict') {
-      return isMyTurn ? 'Choose the main conflict' : 'Opponent choosing main conflict...';
+      return isMyTurn ? t('game.status.chooseMainConflict') : t('game.status.opponentChoosingConflict');
     }
     if (phase === 'resolve_chain') {
-      return isMyTurn ? 'Resolve more conflicts or skip' : 'Opponent resolving conflicts...';
+      return isMyTurn ? t('game.status.resolveOrSkip') : t('game.status.opponentResolving');
     }
     if (!isMyTurn) return t('game.status.opponentTurn');
-    if (actionMode === 'resolve_conflict') return 'Tap a conflict hex to resolve';
-    if (actionMode === 'place_mark') return 'Tap a hex to place mark';
+    if (actionMode === 'resolve_conflict') return t('game.status.tapConflictHex');
+    if (actionMode === 'place_mark') return t('game.status.tapToPlaceMark');
     return t('game.status.tapToPlace');
   };
 
@@ -354,17 +354,17 @@ export default function EinsteinDojoRenderer({
             <div className="absolute inset-0 flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm mx-4 text-center">
                 <h2 className="text-2xl font-bold mb-1">
-                  {viewerIsWinner ? 'Victory!' : 'Defeat'}
+                  {viewerIsWinner ? t('gameOver.victory') : t('gameOver.defeat')}
                 </h2>
                 {reason === 'main_conflict_resolved' && (
                   <p className="text-sm text-purple-600 font-medium mb-3">
                     {viewerIsWinner
-                      ? 'You resolved the main conflict!'
-                      : `${winnerNames} resolved the main conflict`}
+                      ? t('gameOver.resolvedMainConflict')
+                      : t('gameOver.opponentResolvedMainConflict', { name: winnerNames })}
                   </p>
                 )}
                 {reason !== 'main_conflict_resolved' && (
-                  <p className="text-sm text-gray-500 mb-3">{winnerNames} wins</p>
+                  <p className="text-sm text-gray-500 mb-3">{t('gameOver.genericWins', { name: winnerNames })}</p>
                 )}
                 <div className="space-y-2 mb-4">
                   {view.players.map(p => {
@@ -383,7 +383,7 @@ export default function EinsteinDojoRenderer({
                             style={{ backgroundColor: PLAYER_COLORS[seatIdx % PLAYER_COLORS.length] }}
                           />
                           <span className="font-medium">{p.display_name}</span>
-                          {isWinner && <span className="text-yellow-600 text-sm font-bold">Winner!</span>}
+                          {isWinner && <span className="text-yellow-600 text-sm font-bold">{t('gameOver.winner')}</span>}
                         </div>
                         <span className="text-lg font-bold">
                           {gameOver.final_scores[p.player_id] ?? 0}
@@ -432,7 +432,7 @@ export default function EinsteinDojoRenderer({
           {/* Action mode buttons */}
           {isMyTurn && phase === 'player_turn' && (
             <div className="bg-white rounded-lg border shadow-sm px-4 py-3">
-              <div className="text-sm font-semibold mb-2">Action</div>
+              <div className="text-sm font-semibold mb-2">{t('einstein.action')}</div>
               <div className="flex gap-2">
                 <button
                   onClick={() => { setActionMode('place_tile'); setSelectedMark(null); setSelectedResolve(null); }}
@@ -445,7 +445,7 @@ export default function EinsteinDojoRenderer({
                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  Tile ({myTilesRemaining})
+                  {t('einstein.tile', { count: myTilesRemaining })}
                 </button>
                 <button
                   onClick={() => { setActionMode('place_mark'); setHoverHex(null); setSelectedResolve(null); }}
@@ -458,7 +458,7 @@ export default function EinsteinDojoRenderer({
                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  Mark ({myMarksRemaining})
+                  {t('einstein.mark', { count: myMarksRemaining })}
                 </button>
                 <button
                   onClick={() => { setActionMode('resolve_conflict'); setHoverHex(null); setSelectedMark(null); }}
@@ -471,7 +471,7 @@ export default function EinsteinDojoRenderer({
                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  Resolve
+                  {t('einstein.resolve')}
                 </button>
               </div>
             </div>
@@ -480,23 +480,23 @@ export default function EinsteinDojoRenderer({
           {/* Resolve chain panel */}
           {isMyTurn && phase === 'resolve_chain' && (
             <div className="bg-purple-50 rounded-lg border border-purple-200 shadow-sm px-4 py-3">
-              <div className="text-sm font-semibold mb-2 text-purple-800">Resolve Chain</div>
+              <div className="text-sm font-semibold mb-2 text-purple-800">{t('einstein.resolveChain')}</div>
               <p className="text-xs text-purple-600 mb-3">
                 {canResolve
-                  ? 'You can resolve more conflicts or skip.'
-                  : 'No more conflicts to resolve.'}
+                  ? t('einstein.resolveMore')
+                  : t('einstein.noMoreConflicts')}
               </p>
               <div className="flex gap-2">
                 {canResolve && (
                   <span className="flex-1 text-center px-3 py-2 rounded-lg text-sm font-medium bg-purple-600 text-white">
-                    Tap a conflict hex
+                    {t('einstein.tapConflictHex')}
                   </span>
                 )}
                 <button
                   onClick={handleSkipResolve}
                   className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
                 >
-                  Skip
+                  {t('einstein.skip')}
                 </button>
               </div>
             </div>
@@ -524,7 +524,7 @@ export default function EinsteinDojoRenderer({
 
           {/* Resources remaining for both players */}
           <div className="bg-white rounded-lg border shadow-sm px-4 py-3">
-            <div className="text-sm font-semibold mb-2">Resources</div>
+            <div className="text-sm font-semibold mb-2">{t('einstein.resources')}</div>
             {view.players.map(p => (
               <div key={p.player_id} className="flex items-center justify-between py-1">
                 <div className="flex items-center gap-2">
@@ -535,8 +535,8 @@ export default function EinsteinDojoRenderer({
                   <span className="text-sm">{p.display_name}</span>
                 </div>
                 <div className="flex gap-3 text-sm">
-                  <span title="Tiles"><span className="text-gray-500">T:</span> <span className="font-bold">{gameData.tiles_remaining[p.player_id] ?? 0}</span></span>
-                  <span title="Marks"><span className="text-gray-500">M:</span> <span className="font-bold">{gameData.marks_remaining[p.player_id] ?? 0}</span></span>
+                  <span title={t('einstein.tile', { count: gameData.tiles_remaining[p.player_id] ?? 0 })}><span className="text-gray-500">{t('einstein.tiles')}</span> <span className="font-bold">{gameData.tiles_remaining[p.player_id] ?? 0}</span></span>
+                  <span title={t('einstein.mark', { count: gameData.marks_remaining[p.player_id] ?? 0 })}><span className="text-gray-500">{t('einstein.marks')}</span> <span className="font-bold">{gameData.marks_remaining[p.player_id] ?? 0}</span></span>
                 </div>
               </div>
             ))}

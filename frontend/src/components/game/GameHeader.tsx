@@ -26,6 +26,9 @@ export default function GameHeader({
       'place_meeple': t('game.phase.placeMeeple'),
       'score_check': t('game.phase.placeTile'),
       'game_over': t('game.phase.gameOver'),
+      'player_turn': t('game.phase.playerTurn'),
+      'choose_main_conflict': t('game.phase.chooseMainConflict'),
+      'resolve_chain': t('game.phase.resolveChain'),
     };
     return phaseMap[phase] || phase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };

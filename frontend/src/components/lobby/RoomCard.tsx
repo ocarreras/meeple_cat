@@ -10,11 +10,6 @@ interface RoomCardProps {
   isCurrentUser: boolean;
 }
 
-const GAME_NAMES: Record<string, string> = {
-  carcassonne: 'Carcassonne',
-  einstein_dojo: 'Ein Stein Dojo',
-};
-
 export default function RoomCard({ room, onJoin, onView, isCurrentUser }: RoomCardProps) {
   const { t } = useTranslation();
   const occupiedSeats = room.seats.filter(
@@ -31,7 +26,7 @@ export default function RoomCard({ room, onJoin, onView, isCurrentUser }: RoomCa
       <div className="flex justify-between items-start mb-3">
         <div>
           <h3 className="font-semibold text-lg text-gray-800">
-            {GAME_NAMES[room.game_id] ?? room.game_id}
+            {t(`gameName.${room.game_id}`, room.game_id)}
           </h3>
           <p className="text-sm text-gray-500">{t('room.host', { name: room.creator_name })}</p>
         </div>
