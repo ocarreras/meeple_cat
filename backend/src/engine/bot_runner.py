@@ -105,7 +105,11 @@ class BotRunner:
                 session.state.game_data, phase, player_id, session.plugin,
                 players=session.state.players,
             )
-            action_type = phase.expected_actions[0].action_type
+            # Prefer the action_type embedded in the chosen payload (e.g.
+            # einstein_dojo returns "place_tile" / "place_mark" inside the
+            # payload).  Fall back to the phase's expected action_type for
+            # games like carcassonne where the payload doesn't carry one.
+            action_type = chosen.pop("action_type", None) or phase.expected_actions[0].action_type
 
             action = Action(
                 action_type=action_type,

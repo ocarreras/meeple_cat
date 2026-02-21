@@ -71,20 +71,34 @@ async def lifespan(app: FastAPI):
 
     # Register difficulty-tier MCTS bot strategies backed by Rust engine.
     # Each difficulty maps to a named profile in bot_profiles.toml on the Rust side.
-    from src.engine.bot_strategy import register_strategy, GrpcMctsStrategy
+    # Games without MCTS support (e.g. einstein_dojo) fall back to a game-specific
+    # random strategy.
+    from src.engine.bot_strategy import register_strategy, GrpcMctsStrategy, EinsteinDojoRandomStrategy
     grpc_url = settings.game_engine_grpc_url
+
+    _GAME_SPECIFIC_STRATEGIES: dict[str, type] = {
+        "einstein_dojo": EinsteinDojoRandomStrategy,
+    }
 
     for difficulty in ("easy", "medium", "hard"):
         def _make_factory(diff: str) -> object:
-            return lambda game_id="carcassonne", **kw: GrpcMctsStrategy(
-                grpc_address=grpc_url, game_id=game_id, bot_profile=diff, **kw,
-            )
+            def factory(game_id="carcassonne", **kw):
+                if game_id in _GAME_SPECIFIC_STRATEGIES:
+                    return _GAME_SPECIFIC_STRATEGIES[game_id]()
+                return GrpcMctsStrategy(
+                    grpc_address=grpc_url, game_id=game_id, bot_profile=diff, **kw,
+                )
+            return factory
         register_strategy(f"mcts-{difficulty}", _make_factory(difficulty))
 
     # Backward compat: "mcts" → hard profile
-    register_strategy("mcts", lambda game_id="carcassonne", **kw: GrpcMctsStrategy(
-        grpc_address=grpc_url, game_id=game_id, bot_profile="hard", **kw,
-    ))
+    def _mcts_fallback(game_id="carcassonne", **kw):
+        if game_id in _GAME_SPECIFIC_STRATEGIES:
+            return _GAME_SPECIFIC_STRATEGIES[game_id]()
+        return GrpcMctsStrategy(
+            grpc_address=grpc_url, game_id=game_id, bot_profile="hard", **kw,
+        )
+    register_strategy("mcts", _mcts_fallback)
 
     # Initialize connection manager and broadcaster
     cm = ConnectionManager()

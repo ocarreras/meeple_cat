@@ -42,6 +42,42 @@ class RandomStrategy:
         return self._rng.choice(valid)
 
 
+class EinsteinDojoRandomStrategy:
+    """Random bot for Ein Stein Dojo: 70% tile placement, 30% mark placement.
+
+    During the player_turn phase, valid actions include both place_tile and
+    place_mark.  This strategy biases toward tiles (70%) vs marks (30%).
+    In all other phases (resolve_chain, choose_main_conflict, etc.) it
+    picks uniformly at random from whatever is valid.
+    """
+
+    TILE_WEIGHT = 0.7
+
+    def __init__(self, seed: int | None = None) -> None:
+        self._rng = _random.Random(seed)
+
+    def choose_action(
+        self,
+        game_data: dict,
+        phase: Phase,
+        player_id: PlayerId,
+        plugin: GamePlugin,
+        players: list[Player] | None = None,
+    ) -> dict:
+        valid = plugin.get_valid_actions(game_data, phase, player_id)
+
+        if phase.name == "player_turn":
+            tiles = [a for a in valid if a.get("action_type") == "place_tile"]
+            marks = [a for a in valid if a.get("action_type") == "place_mark"]
+
+            if tiles and marks:
+                if self._rng.random() < self.TILE_WEIGHT:
+                    return self._rng.choice(tiles)
+                return self._rng.choice(marks)
+
+        return self._rng.choice(valid)
+
+
 logger = __import__("logging").getLogger(__name__)
 
 
