@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EinsteinDojoGameData, Player } from '@/lib/types';
-import { hexToPixel, hexVertex, hexEdgeMidpoint, kitePolygon } from '@/lib/hexGeometry';
+import { hexToPixel, hexVertex, kitePolygon } from '@/lib/hexGeometry';
 import { getPlacedKites } from '@/lib/einsteinPieces';
 
 export interface GhostPiece {
@@ -311,12 +311,13 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     }
 
     ctx.strokeStyle = '#d1d5db';
-    ctx.lineWidth = 0.5;
     for (const hexKey of gridHexes) {
       const [q, r] = hexKey.split(',').map(Number);
       const { x: cx, y: cy } = hexToPixel(q, r, HEX_SIZE);
+      ctx.lineWidth = 1.2;
       drawHexOutline(ctx, cx, cy, HEX_SIZE);
-      // Draw kite dividers (center → vertices and center → edge midpoints)
+      // Draw kite dividers (center → vertices)
+      ctx.lineWidth = 0.3;
       drawKiteDividers(ctx, cx, cy, HEX_SIZE);
     }
 
@@ -432,16 +433,13 @@ function drawHexFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, size
   ctx.fill();
 }
 
-/** Draw kite dividers inside a hex (lines from center to vertices and edge midpoints). */
+/** Draw kite dividers inside a hex (lines from center to each vertex). */
 function drawKiteDividers(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
     const v = hexVertex(cx, cy, size, i);
     ctx.moveTo(cx, cy);
     ctx.lineTo(v.x, v.y);
-    const m = hexEdgeMidpoint(cx, cy, size, i);
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(m.x, m.y);
   }
   ctx.stroke();
 }
