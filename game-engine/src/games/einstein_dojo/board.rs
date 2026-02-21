@@ -70,10 +70,12 @@ pub fn derive_hex_state(board: &Board, q: i32, r: i32) -> HexState {
 
     if kites_filled == 0 {
         HexState::Empty
-    } else if players_present.len() > 1 {
-        HexState::Conflict
     } else if kites_filled == 6 {
-        HexState::Complete
+        if players_present.len() > 1 {
+            HexState::Conflict
+        } else {
+            HexState::Complete
+        }
     } else {
         HexState::Open
     }
@@ -265,6 +267,14 @@ mod tests {
                 .insert(format!("0,0:{k}"), "p2".into());
         }
         assert_eq!(derive_hex_state(&board, 0, 0), HexState::Conflict);
+    }
+
+    #[test]
+    fn test_derive_hex_state_partial_two_players_is_open() {
+        let mut board = Board::new();
+        board.kite_owners.insert("0,0:0".into(), "p1".into());
+        board.kite_owners.insert("0,0:1".into(), "p2".into());
+        assert_eq!(derive_hex_state(&board, 0, 0), HexState::Open);
     }
 
     #[test]
