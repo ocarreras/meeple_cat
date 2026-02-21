@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EinsteinDojoGameData, Player } from '@/lib/types';
-import { hexToPixel, hexVertex, kitePolygon } from '@/lib/hexGeometry';
+import { hexToPixel, hexVertex, hexEdgeMidpoint, kitePolygon } from '@/lib/hexGeometry';
 import { getPlacedKites } from '@/lib/einsteinPieces';
 
 export interface GhostPiece {
@@ -26,6 +26,9 @@ interface EinsteinDojoBoardProps {
   isMyTurn: boolean;
   phase: string;
   ghostPiece: GhostPiece | null;
+  mainConflict: string | null;
+  chooseableConflicts: string[];
+  onConflictChosen: (hexKey: string) => void;
 }
 
 const HEX_SIZE = 40;
@@ -85,6 +88,9 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     isMyTurn,
     phase,
     ghostPiece,
+    mainConflict,
+    chooseableConflicts,
+    onConflictChosen,
   },
   ref,
 ) {
@@ -114,6 +120,29 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
   onHexClickedRef.current = onHexClicked;
   const onHoverHexRef = useRef(onHoverHex);
   onHoverHexRef.current = onHoverHex;
+  const onConflictChosenRef = useRef(onConflictChosen);
+  onConflictChosenRef.current = onConflictChosen;
+  const chooseableConflictsRef = useRef(chooseableConflicts);
+  chooseableConflictsRef.current = chooseableConflicts;
+
+  // Animation state for pulsing chooseable conflicts
+  const animFrameRef = useRef<number>(0);
+  const [pulseTime, setPulseTime] = useState(0);
+
+  useEffect(() => {
+    if (chooseableConflicts.length === 0) return;
+    let running = true;
+    const animate = () => {
+      if (!running) return;
+      setPulseTime(Date.now());
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+    return () => {
+      running = false;
+      cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [chooseableConflicts.length]);
 
   // Expose screenToHex for cross-component drag
   useImperativeHandle(ref, () => ({
@@ -208,8 +237,13 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
       e.preventDefault();
       if (!touchMovedRef.current && touchStartRef.current && e.changedTouches.length === 1) {
         const touch = e.changedTouches[0];
-        if (isMyTurnRef.current && phaseRef.current === 'place_tile') {
-          const hex = clientToHex(touch.clientX, touch.clientY, canvas, cameraRef.current);
+        const hex = clientToHex(touch.clientX, touch.clientY, canvas, cameraRef.current);
+        if (isMyTurnRef.current && phaseRef.current === 'choose_main_conflict') {
+          const hexKey = `${hex.q},${hex.r}`;
+          if (chooseableConflictsRef.current.includes(hexKey)) {
+            onConflictChosenRef.current(hexKey);
+          }
+        } else if (isMyTurnRef.current && phaseRef.current === 'place_tile') {
           onHexClickedRef.current(hex.q, hex.r);
         }
       }
@@ -256,16 +290,23 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         Math.pow(e.clientX - (panStart.x + camera.x), 2) +
         Math.pow(e.clientY - (panStart.y + camera.y), 2)
       );
-      if (dragDistance < 5 && isMyTurn && phase === 'place_tile') {
+      if (dragDistance < 5 && isMyTurn) {
         const canvas = canvasRef.current;
         if (canvas) {
           const hex = clientToHex(e.clientX, e.clientY, canvas, camera);
-          onHexClicked(hex.q, hex.r);
+          if (phase === 'choose_main_conflict') {
+            const hexKey = `${hex.q},${hex.r}`;
+            if (chooseableConflicts.includes(hexKey)) {
+              onConflictChosen(hexKey);
+            }
+          } else if (phase === 'place_tile') {
+            onHexClicked(hex.q, hex.r);
+          }
         }
       }
     }
     setIsPanning(false);
-  }, [isPanning, panStart, camera, isMyTurn, phase, onHexClicked]);
+  }, [isPanning, panStart, camera, isMyTurn, phase, onHexClicked, chooseableConflicts, onConflictChosen]);
 
   const handleMouseLeave = useCallback(() => {
     setIsPanning(false);
@@ -335,6 +376,9 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     }
 
     // ── Hex state overlays ──
+    const chooseSet = new Set(chooseableConflicts);
+    const pulse = Math.sin(pulseTime / 200) * 0.5 + 0.5; // 0..1 oscillation
+
     for (const [hexKey, state] of Object.entries(gameData.board.hex_states)) {
       const [q, r] = hexKey.split(',').map(Number);
       const { x: cx, y: cy } = hexToPixel(q, r, HEX_SIZE);
@@ -343,18 +387,38 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         const sampleKiteKey = `${hexKey}:0`;
         const owner = gameData.board.kite_owners[sampleKiteKey];
         const seatIdx = owner ? (colors[owner] ?? 0) : 0;
-        // Subtle fill to highlight completed hexes
         ctx.fillStyle = seatIdx === 0 ? 'rgba(59, 130, 246, 0.08)' : 'rgba(249, 115, 22, 0.08)';
         drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
         ctx.strokeStyle = PLAYER_COLORS[seatIdx % PLAYER_COLORS.length];
         ctx.lineWidth = 3;
         drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
       } else if (state === 'conflict') {
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
-        drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
-        ctx.setLineDash([]);
+        if (hexKey === mainConflict) {
+          // Main conflict: solid purple
+          ctx.fillStyle = 'rgba(139, 92, 246, 0.1)';
+          drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
+          ctx.strokeStyle = '#8b5cf6';
+          ctx.lineWidth = 3;
+          drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+        } else if (chooseSet.has(hexKey)) {
+          // Chooseable conflict: pulsing purple glow
+          ctx.fillStyle = `rgba(139, 92, 246, ${0.05 + pulse * 0.12})`;
+          drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
+          ctx.shadowColor = '#8b5cf6';
+          ctx.shadowBlur = 8 + pulse * 12;
+          ctx.strokeStyle = '#8b5cf6';
+          ctx.lineWidth = 2 + pulse;
+          drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        } else {
+          // Regular conflict: red dashed
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+          ctx.setLineDash([]);
+        }
       }
     }
 
@@ -380,7 +444,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     }
 
     ctx.restore();
-  }, [camera, canvasDims, gameData, players, ghostPiece, playerColorMap]);
+  }, [camera, canvasDims, gameData, players, ghostPiece, playerColorMap, mainConflict, chooseableConflicts, pulseTime]);
 
   return (
     <div ref={containerRef} className="w-full h-full bg-gray-100 relative overflow-hidden">
@@ -390,7 +454,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
-        className={`w-full h-full ${isMyTurn && phase === 'place_tile' ? 'cursor-crosshair' : 'cursor-grab'} active:cursor-grabbing`}
+        className={`w-full h-full ${isMyTurn && (phase === 'place_tile' || phase === 'choose_main_conflict') ? 'cursor-crosshair' : 'cursor-grab'} active:cursor-grabbing`}
         style={{ touchAction: 'none' }}
       />
       <div className="absolute bottom-2 left-2 md:bottom-4 md:left-4 bg-white/80 px-2 py-1 md:px-3 md:py-2 rounded shadow text-xs md:text-sm">
@@ -433,13 +497,13 @@ function drawHexFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, size
   ctx.fill();
 }
 
-/** Draw kite dividers inside a hex (lines from center to each vertex). */
+/** Draw kite dividers inside a hex (lines from center to each edge midpoint). */
 function drawKiteDividers(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
-    const v = hexVertex(cx, cy, size, i);
+    const m = hexEdgeMidpoint(cx, cy, size, i);
     ctx.moveTo(cx, cy);
-    ctx.lineTo(v.x, v.y);
+    ctx.lineTo(m.x, m.y);
   }
   ctx.stroke();
 }

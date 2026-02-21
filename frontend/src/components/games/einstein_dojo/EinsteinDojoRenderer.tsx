@@ -41,6 +41,18 @@ export default function EinsteinDojoRenderer({
   const playerSeatIndex = viewerPlayer?.seat_index ?? 0;
   const playerColor = PLAYER_COLORS[playerSeatIndex % PLAYER_COLORS.length];
 
+  // Main conflict
+  const mainConflict = gameData.main_conflict;
+  const chooseableConflicts = useMemo(() => {
+    if (phase !== 'choose_main_conflict') return [];
+    const hexes = view.current_phase?.metadata?.conflict_hexes;
+    return Array.isArray(hexes) ? (hexes as string[]) : [];
+  }, [phase, view.current_phase?.metadata?.conflict_hexes]);
+
+  const handleConflictChosen = useCallback((hexKey: string) => {
+    onAction('choose_main_conflict', { hex: hexKey });
+  }, [onAction]);
+
   const myTilesRemaining = view.viewer_id
     ? gameData.tiles_remaining[view.viewer_id] ?? 0
     : 0;
@@ -185,6 +197,9 @@ export default function EinsteinDojoRenderer({
   // Mobile status
   const getMobileStatus = (): string => {
     if (isGameOver) return t('game.status.gameOver');
+    if (phase === 'choose_main_conflict') {
+      return isMyTurn ? 'Choose the main conflict' : 'Opponent choosing main conflict...';
+    }
     if (!isMyTurn) return t('game.status.opponentTurn');
     return t('game.status.tapToPlace');
   };
@@ -203,6 +218,9 @@ export default function EinsteinDojoRenderer({
           isMyTurn={isMyTurn}
           phase={phase}
           ghostPiece={ghostPiece}
+          mainConflict={mainConflict}
+          chooseableConflicts={chooseableConflicts}
+          onConflictChosen={handleConflictChosen}
         />
         {isGameOver && gameOver && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">

@@ -47,6 +47,9 @@ pub struct EinsteinDojoState {
     pub tiles_remaining: HashMap<String, i32>,
     pub scores: HashMap<String, i64>,
     pub current_player_index: usize,
+    /// Hex key ("q,r") of the main conflict. None until the first conflict is created.
+    #[serde(default)]
+    pub main_conflict: Option<String>,
 }
 
 impl EinsteinDojoState {

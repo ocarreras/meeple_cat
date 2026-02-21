@@ -62,6 +62,7 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
             tiles_remaining,
             scores,
             current_player_index: 0,
+            main_conflict: None,
         };
 
         let first_player = &players[0];
@@ -96,10 +97,6 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
         phase: &Phase,
         player_id: &str,
     ) -> Vec<serde_json::Value> {
-        if phase.name != "place_tile" {
-            return vec![];
-        }
-
         let expected_pid = phase
             .expected_actions
             .first()
@@ -108,20 +105,34 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
             return vec![];
         }
 
-        if state.tiles_remaining.get(player_id).copied().unwrap_or(0) <= 0 {
-            return vec![];
+        match phase.name.as_str() {
+            "place_tile" => {
+                if state.tiles_remaining.get(player_id).copied().unwrap_or(0) <= 0 {
+                    return vec![];
+                }
+                get_all_valid_placements(&state.board)
+                    .into_iter()
+                    .map(|(orientation, anchor_q, anchor_r)| {
+                        serde_json::json!({
+                            "anchor_q": anchor_q,
+                            "anchor_r": anchor_r,
+                            "orientation": orientation,
+                        })
+                    })
+                    .collect()
+            }
+            "choose_main_conflict" => {
+                phase.metadata.get("conflict_hexes")
+                    .and_then(|v| v.as_array())
+                    .map(|hexes| {
+                        hexes.iter()
+                            .map(|h| serde_json::json!({"hex": h}))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            }
+            _ => vec![],
         }
-
-        get_all_valid_placements(&state.board)
-            .into_iter()
-            .map(|(orientation, anchor_q, anchor_r)| {
-                serde_json::json!({
-                    "anchor_q": anchor_q,
-                    "anchor_r": anchor_r,
-                    "orientation": orientation,
-                })
-            })
-            .collect()
     }
 
     fn validate_action(
@@ -130,10 +141,11 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
         phase: &Phase,
         action: &Action,
     ) -> Option<String> {
-        if phase.name == "place_tile" {
-            return self.validate_place_tile(state, action);
+        match phase.name.as_str() {
+            "place_tile" => self.validate_place_tile(state, action),
+            "choose_main_conflict" => self.validate_choose_main_conflict(phase, action),
+            _ => None,
         }
-        None
     }
 
     fn apply_action(
@@ -146,6 +158,7 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
         match phase.name.as_str() {
             "place_tile" => self.apply_place_tile(state, phase, action, players),
             "score_check" => self.apply_score_check(state, phase, players),
+            "choose_main_conflict" => self.apply_choose_main_conflict(state, phase, action),
             _ => panic!("Unknown phase: {}", phase.name),
         }
     }
@@ -195,28 +208,59 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
         player_id: &str,
         players: &[Player],
     ) -> Option<TypedTransitionResult<EinsteinDojoState>> {
-        if phase.name != "place_tile" {
-            return None;
+        match phase.name.as_str() {
+            "place_tile" => {
+                let current_idx = phase.metadata["player_index"].as_u64()? as usize;
+                let mut s = state.clone();
+
+                let next_idx = (current_idx + 1) % players.len();
+                let next_player = &players[next_idx];
+                s.current_player_index = next_idx;
+
+                Some(TypedTransitionResult {
+                    state: s.clone(),
+                    events: vec![Event {
+                        event_type: "turn_skipped".into(),
+                        player_id: Some(player_id.into()),
+                        payload: serde_json::json!({}),
+                    }],
+                    next_phase: make_place_tile_phase(next_idx, &next_player.player_id),
+                    scores: s.float_scores(),
+                    game_over: None,
+                })
+            }
+            "choose_main_conflict" => {
+                // Auto-pick first conflict hex on forfeit
+                let mut s = state.clone();
+                let conflict_hexes = phase.metadata.get("conflict_hexes")
+                    .and_then(|v| v.as_array())
+                    .and_then(|arr| arr.first())
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                s.main_conflict = conflict_hexes;
+
+                let player_index = phase.metadata["player_index"].as_u64()? as usize;
+
+                Some(TypedTransitionResult {
+                    state: s.clone(),
+                    events: vec![Event {
+                        event_type: "main_conflict_chosen".into(),
+                        player_id: Some(player_id.into()),
+                        payload: serde_json::json!({"hex": s.main_conflict, "forfeited": true}),
+                    }],
+                    next_phase: Phase {
+                        name: "score_check".into(),
+                        auto_resolve: true,
+                        concurrent_mode: None,
+                        expected_actions: vec![],
+                        metadata: serde_json::json!({"player_index": player_index}),
+                    },
+                    scores: s.float_scores(),
+                    game_over: None,
+                })
+            }
+            _ => None,
         }
-
-        let current_idx = phase.metadata["player_index"].as_u64()? as usize;
-        let mut s = state.clone();
-
-        let next_idx = (current_idx + 1) % players.len();
-        let next_player = &players[next_idx];
-        s.current_player_index = next_idx;
-
-        Some(TypedTransitionResult {
-            state: s.clone(),
-            events: vec![Event {
-                event_type: "turn_skipped".into(),
-                player_id: Some(player_id.into()),
-                payload: serde_json::json!({}),
-            }],
-            next_phase: make_place_tile_phase(next_idx, &next_player.player_id),
-            scores: s.float_scores(),
-            game_over: None,
-        })
     }
 }
 
@@ -290,21 +334,69 @@ impl EinsteinDojoPlugin {
                 "anchor_q": anchor_q,
                 "anchor_r": anchor_r,
                 "orientation": orientation,
-                "changed_hexes": changed_hexes,
+                "changed_hexes": &changed_hexes,
             }),
         }];
 
-        // Transition to score_check (auto-resolve)
+        let score_check_phase = Phase {
+            name: "score_check".into(),
+            auto_resolve: true,
+            concurrent_mode: None,
+            expected_actions: vec![],
+            metadata: serde_json::json!({"player_index": player_index}),
+        };
+
+        // Detect new conflicts and potentially trigger choose_main_conflict
+        if s.main_conflict.is_none() {
+            let new_conflicts: Vec<String> = changed_hexes
+                .iter()
+                .filter(|hex_key| {
+                    s.board.hex_states.get(*hex_key).copied() == Some(HexState::Conflict)
+                })
+                .cloned()
+                .collect();
+
+            if new_conflicts.len() == 1 {
+                // Auto-set the single new conflict as main
+                s.main_conflict = Some(new_conflicts[0].clone());
+                return TypedTransitionResult {
+                    state: s.clone(),
+                    events,
+                    next_phase: score_check_phase,
+                    scores: s.float_scores(),
+                    game_over: None,
+                };
+            } else if new_conflicts.len() > 1 {
+                // Player must choose which conflict is the main one
+                return TypedTransitionResult {
+                    state: s.clone(),
+                    events,
+                    next_phase: Phase {
+                        name: "choose_main_conflict".into(),
+                        auto_resolve: false,
+                        concurrent_mode: Some(ConcurrentMode::Sequential),
+                        expected_actions: vec![ExpectedAction {
+                            player_id: player_id.clone(),
+                            action_type: "choose_main_conflict".into(),
+                            constraints: HashMap::new(),
+                            timeout_ms: None,
+                        }],
+                        metadata: serde_json::json!({
+                            "player_index": player_index,
+                            "conflict_hexes": new_conflicts,
+                        }),
+                    },
+                    scores: s.float_scores(),
+                    game_over: None,
+                };
+            }
+        }
+
+        // No main conflict logic needed — proceed to score_check
         TypedTransitionResult {
             state: s.clone(),
             events,
-            next_phase: Phase {
-                name: "score_check".into(),
-                auto_resolve: true,
-                concurrent_mode: None,
-                expected_actions: vec![],
-                metadata: serde_json::json!({"player_index": player_index}),
-            },
+            next_phase: score_check_phase,
             scores: s.float_scores(),
             game_over: None,
         }
@@ -349,6 +441,59 @@ impl EinsteinDojoPlugin {
             state: s.clone(),
             events: vec![],
             next_phase: make_place_tile_phase(next_idx, &next_player.player_id),
+            scores: s.float_scores(),
+            game_over: None,
+        }
+    }
+
+    fn validate_choose_main_conflict(
+        &self,
+        phase: &Phase,
+        action: &Action,
+    ) -> Option<String> {
+        let hex = action.payload.get("hex").and_then(|v| v.as_str());
+        match hex {
+            None => Some("Missing 'hex' in payload".into()),
+            Some(chosen) => {
+                let allowed = phase.metadata.get("conflict_hexes")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().any(|h| h.as_str() == Some(chosen)))
+                    .unwrap_or(false);
+                if !allowed {
+                    Some(format!("Hex {chosen} is not a valid conflict choice"))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn apply_choose_main_conflict(
+        &self,
+        state: &EinsteinDojoState,
+        phase: &Phase,
+        action: &Action,
+    ) -> TypedTransitionResult<EinsteinDojoState> {
+        let mut s = state.clone();
+        let chosen_hex = action.payload["hex"].as_str().unwrap().to_string();
+        s.main_conflict = Some(chosen_hex.clone());
+
+        let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
+
+        TypedTransitionResult {
+            state: s.clone(),
+            events: vec![Event {
+                event_type: "main_conflict_chosen".into(),
+                player_id: Some(action.player_id.clone()),
+                payload: serde_json::json!({"hex": chosen_hex}),
+            }],
+            next_phase: Phase {
+                name: "score_check".into(),
+                auto_resolve: true,
+                concurrent_mode: None,
+                expected_actions: vec![],
+                metadata: serde_json::json!({"player_index": player_index}),
+            },
             scores: s.float_scores(),
             game_over: None,
         }
@@ -645,6 +790,20 @@ mod tests {
                 continue;
             }
 
+            if phase.name == "choose_main_conflict" {
+                let current_pid = phase.expected_actions[0].player_id.clone();
+                let valid = plugin.get_valid_actions(&state, &phase, &current_pid);
+                let action = Action {
+                    action_type: "choose_main_conflict".into(),
+                    player_id: current_pid,
+                    payload: valid[0].clone(),
+                };
+                let r = plugin.apply_action(&state, &phase, &action, &players);
+                state = r.state;
+                phase = r.next_phase;
+                continue;
+            }
+
             let current_pid = phase.expected_actions[0].player_id.clone();
             let valid = plugin.get_valid_actions(&state, &phase, &current_pid);
 
@@ -697,6 +856,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             current_player_index: 0,
+            main_conflict: None,
         };
 
         let score_phase = Phase {

@@ -57,7 +57,9 @@ function GamePageContent() {
   }
 
   const currentPhase = view.current_phase;
-  const isMyTurn = currentPhase.expected_actions?.[0]?.player_id === view.viewer_id;
+  const isMyTurn = currentPhase.expected_actions?.[0]?.player_id === view.viewer_id
+    || (currentPhase.name === 'choose_main_conflict'
+      && currentPhase.expected_actions?.some(a => a.player_id === view.viewer_id));
   const currentPlayer = view.players.find(
     p => p.player_id === currentPhase.expected_actions?.[0]?.player_id
   );

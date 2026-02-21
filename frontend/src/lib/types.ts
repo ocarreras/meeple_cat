@@ -99,6 +99,7 @@ export interface EinsteinDojoGameData {
   tiles_remaining: Record<PlayerId, number>;
   scores: Record<PlayerId, number>;
   current_player_index: number;
+  main_conflict: string | null;  // hex key "q,r" of the main conflict
 }
 
 // Ein Stein Dojo action types
