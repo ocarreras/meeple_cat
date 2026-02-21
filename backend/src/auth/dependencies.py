@@ -18,7 +18,10 @@ async def get_current_user(
     # 1. Try access_token cookie
     cookie_token = request.cookies.get("access_token")
     if cookie_token:
-        return decode_token(cookie_token)
+        try:
+            return decode_token(cookie_token)
+        except HTTPException:
+            pass  # Fall through to Bearer (cookie may be expired/stale)
 
     # 2. Fall back to Bearer header
     if credentials:
