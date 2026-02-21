@@ -344,39 +344,58 @@ export default function EinsteinDojoRenderer({
           onResolveSelected={handleResolveSelected}
           onConfirmResolve={handleConfirmResolve}
         />
-        {isGameOver && gameOver && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm mx-4 text-center">
-              <h2 className="text-2xl font-bold mb-3">{t('game.status.gameOver')}</h2>
-              <div className="space-y-2 mb-4">
-                {view.players.map(p => {
-                  const isWinner = gameOver.winners.includes(p.player_id);
-                  const seatIdx = p.seat_index;
-                  return (
-                    <div
-                      key={p.player_id}
-                      className={`flex items-center justify-between px-3 py-2 rounded ${
-                        isWinner ? 'bg-yellow-50 border border-yellow-300' : 'bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-4 h-4 rounded-full"
-                          style={{ backgroundColor: PLAYER_COLORS[seatIdx % PLAYER_COLORS.length] }}
-                        />
-                        <span className="font-medium">{p.display_name}</span>
-                        {isWinner && <span className="text-yellow-600 text-sm font-bold">Winner!</span>}
+        {isGameOver && gameOver && (() => {
+          const viewerIsWinner = view.viewer_id ? gameOver.winners.includes(view.viewer_id) : false;
+          const winnerNames = gameOver.winners
+            .map(id => view.players.find(p => p.player_id === id)?.display_name ?? id)
+            .join(' & ');
+          const reason = gameOver.reason;
+          return (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm mx-4 text-center">
+                <h2 className="text-2xl font-bold mb-1">
+                  {viewerIsWinner ? 'Victory!' : 'Defeat'}
+                </h2>
+                {reason === 'main_conflict_resolved' && (
+                  <p className="text-sm text-purple-600 font-medium mb-3">
+                    {viewerIsWinner
+                      ? 'You resolved the main conflict!'
+                      : `${winnerNames} resolved the main conflict`}
+                  </p>
+                )}
+                {reason !== 'main_conflict_resolved' && (
+                  <p className="text-sm text-gray-500 mb-3">{winnerNames} wins</p>
+                )}
+                <div className="space-y-2 mb-4">
+                  {view.players.map(p => {
+                    const isWinner = gameOver.winners.includes(p.player_id);
+                    const seatIdx = p.seat_index;
+                    return (
+                      <div
+                        key={p.player_id}
+                        className={`flex items-center justify-between px-3 py-2 rounded ${
+                          isWinner ? 'bg-yellow-50 border border-yellow-300' : 'bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-4 h-4 rounded-full"
+                            style={{ backgroundColor: PLAYER_COLORS[seatIdx % PLAYER_COLORS.length] }}
+                          />
+                          <span className="font-medium">{p.display_name}</span>
+                          {isWinner && <span className="text-yellow-600 text-sm font-bold">Winner!</span>}
+                        </div>
+                        <span className="text-lg font-bold">
+                          {gameOver.final_scores[p.player_id] ?? 0}
+                        </span>
                       </div>
-                      <span className="text-lg font-bold">
-                        {gameOver.final_scores[p.player_id] ?? 0}
-                      </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Sidebar (desktop) / Bottom panel (mobile) */}
