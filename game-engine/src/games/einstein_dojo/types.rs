@@ -11,6 +11,7 @@ pub enum HexState {
     Open,     // some kites filled, all same player
     Complete, // all 6 kites filled by one player
     Conflict, // kites filled by different players
+    Resolved, // conflict resolved by a player (ownership in hex_owners)
 }
 
 /// A placed piece, recorded for history/rendering.
@@ -30,6 +31,8 @@ pub struct Board {
     pub placed_pieces: Vec<PlacedPiece>,
     #[serde(default)]
     pub hex_marks: HashMap<String, String>,     // "q,r" -> player_id (mark owner)
+    #[serde(default)]
+    pub hex_owners: HashMap<String, String>,    // "q,r" -> player_id (resolved hex ownership)
 }
 
 impl Board {
@@ -39,6 +42,7 @@ impl Board {
             hex_states: HashMap::new(),
             placed_pieces: Vec::new(),
             hex_marks: HashMap::new(),
+            hex_owners: HashMap::new(),
         }
     }
 }

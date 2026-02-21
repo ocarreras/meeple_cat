@@ -202,9 +202,84 @@ export function getValidMarkHexes(
   const valid = new Set<string>();
   for (const hexKey of candidates) {
     const state = hexStates[hexKey] ?? 'empty';
-    if (state === 'complete' || state === 'conflict') continue;
+    if (state === 'complete' || state === 'conflict' || state === 'resolved') continue;
     if (hexKey in hexMarks) continue;
     valid.add(hexKey);
   }
   return valid;
+}
+
+// ── Conflict resolution ──
+
+const HEX_DIRS: [number, number][] = [
+  [1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1],
+];
+
+/** Check if a hex is "controlled" by a given player. */
+function isHexControlled(
+  kiteOwners: Record<string, string>,
+  hexStates: Record<string, string>,
+  hexMarks: Record<string, string>,
+  hexOwners: Record<string, string>,
+  q: number,
+  r: number,
+  playerId: string,
+): boolean {
+  const key = `${q},${r}`;
+  const state = hexStates[key] ?? 'empty';
+
+  if (state === 'complete') {
+    return kiteOwners[`${key}:0`] === playerId;
+  }
+  if (state === 'resolved') {
+    return hexOwners[key] === playerId;
+  }
+  return hexMarks[key] === playerId;
+}
+
+/** Compute surrounding count for a conflict hex. */
+function computeSurroundingCount(
+  kiteOwners: Record<string, string>,
+  hexStates: Record<string, string>,
+  hexMarks: Record<string, string>,
+  hexOwners: Record<string, string>,
+  q: number,
+  r: number,
+  playerId: string,
+): number {
+  let count = 0;
+  for (const [dq, dr] of HEX_DIRS) {
+    const l1q = q + dq;
+    const l1r = r + dr;
+    if (isHexControlled(kiteOwners, hexStates, hexMarks, hexOwners, l1q, l1r, playerId)) {
+      count += 1;
+      const l2q = q + 2 * dq;
+      const l2r = r + 2 * dr;
+      if (isHexControlled(kiteOwners, hexStates, hexMarks, hexOwners, l2q, l2r, playerId)) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+/** Return set of conflict hex keys that the given player can resolve (surrounding >= 4). */
+export function getResolvableConflicts(
+  kiteOwners: Record<string, string>,
+  hexStates: Record<string, string>,
+  hexMarks: Record<string, string>,
+  hexOwners: Record<string, string>,
+  playerId: string,
+): Set<string> {
+  const resolvable = new Set<string>();
+  for (const [hexKey, state] of Object.entries(hexStates)) {
+    if (state !== 'conflict') continue;
+    const parts = hexKey.split(',').map(Number);
+    if (parts.length !== 2) continue;
+    const [q, r] = parts;
+    if (computeSurroundingCount(kiteOwners, hexStates, hexMarks, hexOwners, q, r, playerId) >= 4) {
+      resolvable.add(hexKey);
+    }
+  }
+  return resolvable;
 }

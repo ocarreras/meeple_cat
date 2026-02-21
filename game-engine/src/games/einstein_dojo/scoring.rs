@@ -1,10 +1,10 @@
-//! Scoring for Ein Stein Dojo — count complete hexes + marks per player.
+//! Scoring for Ein Stein Dojo — count complete hexes + resolved hexes + marks per player.
 
 use std::collections::HashMap;
 
 use super::types::{Board, HexState};
 
-/// Count score per player: Complete hexes + marks.
+/// Count score per player: Complete hexes + resolved hexes + marks.
 ///
 /// Returns {player_id: score}.
 pub fn count_scores(board: &Board) -> HashMap<String, i64> {
@@ -17,6 +17,14 @@ pub fn count_scores(board: &Board) -> HashMap<String, i64> {
             if let Some(owner) = board.kite_owners.get(&kite_key) {
                 *counts.entry(owner.clone()).or_insert(0) += 1;
             }
+        }
+    }
+
+    // Resolved hexes: 1 point each (from hex_owners)
+    for (hex_key, owner) in &board.hex_owners {
+        let state = board.hex_states.get(hex_key).copied().unwrap_or(HexState::Empty);
+        if state == HexState::Resolved {
+            *counts.entry(owner.clone()).or_insert(0) += 1;
         }
     }
 
@@ -85,5 +93,32 @@ mod tests {
 
         let counts = count_scores(&board);
         assert_eq!(counts.get("p1"), Some(&2)); // 1 complete + 1 mark
+    }
+
+    #[test]
+    fn test_resolved_hex_scores() {
+        let mut board = Board::new();
+        board.hex_states.insert("0,0".into(), HexState::Resolved);
+        board.hex_owners.insert("0,0".into(), "p1".into());
+        let counts = count_scores(&board);
+        assert_eq!(counts.get("p1"), Some(&1));
+    }
+
+    #[test]
+    fn test_complete_plus_resolved_plus_marks() {
+        let mut board = Board::new();
+        // Complete hex for p1
+        for k in 0..6 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p1".into());
+        }
+        board.hex_states.insert("0,0".into(), HexState::Complete);
+        // Resolved hex for p1
+        board.hex_states.insert("1,0".into(), HexState::Resolved);
+        board.hex_owners.insert("1,0".into(), "p1".into());
+        // Mark for p1
+        board.hex_marks.insert("2,0".into(), "p1".into());
+
+        let counts = count_scores(&board);
+        assert_eq!(counts.get("p1"), Some(&3)); // 1 + 1 + 1
     }
 }

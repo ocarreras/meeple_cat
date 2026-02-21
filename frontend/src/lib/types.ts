@@ -93,6 +93,7 @@ export interface EinsteinDojoBoard {
     anchor_r: number;
   }[];
   hex_marks: Record<string, string>;    // "q,r" -> player_id (mark owner)
+  hex_owners: Record<string, string>;   // "q,r" -> player_id (resolved hex ownership)
 }
 
 export interface EinsteinDojoGameData {

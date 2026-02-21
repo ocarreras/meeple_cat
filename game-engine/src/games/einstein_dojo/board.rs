@@ -232,6 +232,7 @@ pub fn get_valid_mark_hexes(board: &Board) -> Vec<String> {
             let state = board.hex_states.get(&key).copied().unwrap_or(HexState::Empty);
             state != HexState::Complete
                 && state != HexState::Conflict
+                && state != HexState::Resolved
                 && !board.hex_marks.contains_key(&key)
         })
         .map(|(q, r)| hex_to_key(q, r))
@@ -247,6 +248,9 @@ pub fn validate_mark_placement(board: &Board, hex_key: &str) -> Option<String> {
     }
     if state == HexState::Conflict {
         return Some("Cannot mark a conflict hex".into());
+    }
+    if state == HexState::Resolved {
+        return Some("Cannot mark a resolved hex".into());
     }
     if board.hex_marks.contains_key(hex_key) {
         return Some("Hex is already marked".into());
@@ -277,6 +281,112 @@ pub fn validate_mark_placement(board: &Board, hex_key: &str) -> Option<String> {
     }
 
     None
+}
+
+// ── Conflict resolution ──
+
+/// Parse a hex key "q,r" into (q, r) coordinates.
+pub fn parse_hex_key(hex_key: &str) -> Option<(i32, i32)> {
+    let parts: Vec<&str> = hex_key.split(',').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let q: i32 = parts[0].parse().ok()?;
+    let r: i32 = parts[1].parse().ok()?;
+    Some((q, r))
+}
+
+/// Check if a hex is "controlled" by a given player.
+/// A hex is controlled if:
+///   - It is Complete and all kites belong to the player, OR
+///   - It is Resolved and owned by the player (hex_owners), OR
+///   - It has a mark by the player (hex_marks)
+pub fn is_hex_controlled(board: &Board, q: i32, r: i32, player_id: &str) -> bool {
+    let key = hex_to_key(q, r);
+    let state = board.hex_states.get(&key).copied().unwrap_or(HexState::Empty);
+
+    match state {
+        HexState::Complete => {
+            let kite_key = format!("{key}:0");
+            board.kite_owners.get(&kite_key).map(|s| s.as_str()) == Some(player_id)
+        }
+        HexState::Resolved => {
+            board.hex_owners.get(&key).map(|s| s.as_str()) == Some(player_id)
+        }
+        _ => {
+            board.hex_marks.get(&key).map(|s| s.as_str()) == Some(player_id)
+        }
+    }
+}
+
+/// Compute the surrounding count for a conflict hex from a given player's perspective.
+///
+/// For each of the 6 hex directions:
+///   - Layer 1 (direct neighbor): if controlled by player, +1
+///   - Layer 2 (next in same direction): if controlled AND layer 1 is also
+///     controlled (bridge), +1 more
+pub fn compute_surrounding_count(board: &Board, q: i32, r: i32, player_id: &str) -> u32 {
+    let mut count = 0u32;
+    for &(dq, dr) in &HEX_DIRECTIONS {
+        let l1_q = q + dq;
+        let l1_r = r + dr;
+        if is_hex_controlled(board, l1_q, l1_r, player_id) {
+            count += 1;
+            let l2_q = q + 2 * dq;
+            let l2_r = r + 2 * dr;
+            if is_hex_controlled(board, l2_q, l2_r, player_id) {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+/// Return all conflict hex keys that the given player can resolve (surrounding >= 4).
+pub fn get_resolvable_conflicts(board: &Board, player_id: &str) -> Vec<String> {
+    board
+        .hex_states
+        .iter()
+        .filter(|(_, &state)| state == HexState::Conflict)
+        .filter_map(|(hex_key, _)| {
+            let (q, r) = parse_hex_key(hex_key)?;
+            if compute_surrounding_count(board, q, r, player_id) >= 4 {
+                Some(hex_key.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Validate that a player can resolve a specific conflict hex.
+pub fn validate_resolve_conflict(board: &Board, hex_key: &str, player_id: &str) -> Option<String> {
+    let state = board.hex_states.get(hex_key).copied().unwrap_or(HexState::Empty);
+    if state != HexState::Conflict {
+        return Some(format!("Hex {hex_key} is not a conflict"));
+    }
+    let (q, r) = match parse_hex_key(hex_key) {
+        Some(coords) => coords,
+        None => return Some("Invalid hex key format".into()),
+    };
+    let count = compute_surrounding_count(board, q, r, player_id);
+    if count < 4 {
+        return Some(format!(
+            "Insufficient surrounding count for {hex_key}: {count} (need >= 4)"
+        ));
+    }
+    None
+}
+
+/// Resolve a conflict hex: mark it as Resolved and assign ownership.
+/// Kite owners remain unchanged (for visual display of split colors).
+pub fn apply_resolve_conflict(board: &mut Board, hex_key: &str, player_id: &str) {
+    board
+        .hex_states
+        .insert(hex_key.to_string(), HexState::Resolved);
+    board
+        .hex_owners
+        .insert(hex_key.to_string(), player_id.to_string());
 }
 
 /// Extract the set of hex cells that have at least one occupied kite.
@@ -564,5 +674,198 @@ mod tests {
             board.hex_marks.remove("0,0");
         }
         assert!(!board.hex_marks.contains_key("0,0"));
+    }
+
+    // ── Conflict resolution tests ──
+
+    #[test]
+    fn test_parse_hex_key() {
+        assert_eq!(parse_hex_key("0,0"), Some((0, 0)));
+        assert_eq!(parse_hex_key("-1,2"), Some((-1, 2)));
+        assert_eq!(parse_hex_key("invalid"), None);
+        assert_eq!(parse_hex_key(""), None);
+    }
+
+    #[test]
+    fn test_is_hex_controlled_complete() {
+        let mut board = Board::new();
+        for k in 0..6 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p1".into());
+        }
+        board.hex_states.insert("0,0".into(), HexState::Complete);
+        assert!(is_hex_controlled(&board, 0, 0, "p1"));
+        assert!(!is_hex_controlled(&board, 0, 0, "p2"));
+    }
+
+    #[test]
+    fn test_is_hex_controlled_marked() {
+        let mut board = Board::new();
+        board.hex_marks.insert("0,0".into(), "p2".into());
+        assert!(is_hex_controlled(&board, 0, 0, "p2"));
+        assert!(!is_hex_controlled(&board, 0, 0, "p1"));
+    }
+
+    #[test]
+    fn test_is_hex_controlled_resolved() {
+        let mut board = Board::new();
+        board.hex_states.insert("0,0".into(), HexState::Resolved);
+        board.hex_owners.insert("0,0".into(), "p1".into());
+        assert!(is_hex_controlled(&board, 0, 0, "p1"));
+        assert!(!is_hex_controlled(&board, 0, 0, "p2"));
+    }
+
+    #[test]
+    fn test_is_hex_controlled_empty() {
+        let board = Board::new();
+        assert!(!is_hex_controlled(&board, 0, 0, "p1"));
+    }
+
+    #[test]
+    fn test_surrounding_count_four_neighbors() {
+        let mut board = Board::new();
+        // 4 controlled neighbors around (0,0) via marks
+        for &(q, r) in &[(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            board.hex_marks.insert(hex_to_key(q, r), "p1".into());
+        }
+        board.hex_states.insert("0,0".into(), HexState::Conflict);
+        assert_eq!(compute_surrounding_count(&board, 0, 0, "p1"), 4);
+        assert_eq!(compute_surrounding_count(&board, 0, 0, "p2"), 0);
+    }
+
+    #[test]
+    fn test_surrounding_count_with_bridge() {
+        let mut board = Board::new();
+        // Direction (1,0): layer1=(1,0) + layer2=(2,0) → contributes 2
+        board.hex_marks.insert("1,0".into(), "p1".into());
+        board.hex_marks.insert("2,0".into(), "p1".into());
+        // Two more directions for a total of 4
+        board.hex_marks.insert("-1,0".into(), "p1".into());
+        board.hex_marks.insert("0,1".into(), "p1".into());
+        assert_eq!(compute_surrounding_count(&board, 0, 0, "p1"), 4);
+    }
+
+    #[test]
+    fn test_surrounding_count_layer2_without_bridge() {
+        let mut board = Board::new();
+        // Layer2 at (2,0) but NO layer1 at (1,0) → should NOT count
+        board.hex_marks.insert("2,0".into(), "p1".into());
+        assert_eq!(compute_surrounding_count(&board, 0, 0, "p1"), 0);
+    }
+
+    #[test]
+    fn test_resolvable_conflicts() {
+        let mut board = Board::new();
+        // Make (0,0) a conflict
+        for k in 0..3 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p1".into());
+        }
+        for k in 3..6 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p2".into());
+        }
+        board.hex_states.insert("0,0".into(), HexState::Conflict);
+        // 4 controlled neighbors for p1
+        for &(q, r) in &[(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            board.hex_marks.insert(hex_to_key(q, r), "p1".into());
+        }
+        let resolvable = get_resolvable_conflicts(&board, "p1");
+        assert!(resolvable.contains(&"0,0".to_string()));
+        assert!(get_resolvable_conflicts(&board, "p2").is_empty());
+    }
+
+    #[test]
+    fn test_resolvable_conflicts_insufficient() {
+        let mut board = Board::new();
+        for k in 0..3 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p1".into());
+        }
+        for k in 3..6 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p2".into());
+        }
+        board.hex_states.insert("0,0".into(), HexState::Conflict);
+        // Only 3 controlled neighbors — not enough
+        for &(q, r) in &[(1, 0), (-1, 0), (0, 1)] {
+            board.hex_marks.insert(hex_to_key(q, r), "p1".into());
+        }
+        assert!(get_resolvable_conflicts(&board, "p1").is_empty());
+    }
+
+    #[test]
+    fn test_apply_resolve_conflict() {
+        let mut board = Board::new();
+        for k in 0..3 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p1".into());
+        }
+        for k in 3..6 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p2".into());
+        }
+        board.hex_states.insert("0,0".into(), HexState::Conflict);
+        apply_resolve_conflict(&mut board, "0,0", "p1");
+        assert_eq!(board.hex_states["0,0"], HexState::Resolved);
+        assert_eq!(board.hex_owners["0,0"], "p1");
+        // Kites remain unchanged
+        assert_eq!(board.kite_owners["0,0:0"], "p1");
+        assert_eq!(board.kite_owners["0,0:3"], "p2");
+    }
+
+    #[test]
+    fn test_validate_resolve_conflict_not_conflict() {
+        let mut board = Board::new();
+        board.hex_states.insert("0,0".into(), HexState::Complete);
+        assert!(validate_resolve_conflict(&board, "0,0", "p1").is_some());
+    }
+
+    #[test]
+    fn test_chain_resolution() {
+        let mut board = Board::new();
+        // Two conflicts at (0,0) and (2,0)
+        for hex in ["0,0", "2,0"] {
+            for k in 0..3 {
+                board.kite_owners.insert(format!("{hex}:{k}"), "p1".into());
+            }
+            for k in 3..6 {
+                board.kite_owners.insert(format!("{hex}:{k}"), "p2".into());
+            }
+            board.hex_states.insert(hex.to_string(), HexState::Conflict);
+        }
+        // (0,0) has 4 controlled neighbors
+        for &(q, r) in &[(-1, 0), (0, 1), (0, -1), (-1, 1)] {
+            board.hex_marks.insert(hex_to_key(q, r), "p1".into());
+        }
+        // (2,0) has 3 neighbors + bridge via (1,0)
+        for &(q, r) in &[(3, 0), (2, 1), (2, -1)] {
+            board.hex_marks.insert(hex_to_key(q, r), "p1".into());
+        }
+        board.hex_marks.insert("1,0".into(), "p1".into());
+
+        // Before resolving: (0,0) is resolvable
+        assert!(!get_resolvable_conflicts(&board, "p1").is_empty());
+
+        // Resolve (0,0) — now it's controlled and provides layer-2 support for (2,0)
+        apply_resolve_conflict(&mut board, "0,0", "p1");
+
+        // (2,0) direction (-1,0): layer1=(1,0) controlled, layer2=(0,0) now Resolved+controlled
+        let resolvable = get_resolvable_conflicts(&board, "p1");
+        assert!(
+            resolvable.contains(&"2,0".to_string()),
+            "chain should make (2,0) resolvable after resolving (0,0)"
+        );
+    }
+
+    #[test]
+    fn test_valid_mark_hexes_excludes_resolved() {
+        let mut board = Board::new();
+        apply_placement(&mut board, "p1", 0, 0, 0);
+        board.hex_states.insert("1,0".into(), HexState::Resolved);
+        board.hex_owners.insert("1,0".into(), "p1".into());
+        let hexes = get_valid_mark_hexes(&board);
+        assert!(!hexes.contains(&"1,0".to_string()));
+    }
+
+    #[test]
+    fn test_validate_mark_placement_resolved() {
+        let mut board = Board::new();
+        apply_placement(&mut board, "p1", 0, 0, 0);
+        board.hex_states.insert("0,0".into(), HexState::Resolved);
+        assert!(validate_mark_placement(&board, "0,0").is_some());
     }
 }

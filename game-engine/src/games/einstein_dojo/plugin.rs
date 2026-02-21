@@ -5,7 +5,11 @@ use std::collections::HashMap;
 use crate::engine::models::*;
 use crate::engine::plugin::{TypedGamePlugin, TypedTransitionResult};
 
-use super::board::{apply_placement, get_all_valid_placements, get_valid_mark_hexes, validate_mark_placement, validate_placement};
+use super::board::{
+    apply_placement, apply_resolve_conflict, get_all_valid_placements,
+    get_resolvable_conflicts, get_valid_mark_hexes, validate_mark_placement,
+    validate_placement, validate_resolve_conflict,
+};
 use super::scoring::count_scores;
 use super::types::*;
 
@@ -127,6 +131,27 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
                     }
                 }
 
+                // Resolve conflict actions
+                for hex_key in get_resolvable_conflicts(&state.board, player_id) {
+                    actions.push(serde_json::json!({
+                        "action_type": "resolve_conflict",
+                        "hex": hex_key,
+                    }));
+                }
+
+                actions
+            }
+            "resolve_chain" => {
+                let mut actions = vec![];
+                for hex_key in get_resolvable_conflicts(&state.board, player_id) {
+                    actions.push(serde_json::json!({
+                        "action_type": "resolve_conflict",
+                        "hex": hex_key,
+                    }));
+                }
+                actions.push(serde_json::json!({
+                    "action_type": "skip_resolve",
+                }));
                 actions
             }
             "choose_main_conflict" => {
@@ -153,7 +178,13 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
             "player_turn" => match action.action_type.as_str() {
                 "place_tile" => self.validate_place_tile(state, action),
                 "place_mark" => self.validate_place_mark(state, action),
+                "resolve_conflict" => self.validate_resolve_action(state, action),
                 _ => Some(format!("Unknown action type: {}", action.action_type)),
+            },
+            "resolve_chain" => match action.action_type.as_str() {
+                "resolve_conflict" => self.validate_resolve_action(state, action),
+                "skip_resolve" => None,
+                _ => Some(format!("Unknown action type in resolve_chain: {}", action.action_type)),
             },
             "choose_main_conflict" => self.validate_choose_main_conflict(phase, action),
             _ => None,
@@ -171,7 +202,13 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
             "player_turn" => match action.action_type.as_str() {
                 "place_tile" => self.apply_place_tile(state, phase, action, players),
                 "place_mark" => self.apply_place_mark(state, phase, action),
+                "resolve_conflict" => self.apply_resolve(state, phase, action, players),
                 _ => panic!("Unknown action type in player_turn: {}", action.action_type),
+            },
+            "resolve_chain" => match action.action_type.as_str() {
+                "resolve_conflict" => self.apply_resolve(state, phase, action, players),
+                "skip_resolve" => self.apply_resolve_chain_skip(state, phase),
+                _ => panic!("Unknown action type in resolve_chain: {}", action.action_type),
             },
             "score_check" => self.apply_score_check(state, phase, players),
             "choose_main_conflict" => self.apply_choose_main_conflict(state, phase, action),
@@ -241,6 +278,25 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
                         payload: serde_json::json!({}),
                     }],
                     next_phase: make_player_turn_phase(next_idx, &next_player.player_id),
+                    scores: s.float_scores(),
+                    game_over: None,
+                })
+            }
+            "resolve_chain" => {
+                // Auto-skip on forfeit
+                let s = state.clone();
+                let player_index = phase.metadata["player_index"].as_u64()? as usize;
+
+                Some(TypedTransitionResult {
+                    state: s.clone(),
+                    events: vec![],
+                    next_phase: Phase {
+                        name: "score_check".into(),
+                        auto_resolve: true,
+                        concurrent_mode: None,
+                        expected_actions: vec![],
+                        metadata: serde_json::json!({"player_index": player_index}),
+                    },
                     scores: s.float_scores(),
                     game_over: None,
                 })
@@ -579,6 +635,169 @@ impl EinsteinDojoPlugin {
         }
     }
 
+    fn validate_resolve_action(
+        &self,
+        state: &EinsteinDojoState,
+        action: &Action,
+    ) -> Option<String> {
+        let hex = action.payload.get("hex").and_then(|v| v.as_str());
+        match hex {
+            None => Some("Missing 'hex' in payload".into()),
+            Some(hex_key) => validate_resolve_conflict(&state.board, hex_key, &action.player_id),
+        }
+    }
+
+    fn apply_resolve(
+        &self,
+        state: &EinsteinDojoState,
+        phase: &Phase,
+        action: &Action,
+        players: &[Player],
+    ) -> TypedTransitionResult<EinsteinDojoState> {
+        let mut s = state.clone();
+        let player_id = &action.player_id;
+        let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
+        let hex_key = action.payload["hex"].as_str().unwrap().to_string();
+
+        apply_resolve_conflict(&mut s.board, &hex_key, player_id);
+
+        // Check for main conflict win
+        if s.main_conflict.as_deref() == Some(hex_key.as_str()) {
+            return self.end_game_main_conflict_win(s, player_id, &hex_key, players);
+        }
+
+        // Recount scores
+        let score_counts = count_scores(&s.board);
+        for p in players {
+            s.scores.insert(
+                p.player_id.clone(),
+                score_counts.get(&p.player_id).copied().unwrap_or(0),
+            );
+        }
+
+        let events = vec![Event {
+            event_type: "conflict_resolved".into(),
+            player_id: Some(player_id.clone()),
+            payload: serde_json::json!({ "hex": hex_key }),
+        }];
+
+        // Check for more resolvable conflicts (chaining)
+        let more_resolvable = get_resolvable_conflicts(&s.board, player_id);
+        if more_resolvable.is_empty() {
+            TypedTransitionResult {
+                state: s.clone(),
+                events,
+                next_phase: Phase {
+                    name: "score_check".into(),
+                    auto_resolve: true,
+                    concurrent_mode: None,
+                    expected_actions: vec![],
+                    metadata: serde_json::json!({"player_index": player_index}),
+                },
+                scores: s.float_scores(),
+                game_over: None,
+            }
+        } else {
+            TypedTransitionResult {
+                state: s.clone(),
+                events,
+                next_phase: Phase {
+                    name: "resolve_chain".into(),
+                    auto_resolve: false,
+                    concurrent_mode: Some(ConcurrentMode::Sequential),
+                    expected_actions: vec![ExpectedAction {
+                        player_id: player_id.clone(),
+                        action_type: "resolve_chain".into(),
+                        constraints: HashMap::new(),
+                        timeout_ms: None,
+                    }],
+                    metadata: serde_json::json!({
+                        "player_index": player_index,
+                        "resolvable_hexes": more_resolvable,
+                    }),
+                },
+                scores: s.float_scores(),
+                game_over: None,
+            }
+        }
+    }
+
+    fn apply_resolve_chain_skip(
+        &self,
+        state: &EinsteinDojoState,
+        phase: &Phase,
+    ) -> TypedTransitionResult<EinsteinDojoState> {
+        let s = state.clone();
+        let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
+
+        TypedTransitionResult {
+            state: s.clone(),
+            events: vec![],
+            next_phase: Phase {
+                name: "score_check".into(),
+                auto_resolve: true,
+                concurrent_mode: None,
+                expected_actions: vec![],
+                metadata: serde_json::json!({"player_index": player_index}),
+            },
+            scores: s.float_scores(),
+            game_over: None,
+        }
+    }
+
+    fn end_game_main_conflict_win(
+        &self,
+        mut state: EinsteinDojoState,
+        winner_id: &str,
+        hex_key: &str,
+        players: &[Player],
+    ) -> TypedTransitionResult<EinsteinDojoState> {
+        let score_counts = count_scores(&state.board);
+        for p in players {
+            state.scores.insert(
+                p.player_id.clone(),
+                score_counts.get(&p.player_id).copied().unwrap_or(0),
+            );
+        }
+        let final_scores = state.float_scores();
+
+        let events = vec![
+            Event {
+                event_type: "conflict_resolved".into(),
+                player_id: Some(winner_id.to_string()),
+                payload: serde_json::json!({ "hex": hex_key }),
+            },
+            Event {
+                event_type: "game_ended".into(),
+                player_id: None,
+                payload: serde_json::json!({
+                    "final_scores": &final_scores,
+                    "winners": [winner_id],
+                    "reason": "main_conflict_resolved",
+                }),
+            },
+        ];
+
+        TypedTransitionResult {
+            state,
+            events,
+            next_phase: Phase {
+                name: "game_over".into(),
+                auto_resolve: false,
+                concurrent_mode: None,
+                expected_actions: vec![],
+                metadata: serde_json::json!({}),
+            },
+            scores: final_scores.clone(),
+            game_over: Some(GameResult {
+                winners: vec![winner_id.to_string()],
+                final_scores,
+                reason: "main_conflict_resolved".into(),
+                details: HashMap::new(),
+            }),
+        }
+    }
+
     fn end_game(
         &self,
         state: EinsteinDojoState,
@@ -883,6 +1102,26 @@ mod tests {
                 let r = plugin.apply_action(&state, &phase, &action, &players);
                 state = r.state;
                 phase = r.next_phase;
+                if r.game_over.is_some() {
+                    break;
+                }
+                continue;
+            }
+
+            if phase.name == "resolve_chain" {
+                let current_pid = phase.expected_actions[0].player_id.clone();
+                // Skip resolve chain in the test loop
+                let action = Action {
+                    action_type: "skip_resolve".into(),
+                    player_id: current_pid,
+                    payload: serde_json::json!({}),
+                };
+                let r = plugin.apply_action(&state, &phase, &action, &players);
+                state = r.state;
+                phase = r.next_phase;
+                if r.game_over.is_some() {
+                    break;
+                }
                 continue;
             }
 
@@ -928,6 +1167,106 @@ mod tests {
             (p1_tiles == 0 && p1_marks == 0) || (p2_tiles == 0 && p2_marks == 0),
             "at least one player should have 0 tiles+marks, got p1={p1_tiles}/{p1_marks} p2={p2_tiles}/{p2_marks}"
         );
+    }
+
+    #[test]
+    fn test_resolve_conflict_action() {
+        let plugin = EinsteinDojoPlugin;
+        let players = test_players();
+        let (mut state, _, _) = plugin.create_initial_state(&players, &default_config());
+
+        // Set up a resolvable conflict at (0,0)
+        for k in 0..3 {
+            state.board.kite_owners.insert(format!("0,0:{k}"), "p1".into());
+        }
+        for k in 3..6 {
+            state.board.kite_owners.insert(format!("0,0:{k}"), "p2".into());
+        }
+        state.board.hex_states.insert("0,0".into(), HexState::Conflict);
+        // 4 controlled neighbors
+        for &(q, r) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+            state.board.hex_marks.insert(format!("{q},{r}"), "p1".into());
+        }
+
+        let phase = make_player_turn_phase(0, "p1");
+        let actions = plugin.get_valid_actions(&state, &phase, "p1");
+        let resolve_actions: Vec<_> = actions
+            .iter()
+            .filter(|a| a.get("action_type").and_then(|v| v.as_str()) == Some("resolve_conflict"))
+            .collect();
+        assert!(!resolve_actions.is_empty());
+
+        let action = Action {
+            action_type: "resolve_conflict".into(),
+            player_id: "p1".into(),
+            payload: serde_json::json!({"hex": "0,0"}),
+        };
+        assert!(plugin.validate_action(&state, &phase, &action).is_none());
+
+        let result = plugin.apply_action(&state, &phase, &action, &players);
+        assert_eq!(result.state.board.hex_states["0,0"], HexState::Resolved);
+        assert_eq!(result.state.board.hex_owners["0,0"], "p1");
+    }
+
+    #[test]
+    fn test_main_conflict_win() {
+        let plugin = EinsteinDojoPlugin;
+        let players = test_players();
+        let (mut state, _, _) = plugin.create_initial_state(&players, &default_config());
+
+        state.main_conflict = Some("0,0".into());
+        for k in 0..3 {
+            state.board.kite_owners.insert(format!("0,0:{k}"), "p1".into());
+        }
+        for k in 3..6 {
+            state.board.kite_owners.insert(format!("0,0:{k}"), "p2".into());
+        }
+        state.board.hex_states.insert("0,0".into(), HexState::Conflict);
+        for &(q, r) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+            state.board.hex_marks.insert(format!("{q},{r}"), "p1".into());
+        }
+
+        let phase = make_player_turn_phase(0, "p1");
+        let action = Action {
+            action_type: "resolve_conflict".into(),
+            player_id: "p1".into(),
+            payload: serde_json::json!({"hex": "0,0"}),
+        };
+        let result = plugin.apply_action(&state, &phase, &action, &players);
+        assert!(result.game_over.is_some());
+        let game_over = result.game_over.unwrap();
+        assert_eq!(game_over.winners, vec!["p1"]);
+        assert_eq!(game_over.reason, "main_conflict_resolved");
+    }
+
+    #[test]
+    fn test_resolve_chain_skip() {
+        let plugin = EinsteinDojoPlugin;
+        let players = test_players();
+        let (state, _, _) = plugin.create_initial_state(&players, &default_config());
+
+        let phase = Phase {
+            name: "resolve_chain".into(),
+            auto_resolve: false,
+            concurrent_mode: Some(ConcurrentMode::Sequential),
+            expected_actions: vec![ExpectedAction {
+                player_id: "p1".into(),
+                action_type: "resolve_chain".into(),
+                constraints: HashMap::new(),
+                timeout_ms: None,
+            }],
+            metadata: serde_json::json!({"player_index": 0}),
+        };
+
+        let action = Action {
+            action_type: "skip_resolve".into(),
+            player_id: "p1".into(),
+            payload: serde_json::json!({}),
+        };
+        assert!(plugin.validate_action(&state, &phase, &action).is_none());
+
+        let result = plugin.apply_action(&state, &phase, &action, &players);
+        assert_eq!(result.next_phase.name, "score_check");
     }
 
     #[test]

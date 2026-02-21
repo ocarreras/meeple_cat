@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlayerView, EinsteinDojoGameData } from '@/lib/types';
 import { useGameStore } from '@/stores/gameStore';
-import { orientationInfo, orientationIndex, NUM_ORIENTATIONS, isValidPlacement, getValidMarkHexes } from '@/lib/einsteinPieces';
+import { orientationInfo, orientationIndex, NUM_ORIENTATIONS, isValidPlacement, getValidMarkHexes, getResolvableConflicts } from '@/lib/einsteinPieces';
 import EinsteinDojoBoard, { type BoardHandle, type GhostPiece } from './EinsteinDojoBoard';
 import PieceTray from './PieceTray';
 import ScoreBoard from '../../game/ScoreBoard';
@@ -32,8 +32,9 @@ export default function EinsteinDojoRenderer({
   const [isDraggingFromTray, setIsDraggingFromTray] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [selectedConflict, setSelectedConflict] = useState<string | null>(null);
-  const [actionMode, setActionMode] = useState<'place_tile' | 'place_mark'>('place_tile');
+  const [actionMode, setActionMode] = useState<'place_tile' | 'place_mark' | 'resolve_conflict'>('place_tile');
   const [selectedMark, setSelectedMark] = useState<string | null>(null);
+  const [selectedResolve, setSelectedResolve] = useState<string | null>(null);
 
   const gameData = view.game_data as EinsteinDojoGameData;
   const gameOver = useGameStore((state) => state.gameOver);
@@ -74,6 +75,17 @@ export default function EinsteinDojoRenderer({
     }
   }, [selectedMark, onAction]);
 
+  const handleResolveSelected = useCallback((hexKey: string) => {
+    setSelectedResolve(hexKey);
+  }, []);
+
+  const handleConfirmResolve = useCallback(() => {
+    if (selectedResolve) {
+      onAction('resolve_conflict', { hex: selectedResolve });
+      setSelectedResolve(null);
+    }
+  }, [selectedResolve, onAction]);
+
   const myTilesRemaining = view.viewer_id
     ? gameData.tiles_remaining[view.viewer_id] ?? 0
     : 0;
@@ -88,6 +100,22 @@ export default function EinsteinDojoRenderer({
     return getValidMarkHexes(gameData.board.kite_owners, gameData.board.hex_states, gameData.board.hex_marks);
   }, [isMyTurn, phase, actionMode, gameData.board.kite_owners, gameData.board.hex_states, gameData.board.hex_marks]);
 
+  // Resolvable conflict hexes (memoized)
+  const resolvableConflicts = useMemo(() => {
+    if (!view.viewer_id) return new Set<string>();
+    if (!isMyTurn) return new Set<string>();
+    if (phase !== 'player_turn' && phase !== 'resolve_chain') return new Set<string>();
+    return getResolvableConflicts(
+      gameData.board.kite_owners,
+      gameData.board.hex_states,
+      gameData.board.hex_marks,
+      gameData.board.hex_owners,
+      view.viewer_id,
+    );
+  }, [isMyTurn, phase, view.viewer_id, gameData.board.kite_owners, gameData.board.hex_states, gameData.board.hex_marks, gameData.board.hex_owners]);
+
+  const canResolve = resolvableConflicts.size > 0;
+
   // Refs for window event handlers (avoid stale closures)
   const currentOrientationRef = useRef(currentOrientation);
   currentOrientationRef.current = currentOrientation;
@@ -100,6 +128,7 @@ export default function EinsteinDojoRenderer({
     setIsDraggingFromTray(false);
     setPanelExpanded(false);
     setSelectedMark(null);
+    setSelectedResolve(null);
     // Auto-switch to place_mark if no tiles left but marks remain
     if (myTilesRemaining <= 0 && myMarksRemaining > 0) {
       setActionMode('place_mark');
@@ -107,6 +136,14 @@ export default function EinsteinDojoRenderer({
       setActionMode('place_tile');
     }
   }, [view.turn_number, myTilesRemaining, myMarksRemaining]);
+
+  // Auto-switch to resolve mode during resolve_chain phase
+  useEffect(() => {
+    if (phase === 'resolve_chain' && isMyTurn) {
+      setActionMode('resolve_conflict');
+      setSelectedResolve(null);
+    }
+  }, [phase, isMyTurn]);
 
   // Reset conflict selection when phase changes
   useEffect(() => {
@@ -147,7 +184,18 @@ export default function EinsteinDojoRenderer({
   // ── Click to place ──
 
   const handleHexClicked = useCallback((q: number, r: number) => {
-    if (!isMyTurn || phase !== 'player_turn') return;
+    if (!isMyTurn) return;
+
+    // Resolve mode (player_turn or resolve_chain)
+    if (actionMode === 'resolve_conflict' && (phase === 'player_turn' || phase === 'resolve_chain')) {
+      const hexKey = `${q},${r}`;
+      if (resolvableConflicts.has(hexKey)) {
+        setSelectedResolve(hexKey);
+      }
+      return;
+    }
+
+    if (phase !== 'player_turn') return;
 
     if (actionMode === 'place_mark') {
       const hexKey = `${q},${r}`;
@@ -172,7 +220,7 @@ export default function EinsteinDojoRenderer({
         return;
       }
     }
-  }, [isMyTurn, phase, actionMode, validMarkHexes, gameData.board.kite_owners, currentOrientation, onAction]);
+  }, [isMyTurn, phase, actionMode, resolvableConflicts, validMarkHexes, gameData.board.kite_owners, currentOrientation, onAction]);
 
   // ── Drag from tray ──
 
@@ -254,10 +302,18 @@ export default function EinsteinDojoRenderer({
     if (phase === 'choose_main_conflict') {
       return isMyTurn ? 'Choose the main conflict' : 'Opponent choosing main conflict...';
     }
+    if (phase === 'resolve_chain') {
+      return isMyTurn ? 'Resolve more conflicts or skip' : 'Opponent resolving conflicts...';
+    }
     if (!isMyTurn) return t('game.status.opponentTurn');
+    if (actionMode === 'resolve_conflict') return 'Tap a conflict hex to resolve';
     if (actionMode === 'place_mark') return 'Tap a hex to place mark';
     return t('game.status.tapToPlace');
   };
+
+  const handleSkipResolve = useCallback(() => {
+    onAction('skip_resolve', {});
+  }, [onAction]);
 
   return (
     <div className="flex flex-col md:flex-row h-full">
@@ -283,6 +339,10 @@ export default function EinsteinDojoRenderer({
           selectedMark={selectedMark}
           onMarkSelected={handleMarkSelected}
           onConfirmMark={handleConfirmMark}
+          resolvableConflicts={resolvableConflicts}
+          selectedResolve={selectedResolve}
+          onResolveSelected={handleResolveSelected}
+          onConfirmResolve={handleConfirmResolve}
         />
         {isGameOver && gameOver && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -356,7 +416,7 @@ export default function EinsteinDojoRenderer({
               <div className="text-sm font-semibold mb-2">Action</div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setActionMode('place_tile'); setSelectedMark(null); }}
+                  onClick={() => { setActionMode('place_tile'); setSelectedMark(null); setSelectedResolve(null); }}
                   disabled={myTilesRemaining <= 0}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     actionMode === 'place_tile'
@@ -369,7 +429,7 @@ export default function EinsteinDojoRenderer({
                   Tile ({myTilesRemaining})
                 </button>
                 <button
-                  onClick={() => { setActionMode('place_mark'); setHoverHex(null); }}
+                  onClick={() => { setActionMode('place_mark'); setHoverHex(null); setSelectedResolve(null); }}
                   disabled={myMarksRemaining <= 0}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     actionMode === 'place_mark'
@@ -382,11 +442,42 @@ export default function EinsteinDojoRenderer({
                   Mark ({myMarksRemaining})
                 </button>
                 <button
-                  disabled
-                  className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-400 cursor-not-allowed"
-                  title="Conflict resolution coming soon"
+                  onClick={() => { setActionMode('resolve_conflict'); setHoverHex(null); setSelectedMark(null); }}
+                  disabled={!canResolve}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    actionMode === 'resolve_conflict'
+                      ? 'bg-purple-600 text-white'
+                      : !canResolve
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
                 >
                   Resolve
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Resolve chain panel */}
+          {isMyTurn && phase === 'resolve_chain' && (
+            <div className="bg-purple-50 rounded-lg border border-purple-200 shadow-sm px-4 py-3">
+              <div className="text-sm font-semibold mb-2 text-purple-800">Resolve Chain</div>
+              <p className="text-xs text-purple-600 mb-3">
+                {canResolve
+                  ? 'You can resolve more conflicts or skip.'
+                  : 'No more conflicts to resolve.'}
+              </p>
+              <div className="flex gap-2">
+                {canResolve && (
+                  <span className="flex-1 text-center px-3 py-2 rounded-lg text-sm font-medium bg-purple-600 text-white">
+                    Tap a conflict hex
+                  </span>
+                )}
+                <button
+                  onClick={handleSkipResolve}
+                  className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                >
+                  Skip
                 </button>
               </div>
             </div>
