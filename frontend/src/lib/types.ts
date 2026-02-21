@@ -92,11 +92,13 @@ export interface EinsteinDojoBoard {
     anchor_q: number;
     anchor_r: number;
   }[];
+  hex_marks: Record<string, string>;    // "q,r" -> player_id (mark owner)
 }
 
 export interface EinsteinDojoGameData {
   board: EinsteinDojoBoard;
   tiles_remaining: Record<PlayerId, number>;
+  marks_remaining: Record<PlayerId, number>;
   scores: Record<PlayerId, number>;
   current_player_index: number;
   main_conflict: string | null;  // hex key "q,r" of the main conflict

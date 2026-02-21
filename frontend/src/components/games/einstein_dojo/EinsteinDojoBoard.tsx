@@ -32,6 +32,11 @@ interface EinsteinDojoBoardProps {
   selectedConflict: string | null;
   onConflictSelected: (hexKey: string) => void;
   onConfirmConflict: () => void;
+  actionMode: 'place_tile' | 'place_mark';
+  validMarkHexes: Set<string>;
+  selectedMark: string | null;
+  onMarkSelected: (hexKey: string) => void;
+  onConfirmMark: () => void;
 }
 
 const HEX_SIZE = 40;
@@ -96,6 +101,11 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     selectedConflict,
     onConflictSelected,
     onConfirmConflict,
+    actionMode,
+    validMarkHexes,
+    selectedMark,
+    onMarkSelected,
+    onConfirmMark,
   },
   ref,
 ) {
@@ -129,6 +139,12 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
   onConflictSelectedRef.current = onConflictSelected;
   const chooseableConflictsRef = useRef(chooseableConflicts);
   chooseableConflictsRef.current = chooseableConflicts;
+  const actionModeRef = useRef(actionMode);
+  actionModeRef.current = actionMode;
+  const validMarkHexesRef = useRef(validMarkHexes);
+  validMarkHexesRef.current = validMarkHexes;
+  const onMarkSelectedRef = useRef(onMarkSelected);
+  onMarkSelectedRef.current = onMarkSelected;
 
   // Hover tracking for chooseable conflicts
   const [hoveredHexKey, setHoveredHexKey] = useState<string | null>(null);
@@ -260,8 +276,15 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
           if (chooseableConflictsRef.current.includes(hexKey)) {
             onConflictSelectedRef.current(hexKey);
           }
-        } else if (isMyTurnRef.current && phaseRef.current === 'place_tile') {
-          onHexClickedRef.current(hex.q, hex.r);
+        } else if (isMyTurnRef.current && phaseRef.current === 'player_turn') {
+          if (actionModeRef.current === 'place_mark') {
+            const hexKey = `${hex.q},${hex.r}`;
+            if (validMarkHexesRef.current.has(hexKey)) {
+              onMarkSelectedRef.current(hexKey);
+            }
+          } else {
+            onHexClickedRef.current(hex.q, hex.r);
+          }
         }
       }
       touchStartRef.current = null;
@@ -291,12 +314,20 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         x: e.clientX - panStart.x,
         y: e.clientY - panStart.y,
       }));
-    } else if (isMyTurn && phase === 'place_tile') {
+    } else if (isMyTurn && phase === 'player_turn' && actionMode === 'place_tile') {
       // Report hover hex for ghost preview (only when not panning)
       const canvas = canvasRef.current;
       if (canvas) {
         const hex = clientToHex(e.clientX, e.clientY, canvas, camera);
         onHoverHex(hex.q, hex.r);
+      }
+    } else if (isMyTurn && phase === 'player_turn' && actionMode === 'place_mark') {
+      // Report hover for mark highlight
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const hex = clientToHex(e.clientX, e.clientY, canvas, camera);
+        const key = `${hex.q},${hex.r}`;
+        setHoveredHexKey(validMarkHexes.has(key) ? key : null);
       }
     } else if (isMyTurn && phase === 'choose_main_conflict') {
       const canvas = canvasRef.current;
@@ -306,7 +337,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         setHoveredHexKey(chooseableConflicts.includes(key) ? key : null);
       }
     }
-  }, [isPanning, panStart, isMyTurn, phase, camera, onHoverHex, chooseableConflicts]);
+  }, [isPanning, panStart, isMyTurn, phase, actionMode, camera, onHoverHex, chooseableConflicts, validMarkHexes]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanning) {
@@ -323,14 +354,21 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
             if (chooseableConflicts.includes(hexKey)) {
               onConflictSelected(hexKey);
             }
-          } else if (phase === 'place_tile') {
-            onHexClicked(hex.q, hex.r);
+          } else if (phase === 'player_turn') {
+            if (actionMode === 'place_mark') {
+              const hexKey = `${hex.q},${hex.r}`;
+              if (validMarkHexes.has(hexKey)) {
+                onMarkSelected(hexKey);
+              }
+            } else {
+              onHexClicked(hex.q, hex.r);
+            }
           }
         }
       }
     }
     setIsPanning(false);
-  }, [isPanning, panStart, camera, isMyTurn, phase, onHexClicked, chooseableConflicts, onConflictSelected]);
+  }, [isPanning, panStart, camera, isMyTurn, phase, actionMode, onHexClicked, chooseableConflicts, onConflictSelected, validMarkHexes, onMarkSelected]);
 
   const handleMouseLeave = useCallback(() => {
     setIsPanning(false);
@@ -467,6 +505,46 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
       }
     }
 
+    // ── Marks ──
+    for (const [hexKey, ownerId] of Object.entries(gameData.board.hex_marks)) {
+      const [q, r] = hexKey.split(',').map(Number);
+      const { x: cx, y: cy } = hexToPixel(q, r, HEX_SIZE);
+      const seatIdx = colors[ownerId] ?? 0;
+      const markSize = HEX_SIZE * 0.35;
+      ctx.fillStyle = PLAYER_COLORS[seatIdx % PLAYER_COLORS.length];
+      drawHexFill(ctx, cx, cy, markSize);
+      ctx.strokeStyle = seatIdx === 0 ? '#1d4ed8' : '#c2410c';
+      ctx.lineWidth = 1.5;
+      drawHexOutline(ctx, cx, cy, markSize);
+    }
+
+    // ── Valid mark hex highlights ──
+    if (actionMode === 'place_mark' && validMarkHexes.size > 0) {
+      for (const hexKey of validMarkHexes) {
+        const [q, r] = hexKey.split(',').map(Number);
+        const { x: cx, y: cy } = hexToPixel(q, r, HEX_SIZE);
+        if (hexKey === selectedMark) {
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.15)';
+          drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
+          ctx.strokeStyle = '#22c55e';
+          ctx.lineWidth = 3;
+          drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+        } else if (hexKey === hoveredHexKey) {
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.1)';
+          drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
+          ctx.strokeStyle = '#22c55e';
+          ctx.lineWidth = 2;
+          drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+        } else {
+          ctx.strokeStyle = 'rgba(34, 197, 94, 0.5)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]);
+          drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
     // ── Ghost piece ──
     if (ghostPiece) {
       const kites = getPlacedKites(ghostPiece.orientation, ghostPiece.anchorQ, ghostPiece.anchorR);
@@ -489,12 +567,23 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     }
 
     ctx.restore();
-  }, [camera, canvasDims, gameData, players, ghostPiece, playerColorMap, mainConflict, chooseableConflicts, selectedConflict, hoveredHexKey, pulseTime]);
+  }, [camera, canvasDims, gameData, players, ghostPiece, playerColorMap, mainConflict, chooseableConflicts, selectedConflict, hoveredHexKey, pulseTime, actionMode, validMarkHexes, selectedMark]);
 
-  // Compute confirm button screen position
+  // Compute confirm button screen position for conflicts
   const conflictScreenPos = (() => {
     if (!selectedConflict) return null;
     const [q, r] = selectedConflict.split(',').map(Number);
+    const { x: wx, y: wy } = hexToPixel(q, r, HEX_SIZE);
+    return {
+      x: wx * camera.zoom + canvasDims.width / 2 + camera.x,
+      y: wy * camera.zoom + canvasDims.height / 2 + camera.y,
+    };
+  })();
+
+  // Compute confirm button screen position for marks
+  const markScreenPos = (() => {
+    if (!selectedMark) return null;
+    const [q, r] = selectedMark.split(',').map(Number);
     const { x: wx, y: wy } = hexToPixel(q, r, HEX_SIZE);
     return {
       x: wx * camera.zoom + canvasDims.width / 2 + camera.x,
@@ -511,7 +600,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
-        className={`w-full h-full ${isMyTurn && (phase === 'place_tile' || phase === 'choose_main_conflict') ? 'cursor-crosshair' : 'cursor-grab'} active:cursor-grabbing`}
+        className={`w-full h-full ${isMyTurn && (phase === 'player_turn' || phase === 'choose_main_conflict') ? 'cursor-crosshair' : 'cursor-grab'} active:cursor-grabbing`}
         style={{ touchAction: 'none' }}
       />
 
@@ -532,6 +621,28 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
             padding: 0,
           }}
           title={t('game.confirmTile', 'Confirm')}
+        >
+          <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
+        </button>
+      )}
+
+      {/* Confirm button overlay for selected mark */}
+      {markScreenPos && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onConfirmMark(); }}
+          style={{
+            position: 'absolute',
+            left: markScreenPos.x + HEX_SIZE * camera.zoom * 0.5,
+            top: markScreenPos.y - HEX_SIZE * camera.zoom * 0.5 - BUTTON_SIZE / 2,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            border: 'none',
+            background: 'none',
+            padding: 0,
+          }}
+          title="Place mark"
         >
           <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
         </button>

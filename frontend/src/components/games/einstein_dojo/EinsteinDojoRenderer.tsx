@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlayerView, EinsteinDojoGameData } from '@/lib/types';
 import { useGameStore } from '@/stores/gameStore';
-import { orientationInfo, orientationIndex, NUM_ORIENTATIONS, isValidPlacement } from '@/lib/einsteinPieces';
+import { orientationInfo, orientationIndex, NUM_ORIENTATIONS, isValidPlacement, getValidMarkHexes } from '@/lib/einsteinPieces';
 import EinsteinDojoBoard, { type BoardHandle, type GhostPiece } from './EinsteinDojoBoard';
 import PieceTray from './PieceTray';
 import ScoreBoard from '../../game/ScoreBoard';
@@ -32,6 +32,8 @@ export default function EinsteinDojoRenderer({
   const [isDraggingFromTray, setIsDraggingFromTray] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [selectedConflict, setSelectedConflict] = useState<string | null>(null);
+  const [actionMode, setActionMode] = useState<'place_tile' | 'place_mark'>('place_tile');
+  const [selectedMark, setSelectedMark] = useState<string | null>(null);
 
   const gameData = view.game_data as EinsteinDojoGameData;
   const gameOver = useGameStore((state) => state.gameOver);
@@ -61,9 +63,30 @@ export default function EinsteinDojoRenderer({
     }
   }, [selectedConflict, onAction]);
 
+  const handleMarkSelected = useCallback((hexKey: string) => {
+    setSelectedMark(hexKey);
+  }, []);
+
+  const handleConfirmMark = useCallback(() => {
+    if (selectedMark) {
+      onAction('place_mark', { hex: selectedMark });
+      setSelectedMark(null);
+    }
+  }, [selectedMark, onAction]);
+
   const myTilesRemaining = view.viewer_id
     ? gameData.tiles_remaining[view.viewer_id] ?? 0
     : 0;
+
+  const myMarksRemaining = view.viewer_id
+    ? gameData.marks_remaining[view.viewer_id] ?? 0
+    : 0;
+
+  // Valid mark hexes (memoized)
+  const validMarkHexes = useMemo(() => {
+    if (!isMyTurn || phase !== 'player_turn' || actionMode !== 'place_mark') return new Set<string>();
+    return getValidMarkHexes(gameData.board.kite_owners, gameData.board.hex_states, gameData.board.hex_marks);
+  }, [isMyTurn, phase, actionMode, gameData.board.kite_owners, gameData.board.hex_states, gameData.board.hex_marks]);
 
   // Refs for window event handlers (avoid stale closures)
   const currentOrientationRef = useRef(currentOrientation);
@@ -76,7 +99,14 @@ export default function EinsteinDojoRenderer({
     setHoverHex(null);
     setIsDraggingFromTray(false);
     setPanelExpanded(false);
-  }, [view.turn_number]);
+    setSelectedMark(null);
+    // Auto-switch to place_mark if no tiles left but marks remain
+    if (myTilesRemaining <= 0 && myMarksRemaining > 0) {
+      setActionMode('place_mark');
+    } else {
+      setActionMode('place_tile');
+    }
+  }, [view.turn_number, myTilesRemaining, myMarksRemaining]);
 
   // Reset conflict selection when phase changes
   useEffect(() => {
@@ -117,8 +147,17 @@ export default function EinsteinDojoRenderer({
   // ── Click to place ──
 
   const handleHexClicked = useCallback((q: number, r: number) => {
-    if (!isMyTurn || phase !== 'place_tile') return;
+    if (!isMyTurn || phase !== 'player_turn') return;
 
+    if (actionMode === 'place_mark') {
+      const hexKey = `${q},${r}`;
+      if (validMarkHexes.has(hexKey)) {
+        setSelectedMark(hexKey);
+      }
+      return;
+    }
+
+    // place_tile mode
     if (isValidPlacement(gameData.board.kite_owners, currentOrientation, q, r)) {
       onAction('place_tile', { anchor_q: q, anchor_r: r, orientation: currentOrientation });
       setHoverHex(null);
@@ -133,14 +172,14 @@ export default function EinsteinDojoRenderer({
         return;
       }
     }
-  }, [isMyTurn, phase, gameData.board.kite_owners, currentOrientation, onAction]);
+  }, [isMyTurn, phase, actionMode, validMarkHexes, gameData.board.kite_owners, currentOrientation, onAction]);
 
   // ── Drag from tray ──
 
   const handleTrayDragStart = useCallback(() => {
-    if (!isMyTurn || phase !== 'place_tile') return;
+    if (!isMyTurn || phase !== 'player_turn' || actionMode !== 'place_tile') return;
     setIsDraggingFromTray(true);
-  }, [isMyTurn, phase]);
+  }, [isMyTurn, phase, actionMode]);
 
   // Window-level pointer events for tray drag
   useEffect(() => {
@@ -182,7 +221,7 @@ export default function EinsteinDojoRenderer({
   // ── Ghost piece computation ──
 
   const ghostPiece: GhostPiece | null = useMemo(() => {
-    if (!hoverHex || !isMyTurn || phase !== 'place_tile') return null;
+    if (!hoverHex || !isMyTurn || phase !== 'player_turn' || actionMode !== 'place_tile') return null;
 
     const valid = isValidPlacement(
       gameData.board.kite_owners,
@@ -197,7 +236,7 @@ export default function EinsteinDojoRenderer({
       anchorR: hoverHex.r,
       valid,
     };
-  }, [hoverHex, isMyTurn, phase, gameData.board.kite_owners, currentOrientation]);
+  }, [hoverHex, isMyTurn, phase, actionMode, gameData.board.kite_owners, currentOrientation]);
 
   // ── Scores ──
 
@@ -216,6 +255,7 @@ export default function EinsteinDojoRenderer({
       return isMyTurn ? 'Choose the main conflict' : 'Opponent choosing main conflict...';
     }
     if (!isMyTurn) return t('game.status.opponentTurn');
+    if (actionMode === 'place_mark') return 'Tap a hex to place mark';
     return t('game.status.tapToPlace');
   };
 
@@ -238,6 +278,11 @@ export default function EinsteinDojoRenderer({
           selectedConflict={selectedConflict}
           onConflictSelected={handleConflictSelected}
           onConfirmConflict={handleConfirmConflict}
+          actionMode={actionMode}
+          validMarkHexes={validMarkHexes}
+          selectedMark={selectedMark}
+          onMarkSelected={handleMarkSelected}
+          onConfirmMark={handleConfirmMark}
         />
         {isGameOver && gameOver && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -305,16 +350,60 @@ export default function EinsteinDojoRenderer({
 
         {/* Full panel content */}
         <div className={`${panelExpanded ? 'flex' : 'hidden'} md:flex flex-col gap-4 p-4 overflow-y-auto`}>
-          <PieceTray
-            currentOrientation={currentOrientation}
-            tilesRemaining={myTilesRemaining}
-            onRotate={handleRotate}
-            onFlip={handleFlip}
-            onDragStart={handleTrayDragStart}
-            isMyTurn={isMyTurn}
-            isDragging={isDraggingFromTray}
-            playerColor={playerColor}
-          />
+          {/* Action mode buttons */}
+          {isMyTurn && phase === 'player_turn' && (
+            <div className="bg-white rounded-lg border shadow-sm px-4 py-3">
+              <div className="text-sm font-semibold mb-2">Action</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setActionMode('place_tile'); setSelectedMark(null); }}
+                  disabled={myTilesRemaining <= 0}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    actionMode === 'place_tile'
+                      ? 'bg-blue-600 text-white'
+                      : myTilesRemaining <= 0
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Tile ({myTilesRemaining})
+                </button>
+                <button
+                  onClick={() => { setActionMode('place_mark'); setHoverHex(null); }}
+                  disabled={myMarksRemaining <= 0}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    actionMode === 'place_mark'
+                      ? 'bg-blue-600 text-white'
+                      : myMarksRemaining <= 0
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Mark ({myMarksRemaining})
+                </button>
+                <button
+                  disabled
+                  className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-400 cursor-not-allowed"
+                  title="Conflict resolution coming soon"
+                >
+                  Resolve
+                </button>
+              </div>
+            </div>
+          )}
+
+          {actionMode === 'place_tile' && (
+            <PieceTray
+              currentOrientation={currentOrientation}
+              tilesRemaining={myTilesRemaining}
+              onRotate={handleRotate}
+              onFlip={handleFlip}
+              onDragStart={handleTrayDragStart}
+              isMyTurn={isMyTurn}
+              isDragging={isDraggingFromTray}
+              playerColor={playerColor}
+            />
+          )}
 
           <ScoreBoard
             players={view.players}
@@ -323,9 +412,9 @@ export default function EinsteinDojoRenderer({
             viewerId={view.viewer_id ?? undefined}
           />
 
-          {/* Tiles remaining for both players */}
+          {/* Resources remaining for both players */}
           <div className="bg-white rounded-lg border shadow-sm px-4 py-3">
-            <div className="text-sm font-semibold mb-2">{t('game.tilesRemainingLabel', 'Tiles remaining')}</div>
+            <div className="text-sm font-semibold mb-2">Resources</div>
             {view.players.map(p => (
               <div key={p.player_id} className="flex items-center justify-between py-1">
                 <div className="flex items-center gap-2">
@@ -335,7 +424,10 @@ export default function EinsteinDojoRenderer({
                   />
                   <span className="text-sm">{p.display_name}</span>
                 </div>
-                <span className="font-bold">{gameData.tiles_remaining[p.player_id] ?? 0}</span>
+                <div className="flex gap-3 text-sm">
+                  <span title="Tiles"><span className="text-gray-500">T:</span> <span className="font-bold">{gameData.tiles_remaining[p.player_id] ?? 0}</span></span>
+                  <span title="Marks"><span className="text-gray-500">M:</span> <span className="font-bold">{gameData.marks_remaining[p.player_id] ?? 0}</span></span>
+                </div>
               </div>
             ))}
           </div>

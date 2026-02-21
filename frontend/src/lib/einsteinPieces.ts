@@ -167,3 +167,44 @@ export function isValidPlacement(
 
   return true;
 }
+
+/**
+ * Return set of hex keys where a mark can be placed.
+ * Valid: adjacent to board (hex or neighbor has kites), not Complete, not Conflict,
+ * and not already marked.
+ */
+export function getValidMarkHexes(
+  kiteOwners: Record<string, string>,
+  hexStates: Record<string, string>,
+  hexMarks: Record<string, string>,
+): Set<string> {
+  // Gather occupied hex coords
+  const occupied = new Set<string>();
+  for (const key of Object.keys(kiteOwners)) {
+    occupied.add(key.split(':')[0]);
+  }
+
+  // Candidates: occupied hexes + their neighbors
+  const candidates = new Set<string>();
+  for (const hexKey of occupied) {
+    candidates.add(hexKey);
+    const [q, r] = hexKey.split(',').map(Number);
+    const dirs = [
+      [1, 0], [1, -1], [0, -1],
+      [-1, 0], [-1, 1], [0, 1],
+    ];
+    for (const [dq, dr] of dirs) {
+      candidates.add(`${q + dq},${r + dr}`);
+    }
+  }
+
+  // Filter
+  const valid = new Set<string>();
+  for (const hexKey of candidates) {
+    const state = hexStates[hexKey] ?? 'empty';
+    if (state === 'complete' || state === 'conflict') continue;
+    if (hexKey in hexMarks) continue;
+    valid.add(hexKey);
+  }
+  return valid;
+}

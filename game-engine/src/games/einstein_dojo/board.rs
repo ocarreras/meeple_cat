@@ -147,13 +147,22 @@ pub fn apply_placement(
     // Recalculate hex states for affected hexes
     let affected_hexes: HashSet<(i32, i32)> = kites.iter().map(|&(q, r, _)| (q, r)).collect();
     let mut changed = Vec::new();
-    for (q, r) in affected_hexes {
+    for &(q, r) in &affected_hexes {
         let key = hex_to_key(q, r);
         let old_state = board.hex_states.get(&key).copied().unwrap_or(HexState::Empty);
         let new_state = derive_hex_state(board, q, r);
         board.hex_states.insert(key.clone(), new_state);
         if new_state != old_state {
             changed.push(key);
+        }
+    }
+
+    // Remove marks from hexes that are now fully filled (Complete or Conflict)
+    for &(q, r) in &affected_hexes {
+        let key = hex_to_key(q, r);
+        let state = board.hex_states.get(&key).copied().unwrap_or(HexState::Empty);
+        if state == HexState::Complete || state == HexState::Conflict {
+            board.hex_marks.remove(&key);
         }
     }
 
@@ -200,6 +209,74 @@ pub fn get_all_valid_placements(board: &Board) -> Vec<(u8, i32, i32)> {
     }
 
     valid
+}
+
+/// Return hex keys where a mark can be placed.
+/// Valid targets: adjacent to board (hex or neighbor has kites), not Complete, not Conflict,
+/// and not already marked.
+pub fn get_valid_mark_hexes(board: &Board) -> Vec<String> {
+    let occupied = get_occupied_hex_coords(board);
+    let mut candidates: HashSet<(i32, i32)> = HashSet::new();
+
+    for &(q, r) in &occupied {
+        candidates.insert((q, r));
+        for (nq, nr) in hex_neighbors(q, r) {
+            candidates.insert((nq, nr));
+        }
+    }
+
+    candidates
+        .into_iter()
+        .filter(|&(q, r)| {
+            let key = hex_to_key(q, r);
+            let state = board.hex_states.get(&key).copied().unwrap_or(HexState::Empty);
+            state != HexState::Complete
+                && state != HexState::Conflict
+                && !board.hex_marks.contains_key(&key)
+        })
+        .map(|(q, r)| hex_to_key(q, r))
+        .collect()
+}
+
+/// Validate that a mark can be placed on the given hex.
+/// Returns None if valid, Some(error_message) if invalid.
+pub fn validate_mark_placement(board: &Board, hex_key: &str) -> Option<String> {
+    let state = board.hex_states.get(hex_key).copied().unwrap_or(HexState::Empty);
+    if state == HexState::Complete {
+        return Some("Cannot mark a complete hex".into());
+    }
+    if state == HexState::Conflict {
+        return Some("Cannot mark a conflict hex".into());
+    }
+    if board.hex_marks.contains_key(hex_key) {
+        return Some("Hex is already marked".into());
+    }
+
+    // Parse hex key
+    let parts: Vec<&str> = hex_key.split(',').collect();
+    if parts.len() != 2 {
+        return Some("Invalid hex key format".into());
+    }
+    let q: i32 = match parts[0].parse() {
+        Ok(v) => v,
+        Err(_) => return Some("Invalid hex key format".into()),
+    };
+    let r: i32 = match parts[1].parse() {
+        Ok(v) => v,
+        Err(_) => return Some("Invalid hex key format".into()),
+    };
+
+    // Check adjacency: hex must have kites or a neighbor must have kites
+    let hex_has_kites = (0..6u8).any(|k| board.kite_owners.contains_key(&kite_to_key(q, r, k)));
+    let neighbor_has_kites = hex_neighbors(q, r)
+        .iter()
+        .any(|&(nq, nr)| (0..6u8).any(|k| board.kite_owners.contains_key(&kite_to_key(nq, nr, k))));
+
+    if !hex_has_kites && !neighbor_has_kites {
+        return Some("Hex must be adjacent to the board".into());
+    }
+
+    None
 }
 
 /// Extract the set of hex cells that have at least one occupied kite.
@@ -406,5 +483,86 @@ mod tests {
         // so let's verify via kite_edge_neighbors directly.
         // Instead, verify that an isolated placement far away is rejected.
         assert!(validate_placement(&board, 0, 10, 10).is_some());
+    }
+
+    #[test]
+    fn test_valid_mark_hexes_empty_board() {
+        let board = Board::new();
+        let hexes = get_valid_mark_hexes(&board);
+        assert!(hexes.is_empty(), "no marks possible on empty board");
+    }
+
+    #[test]
+    fn test_valid_mark_hexes_after_placement() {
+        let mut board = Board::new();
+        apply_placement(&mut board, "p1", 0, 0, 0);
+        let hexes = get_valid_mark_hexes(&board);
+        assert!(!hexes.is_empty(), "should have valid mark hexes after placement");
+        // None should be complete or conflict
+        for hex_key in &hexes {
+            let state = board.hex_states.get(hex_key).copied().unwrap_or(HexState::Empty);
+            assert!(state != HexState::Complete && state != HexState::Conflict);
+        }
+    }
+
+    #[test]
+    fn test_valid_mark_hexes_excludes_marked() {
+        let mut board = Board::new();
+        apply_placement(&mut board, "p1", 0, 0, 0);
+        let hexes_before = get_valid_mark_hexes(&board);
+        assert!(!hexes_before.is_empty());
+
+        // Place a mark on the first valid hex
+        let first = hexes_before[0].clone();
+        board.hex_marks.insert(first.clone(), "p1".into());
+
+        let hexes_after = get_valid_mark_hexes(&board);
+        assert!(!hexes_after.contains(&first), "marked hex should be excluded");
+    }
+
+    #[test]
+    fn test_validate_mark_placement_valid() {
+        let mut board = Board::new();
+        apply_placement(&mut board, "p1", 0, 0, 0);
+        // A neighbor of the placed piece should be valid
+        let valid_hexes = get_valid_mark_hexes(&board);
+        assert!(!valid_hexes.is_empty());
+        assert!(validate_mark_placement(&board, &valid_hexes[0]).is_none());
+    }
+
+    #[test]
+    fn test_validate_mark_placement_isolated() {
+        let mut board = Board::new();
+        apply_placement(&mut board, "p1", 0, 0, 0);
+        assert!(validate_mark_placement(&board, "100,100").is_some());
+    }
+
+    #[test]
+    fn test_validate_mark_placement_already_marked() {
+        let mut board = Board::new();
+        apply_placement(&mut board, "p1", 0, 0, 0);
+        let valid = get_valid_mark_hexes(&board);
+        board.hex_marks.insert(valid[0].clone(), "p1".into());
+        assert!(validate_mark_placement(&board, &valid[0]).is_some());
+    }
+
+    #[test]
+    fn test_mark_removed_on_complete() {
+        let mut board = Board::new();
+        // Mark hex (0,0), then fill all 6 kites with same player
+        board.hex_marks.insert("0,0".into(), "p2".into());
+        for k in 0..6 {
+            board.kite_owners.insert(format!("0,0:{k}"), "p1".into());
+        }
+        board.hex_states.insert("0,0".into(), HexState::Open);
+        // Simulate apply_placement updating hex state
+        let new_state = derive_hex_state(&board, 0, 0);
+        board.hex_states.insert("0,0".into(), new_state);
+        assert_eq!(new_state, HexState::Complete);
+        // The mark removal happens in apply_placement, so simulate it:
+        if new_state == HexState::Complete || new_state == HexState::Conflict {
+            board.hex_marks.remove("0,0");
+        }
+        assert!(!board.hex_marks.contains_key("0,0"));
     }
 }

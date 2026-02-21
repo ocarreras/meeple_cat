@@ -5,11 +5,12 @@ use std::collections::HashMap;
 use crate::engine::models::*;
 use crate::engine::plugin::{TypedGamePlugin, TypedTransitionResult};
 
-use super::board::{apply_placement, get_all_valid_placements, validate_placement};
-use super::scoring::count_complete_hexes;
+use super::board::{apply_placement, get_all_valid_placements, get_valid_mark_hexes, validate_mark_placement, validate_placement};
+use super::scoring::count_scores;
 use super::types::*;
 
 const TILES_PER_PLAYER: i32 = 16;
+const MARKS_PER_PLAYER: i32 = 8;
 
 pub struct EinsteinDojoPlugin;
 
@@ -54,30 +55,24 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
             .iter()
             .map(|p| (p.player_id.clone(), TILES_PER_PLAYER))
             .collect();
+        let marks_remaining: HashMap<String, i32> = players
+            .iter()
+            .map(|p| (p.player_id.clone(), MARKS_PER_PLAYER))
+            .collect();
         let scores: HashMap<String, i64> =
             players.iter().map(|p| (p.player_id.clone(), 0)).collect();
 
         let state = EinsteinDojoState {
             board: Board::new(),
             tiles_remaining,
+            marks_remaining,
             scores,
             current_player_index: 0,
             main_conflict: None,
         };
 
         let first_player = &players[0];
-        let phase = Phase {
-            name: "place_tile".into(),
-            concurrent_mode: Some(ConcurrentMode::Sequential),
-            expected_actions: vec![ExpectedAction {
-                player_id: first_player.player_id.clone(),
-                action_type: "place_tile".into(),
-                constraints: HashMap::new(),
-                timeout_ms: None,
-            }],
-            auto_resolve: false,
-            metadata: serde_json::json!({"player_index": 0}),
-        };
+        let phase = make_player_turn_phase(0, &first_player.player_id);
 
         let events = vec![Event {
             event_type: "game_started".into(),
@@ -85,6 +80,7 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
             payload: serde_json::json!({
                 "players": players.iter().map(|p| &p.player_id).collect::<Vec<_>>(),
                 "tiles_per_player": TILES_PER_PLAYER,
+                "marks_per_player": MARKS_PER_PLAYER,
             }),
         }];
 
@@ -106,20 +102,32 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
         }
 
         match phase.name.as_str() {
-            "place_tile" => {
-                if state.tiles_remaining.get(player_id).copied().unwrap_or(0) <= 0 {
-                    return vec![];
-                }
-                get_all_valid_placements(&state.board)
-                    .into_iter()
-                    .map(|(orientation, anchor_q, anchor_r)| {
-                        serde_json::json!({
+            "player_turn" => {
+                let mut actions = vec![];
+
+                // Tile placements
+                if state.tiles_remaining.get(player_id).copied().unwrap_or(0) > 0 {
+                    for (orientation, anchor_q, anchor_r) in get_all_valid_placements(&state.board) {
+                        actions.push(serde_json::json!({
+                            "action_type": "place_tile",
                             "anchor_q": anchor_q,
                             "anchor_r": anchor_r,
                             "orientation": orientation,
-                        })
-                    })
-                    .collect()
+                        }));
+                    }
+                }
+
+                // Mark placements
+                if state.marks_remaining.get(player_id).copied().unwrap_or(0) > 0 {
+                    for hex_key in get_valid_mark_hexes(&state.board) {
+                        actions.push(serde_json::json!({
+                            "action_type": "place_mark",
+                            "hex": hex_key,
+                        }));
+                    }
+                }
+
+                actions
             }
             "choose_main_conflict" => {
                 phase.metadata.get("conflict_hexes")
@@ -142,7 +150,11 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
         action: &Action,
     ) -> Option<String> {
         match phase.name.as_str() {
-            "place_tile" => self.validate_place_tile(state, action),
+            "player_turn" => match action.action_type.as_str() {
+                "place_tile" => self.validate_place_tile(state, action),
+                "place_mark" => self.validate_place_mark(state, action),
+                _ => Some(format!("Unknown action type: {}", action.action_type)),
+            },
             "choose_main_conflict" => self.validate_choose_main_conflict(phase, action),
             _ => None,
         }
@@ -156,7 +168,11 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
         players: &[Player],
     ) -> TypedTransitionResult<EinsteinDojoState> {
         match phase.name.as_str() {
-            "place_tile" => self.apply_place_tile(state, phase, action, players),
+            "player_turn" => match action.action_type.as_str() {
+                "place_tile" => self.apply_place_tile(state, phase, action, players),
+                "place_mark" => self.apply_place_mark(state, phase, action),
+                _ => panic!("Unknown action type in player_turn: {}", action.action_type),
+            },
             "score_check" => self.apply_score_check(state, phase, players),
             "choose_main_conflict" => self.apply_choose_main_conflict(state, phase, action),
             _ => panic!("Unknown phase: {}", phase.name),
@@ -181,16 +197,16 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
     fn parse_ai_action(
         &self,
         response: &serde_json::Value,
-        phase: &Phase,
+        _phase: &Phase,
         player_id: &str,
     ) -> Action {
-        let action_type = if !phase.expected_actions.is_empty() {
-            phase.expected_actions[0].action_type.clone()
-        } else {
-            phase.name.clone()
-        };
-        let payload = response
-            .get("action")
+        let action_obj = response.get("action");
+        let action_type = action_obj
+            .and_then(|a| a.get("action_type"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("place_tile")
+            .to_string();
+        let payload = action_obj
             .and_then(|a| a.get("payload"))
             .unwrap_or(response)
             .clone();
@@ -209,7 +225,7 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
         players: &[Player],
     ) -> Option<TypedTransitionResult<EinsteinDojoState>> {
         match phase.name.as_str() {
-            "place_tile" => {
+            "player_turn" => {
                 let current_idx = phase.metadata["player_index"].as_u64()? as usize;
                 let mut s = state.clone();
 
@@ -224,7 +240,7 @@ impl TypedGamePlugin for EinsteinDojoPlugin {
                         player_id: Some(player_id.into()),
                         payload: serde_json::json!({}),
                     }],
-                    next_phase: make_place_tile_phase(next_idx, &next_player.player_id),
+                    next_phase: make_player_turn_phase(next_idx, &next_player.player_id),
                     scores: s.float_scores(),
                     game_over: None,
                 })
@@ -302,6 +318,65 @@ impl EinsteinDojoPlugin {
                 validate_placement(&state.board, o, aq, ar)
             }
             _ => Some("Missing orientation, anchor_q, or anchor_r in payload".into()),
+        }
+    }
+
+    fn validate_place_mark(
+        &self,
+        state: &EinsteinDojoState,
+        action: &Action,
+    ) -> Option<String> {
+        let hex = action.payload.get("hex").and_then(|v| v.as_str());
+        match hex {
+            None => Some("Missing 'hex' in payload".into()),
+            Some(hex_key) => {
+                if state.marks_remaining.get(&action.player_id).copied().unwrap_or(0) <= 0 {
+                    return Some("No marks remaining".into());
+                }
+                validate_mark_placement(&state.board, hex_key)
+            }
+        }
+    }
+
+    fn apply_place_mark(
+        &self,
+        state: &EinsteinDojoState,
+        phase: &Phase,
+        action: &Action,
+    ) -> TypedTransitionResult<EinsteinDojoState> {
+        let mut s = state.clone();
+        let player_id = &action.player_id;
+        let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
+        let hex_key = action.payload["hex"].as_str().unwrap().to_string();
+
+        // Place mark
+        s.board.hex_marks.insert(hex_key.clone(), player_id.clone());
+
+        // Decrement mark count
+        if let Some(remaining) = s.marks_remaining.get_mut(player_id) {
+            *remaining -= 1;
+        }
+
+        let events = vec![Event {
+            event_type: "mark_placed".into(),
+            player_id: Some(player_id.clone()),
+            payload: serde_json::json!({ "hex": hex_key }),
+        }];
+
+        let score_check_phase = Phase {
+            name: "score_check".into(),
+            auto_resolve: true,
+            concurrent_mode: None,
+            expected_actions: vec![],
+            metadata: serde_json::json!({"player_index": player_index}),
+        };
+
+        TypedTransitionResult {
+            state: s.clone(),
+            events,
+            next_phase: score_check_phase,
+            scores: s.float_scores(),
+            game_over: None,
         }
     }
 
@@ -412,23 +487,28 @@ impl EinsteinDojoPlugin {
         let player_index = phase.metadata["player_index"].as_u64().unwrap_or(0) as usize;
         let current_player = &players[player_index];
 
-        // Recount complete hexes for all players
-        let complete_counts = count_complete_hexes(&s.board);
+        // Recount scores (complete hexes + marks) for all players
+        let score_counts = count_scores(&s.board);
         for p in players {
             s.scores.insert(
                 p.player_id.clone(),
-                complete_counts.get(&p.player_id).copied().unwrap_or(0),
+                score_counts.get(&p.player_id).copied().unwrap_or(0),
             );
         }
 
-        // Check game end: current player used their last tile
+        // Check game end: current player has 0 tiles AND 0 marks
         let tiles_left = s
             .tiles_remaining
             .get(&current_player.player_id)
             .copied()
             .unwrap_or(0);
+        let marks_left = s
+            .marks_remaining
+            .get(&current_player.player_id)
+            .copied()
+            .unwrap_or(0);
 
-        if tiles_left <= 0 {
+        if tiles_left <= 0 && marks_left <= 0 {
             return self.end_game(s, players);
         }
 
@@ -440,7 +520,7 @@ impl EinsteinDojoPlugin {
         TypedTransitionResult {
             state: s.clone(),
             events: vec![],
-            next_phase: make_place_tile_phase(next_idx, &next_player.player_id),
+            next_phase: make_player_turn_phase(next_idx, &next_player.player_id),
             scores: s.float_scores(),
             game_over: None,
         }
@@ -556,13 +636,13 @@ impl EinsteinDojoPlugin {
     }
 }
 
-fn make_place_tile_phase(player_index: usize, player_id: &str) -> Phase {
+fn make_player_turn_phase(player_index: usize, player_id: &str) -> Phase {
     Phase {
-        name: "place_tile".into(),
+        name: "player_turn".into(),
         concurrent_mode: Some(ConcurrentMode::Sequential),
         expected_actions: vec![ExpectedAction {
             player_id: player_id.into(),
-            action_type: "place_tile".into(),
+            action_type: "player_turn".into(),
             constraints: HashMap::new(),
             timeout_ms: None,
         }],
@@ -624,9 +704,11 @@ mod tests {
         assert_eq!(state.scores["p2"], 0);
         assert_eq!(state.current_player_index, 0);
 
-        assert_eq!(phase.name, "place_tile");
+        assert_eq!(phase.name, "player_turn");
         assert!(!phase.auto_resolve);
         assert_eq!(phase.expected_actions[0].player_id, "p1");
+        assert_eq!(state.marks_remaining["p1"], 8);
+        assert_eq!(state.marks_remaining["p2"], 8);
 
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "game_started");
@@ -692,7 +774,7 @@ mod tests {
         let result2 =
             plugin.apply_action(&result.state, &result.next_phase, &score_action, &players);
 
-        assert_eq!(result2.next_phase.name, "place_tile");
+        assert_eq!(result2.next_phase.name, "player_turn");
         assert_eq!(result2.next_phase.expected_actions[0].player_id, "p2");
         assert_eq!(result2.state.current_player_index, 1);
     }
@@ -723,7 +805,7 @@ mod tests {
         state = r.state;
         phase = r.next_phase;
 
-        assert_eq!(phase.name, "place_tile");
+        assert_eq!(phase.name, "player_turn");
         assert_eq!(phase.expected_actions[0].player_id, "p2");
 
         // P2 places tile — pick first valid action
@@ -808,14 +890,19 @@ mod tests {
             let valid = plugin.get_valid_actions(&state, &phase, &current_pid);
 
             if valid.is_empty() {
-                // No valid moves — shouldn't happen in normal play but handle gracefully
                 break;
             }
 
+            // Pick first valid action; extract action_type from payload
+            let first = &valid[0];
+            let action_type = first.get("action_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("place_tile")
+                .to_string();
             let action = Action {
-                action_type: "place_tile".into(),
+                action_type,
                 player_id: current_pid,
-                payload: valid[0].clone(),
+                payload: first.clone(),
             };
 
             let r = plugin.apply_action(&state, &phase, &action, &players);
@@ -828,16 +915,18 @@ mod tests {
             }
         }
 
-        // Each player has 16 tiles, game should end after 32 place_tile actions
-        assert!(turns <= 32, "game should end within 32 turns, took {turns}");
+        // Each player has 16 tiles + 8 marks, game runs until both exhausted for one player
+        assert!(turns <= 50, "game should end within 50 turns, took {turns}");
         assert!(turns > 0, "game should have at least one turn");
 
-        // Verify tiles are exhausted for at least one player
-        let p1_left = state.tiles_remaining["p1"];
-        let p2_left = state.tiles_remaining["p2"];
+        // Verify resources exhausted for at least one player
+        let p1_tiles = state.tiles_remaining["p1"];
+        let p1_marks = state.marks_remaining["p1"];
+        let p2_tiles = state.tiles_remaining["p2"];
+        let p2_marks = state.marks_remaining["p2"];
         assert!(
-            p1_left == 0 || p2_left == 0,
-            "at least one player should have 0 tiles, got p1={p1_left} p2={p2_left}"
+            (p1_tiles == 0 && p1_marks == 0) || (p2_tiles == 0 && p2_marks == 0),
+            "at least one player should have 0 tiles+marks, got p1={p1_tiles}/{p1_marks} p2={p2_tiles}/{p2_marks}"
         );
     }
 
@@ -846,10 +935,13 @@ mod tests {
         let plugin = EinsteinDojoPlugin;
         let players = test_players();
 
-        // Create a state where both players have score 0 and p1 has 0 tiles left
+        // Create a state where both players have score 0 and p1 has 0 tiles and 0 marks
         let state = EinsteinDojoState {
             board: Board::new(),
             tiles_remaining: [("p1".into(), 0), ("p2".into(), 5)]
+                .into_iter()
+                .collect(),
+            marks_remaining: [("p1".into(), 0), ("p2".into(), 5)]
                 .into_iter()
                 .collect(),
             scores: [("p1".into(), 0), ("p2".into(), 0)]

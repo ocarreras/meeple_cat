@@ -28,6 +28,8 @@ pub struct Board {
     pub kite_owners: HashMap<String, String>,   // "q,r:k" -> player_id
     pub hex_states: HashMap<String, HexState>,  // "q,r" -> HexState
     pub placed_pieces: Vec<PlacedPiece>,
+    #[serde(default)]
+    pub hex_marks: HashMap<String, String>,     // "q,r" -> player_id (mark owner)
 }
 
 impl Board {
@@ -36,6 +38,7 @@ impl Board {
             kite_owners: HashMap::new(),
             hex_states: HashMap::new(),
             placed_pieces: Vec::new(),
+            hex_marks: HashMap::new(),
         }
     }
 }
@@ -45,6 +48,8 @@ impl Board {
 pub struct EinsteinDojoState {
     pub board: Board,
     pub tiles_remaining: HashMap<String, i32>,
+    #[serde(default)]
+    pub marks_remaining: HashMap<String, i32>,
     pub scores: HashMap<String, i64>,
     pub current_player_index: usize,
     /// Hex key ("q,r") of the main conflict. None until the first conflict is created.
