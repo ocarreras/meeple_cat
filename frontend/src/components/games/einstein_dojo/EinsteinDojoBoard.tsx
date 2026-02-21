@@ -15,6 +15,7 @@ export interface GhostPiece {
 
 export interface BoardHandle {
   screenToHex: (clientX: number, clientY: number) => { q: number; r: number } | null;
+  hexToScreen: (q: number, r: number) => { x: number; y: number } | null;
 }
 
 interface EinsteinDojoBoardProps {
@@ -28,7 +29,9 @@ interface EinsteinDojoBoardProps {
   ghostPiece: GhostPiece | null;
   mainConflict: string | null;
   chooseableConflicts: string[];
-  onConflictChosen: (hexKey: string) => void;
+  selectedConflict: string | null;
+  onConflictSelected: (hexKey: string) => void;
+  onConfirmConflict: () => void;
 }
 
 const HEX_SIZE = 40;
@@ -90,7 +93,9 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     ghostPiece,
     mainConflict,
     chooseableConflicts,
-    onConflictChosen,
+    selectedConflict,
+    onConflictSelected,
+    onConfirmConflict,
   },
   ref,
 ) {
@@ -120,10 +125,13 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
   onHexClickedRef.current = onHexClicked;
   const onHoverHexRef = useRef(onHoverHex);
   onHoverHexRef.current = onHoverHex;
-  const onConflictChosenRef = useRef(onConflictChosen);
-  onConflictChosenRef.current = onConflictChosen;
+  const onConflictSelectedRef = useRef(onConflictSelected);
+  onConflictSelectedRef.current = onConflictSelected;
   const chooseableConflictsRef = useRef(chooseableConflicts);
   chooseableConflictsRef.current = chooseableConflicts;
+
+  // Hover tracking for chooseable conflicts
+  const [hoveredHexKey, setHoveredHexKey] = useState<string | null>(null);
 
   // Animation state for pulsing chooseable conflicts
   const animFrameRef = useRef<number>(0);
@@ -150,6 +158,15 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
       const canvas = canvasRef.current;
       if (!canvas) return null;
       return clientToHex(clientX, clientY, canvas, cameraRef.current);
+    },
+    hexToScreen: (q: number, r: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
+      const cam = cameraRef.current;
+      const { x: wx, y: wy } = hexToPixel(q, r, HEX_SIZE);
+      const screenX = wx * cam.zoom + canvas.width / 2 + cam.x;
+      const screenY = wy * cam.zoom + canvas.height / 2 + cam.y;
+      return { x: screenX, y: screenY };
     },
   }));
 
@@ -241,7 +258,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         if (isMyTurnRef.current && phaseRef.current === 'choose_main_conflict') {
           const hexKey = `${hex.q},${hex.r}`;
           if (chooseableConflictsRef.current.includes(hexKey)) {
-            onConflictChosenRef.current(hexKey);
+            onConflictSelectedRef.current(hexKey);
           }
         } else if (isMyTurnRef.current && phaseRef.current === 'place_tile') {
           onHexClickedRef.current(hex.q, hex.r);
@@ -281,8 +298,15 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         const hex = clientToHex(e.clientX, e.clientY, canvas, camera);
         onHoverHex(hex.q, hex.r);
       }
+    } else if (isMyTurn && phase === 'choose_main_conflict') {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const hex = clientToHex(e.clientX, e.clientY, canvas, camera);
+        const key = `${hex.q},${hex.r}`;
+        setHoveredHexKey(chooseableConflicts.includes(key) ? key : null);
+      }
     }
-  }, [isPanning, panStart, isMyTurn, phase, camera, onHoverHex]);
+  }, [isPanning, panStart, isMyTurn, phase, camera, onHoverHex, chooseableConflicts]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanning) {
@@ -297,7 +321,7 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
           if (phase === 'choose_main_conflict') {
             const hexKey = `${hex.q},${hex.r}`;
             if (chooseableConflicts.includes(hexKey)) {
-              onConflictChosen(hexKey);
+              onConflictSelected(hexKey);
             }
           } else if (phase === 'place_tile') {
             onHexClicked(hex.q, hex.r);
@@ -306,10 +330,11 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
       }
     }
     setIsPanning(false);
-  }, [isPanning, panStart, camera, isMyTurn, phase, onHexClicked, chooseableConflicts, onConflictChosen]);
+  }, [isPanning, panStart, camera, isMyTurn, phase, onHexClicked, chooseableConflicts, onConflictSelected]);
 
   const handleMouseLeave = useCallback(() => {
     setIsPanning(false);
+    setHoveredHexKey(null);
     onHoverLeave();
   }, [onHoverLeave]);
 
@@ -401,16 +426,36 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
           ctx.lineWidth = 3;
           drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
         } else if (chooseSet.has(hexKey)) {
-          // Chooseable conflict: pulsing purple glow
-          ctx.fillStyle = `rgba(139, 92, 246, ${0.05 + pulse * 0.12})`;
-          drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
-          ctx.shadowColor = '#8b5cf6';
-          ctx.shadowBlur = 8 + pulse * 12;
-          ctx.strokeStyle = '#8b5cf6';
-          ctx.lineWidth = 2 + pulse;
-          drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
-          ctx.shadowColor = 'transparent';
-          ctx.shadowBlur = 0;
+          if (hexKey === selectedConflict) {
+            // Selected conflict: solid thick purple outline + stronger fill
+            ctx.fillStyle = 'rgba(139, 92, 246, 0.2)';
+            drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
+            ctx.strokeStyle = '#8b5cf6';
+            ctx.lineWidth = 3.5;
+            drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+          } else if (hexKey === hoveredHexKey) {
+            // Hovered conflict: brighter pulsing glow
+            ctx.fillStyle = `rgba(139, 92, 246, ${0.08 + pulse * 0.15})`;
+            drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
+            ctx.shadowColor = '#a78bfa';
+            ctx.shadowBlur = 10 + pulse * 14;
+            ctx.strokeStyle = '#a78bfa';
+            ctx.lineWidth = 3;
+            drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+          } else {
+            // Default chooseable: subtler pulsing
+            ctx.fillStyle = `rgba(139, 92, 246, ${0.05 + pulse * 0.12})`;
+            drawHexFill(ctx, cx, cy, HEX_SIZE * 0.92);
+            ctx.shadowColor = '#8b5cf6';
+            ctx.shadowBlur = 8 + pulse * 12;
+            ctx.strokeStyle = '#8b5cf6';
+            ctx.lineWidth = 2 + pulse;
+            drawHexOutline(ctx, cx, cy, HEX_SIZE * 0.92);
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+          }
         } else {
           // Regular conflict: red dashed
           ctx.strokeStyle = '#ef4444';
@@ -444,7 +489,19 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
     }
 
     ctx.restore();
-  }, [camera, canvasDims, gameData, players, ghostPiece, playerColorMap, mainConflict, chooseableConflicts, pulseTime]);
+  }, [camera, canvasDims, gameData, players, ghostPiece, playerColorMap, mainConflict, chooseableConflicts, selectedConflict, hoveredHexKey, pulseTime]);
+
+  // Compute confirm button screen position
+  const conflictScreenPos = (() => {
+    if (!selectedConflict) return null;
+    const [q, r] = selectedConflict.split(',').map(Number);
+    const { x: wx, y: wy } = hexToPixel(q, r, HEX_SIZE);
+    return {
+      x: wx * camera.zoom + canvasDims.width / 2 + camera.x,
+      y: wy * camera.zoom + canvasDims.height / 2 + camera.y,
+    };
+  })();
+  const BUTTON_SIZE = 40;
 
   return (
     <div ref={containerRef} className="w-full h-full bg-gray-100 relative overflow-hidden">
@@ -457,6 +514,29 @@ const EinsteinDojoBoard = forwardRef<BoardHandle, EinsteinDojoBoardProps>(functi
         className={`w-full h-full ${isMyTurn && (phase === 'place_tile' || phase === 'choose_main_conflict') ? 'cursor-crosshair' : 'cursor-grab'} active:cursor-grabbing`}
         style={{ touchAction: 'none' }}
       />
+
+      {/* Confirm button overlay for selected conflict */}
+      {conflictScreenPos && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onConfirmConflict(); }}
+          style={{
+            position: 'absolute',
+            left: conflictScreenPos.x + HEX_SIZE * camera.zoom * 0.5,
+            top: conflictScreenPos.y - HEX_SIZE * camera.zoom * 0.5 - BUTTON_SIZE / 2,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            border: 'none',
+            background: 'none',
+            padding: 0,
+          }}
+          title={t('game.confirmTile', 'Confirm')}
+        >
+          <img src="/icon-accept-48.png" alt="Confirm" style={{ width: '100%', height: '100%' }} />
+        </button>
+      )}
+
       <div className="absolute bottom-2 left-2 md:bottom-4 md:left-4 bg-white/80 px-2 py-1 md:px-3 md:py-2 rounded shadow text-xs md:text-sm">
         <div>{t('game.zoom', { level: (camera.zoom * 100).toFixed(0) })}</div>
         <div className="text-xs text-gray-500">

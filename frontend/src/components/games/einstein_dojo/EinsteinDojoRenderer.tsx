@@ -31,6 +31,7 @@ export default function EinsteinDojoRenderer({
   const [hoverHex, setHoverHex] = useState<{ q: number; r: number } | null>(null);
   const [isDraggingFromTray, setIsDraggingFromTray] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const [selectedConflict, setSelectedConflict] = useState<string | null>(null);
 
   const gameData = view.game_data as EinsteinDojoGameData;
   const gameOver = useGameStore((state) => state.gameOver);
@@ -49,9 +50,16 @@ export default function EinsteinDojoRenderer({
     return Array.isArray(hexes) ? (hexes as string[]) : [];
   }, [phase, view.current_phase?.metadata?.conflict_hexes]);
 
-  const handleConflictChosen = useCallback((hexKey: string) => {
-    onAction('choose_main_conflict', { hex: hexKey });
-  }, [onAction]);
+  const handleConflictSelected = useCallback((hexKey: string) => {
+    setSelectedConflict(hexKey);
+  }, []);
+
+  const handleConfirmConflict = useCallback(() => {
+    if (selectedConflict) {
+      onAction('choose_main_conflict', { hex: selectedConflict });
+      setSelectedConflict(null);
+    }
+  }, [selectedConflict, onAction]);
 
   const myTilesRemaining = view.viewer_id
     ? gameData.tiles_remaining[view.viewer_id] ?? 0
@@ -69,6 +77,13 @@ export default function EinsteinDojoRenderer({
     setIsDraggingFromTray(false);
     setPanelExpanded(false);
   }, [view.turn_number]);
+
+  // Reset conflict selection when phase changes
+  useEffect(() => {
+    if (phase !== 'choose_main_conflict') {
+      setSelectedConflict(null);
+    }
+  }, [phase]);
 
   // ── Rotate / Flip ──
 
@@ -220,7 +235,9 @@ export default function EinsteinDojoRenderer({
           ghostPiece={ghostPiece}
           mainConflict={mainConflict}
           chooseableConflicts={chooseableConflicts}
-          onConflictChosen={handleConflictChosen}
+          selectedConflict={selectedConflict}
+          onConflictSelected={handleConflictSelected}
+          onConfirmConflict={handleConfirmConflict}
         />
         {isGameOver && gameOver && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
