@@ -103,6 +103,40 @@ export function kiteToKey(q: number, r: number, k: number): string {
 }
 
 /**
+ * Neighbor direction for each hex edge index (flat-top).
+ * Edge i connects vertex i to vertex (i+1)%6 and faces the neighbor in this direction.
+ */
+const EDGE_DIRECTIONS: [number, number][] = [
+  [1, 0],   // edge 0
+  [0, 1],   // edge 1
+  [-1, 1],  // edge 2
+  [-1, 0],  // edge 3
+  [0, -1],  // edge 4
+  [1, -1],  // edge 5
+];
+
+/**
+ * Return the 4 kites that share an edge with kite (q, r, k).
+ *
+ * Within the same hex, kite k shares edges with kites (k+1)%6 and (k+5)%6.
+ * Across hex boundaries:
+ *   - via hex edge (k+5)%6: kite (k+2)%6 in the neighbor across that edge
+ *   - via hex edge k:       kite (k+4)%6 in the neighbor across that edge
+ */
+function kiteEdgeNeighbors(q: number, r: number, k: number): Kite[] {
+  const prev = (k + 5) % 6;
+  const next = (k + 1) % 6;
+  const [dq1, dr1] = EDGE_DIRECTIONS[prev];
+  const [dq2, dr2] = EDGE_DIRECTIONS[k];
+  return [
+    [q, r, next],                        // same hex, clockwise neighbor
+    [q, r, prev],                        // same hex, counter-clockwise neighbor
+    [q + dq1, r + dr1, (k + 2) % 6],    // cross-hex via edge (k-1)
+    [q + dq2, r + dr2, (k + 4) % 6],    // cross-hex via edge k
+  ];
+}
+
+/**
  * Client-side placement validation.
  * Checks: no kite overlap, adjacency to existing tiles (first piece exempt).
  */
@@ -121,28 +155,14 @@ export function isValidPlacement(
     if (kiteToKey(q, r, k) in kiteOwners) return false;
   }
 
-  // Check adjacency (first placement exempt)
+  // Check adjacency via shared kite edges (first placement exempt)
   if (Object.keys(kiteOwners).length > 0) {
-    const pieceHexes = new Set<string>();
-    for (const [q, r] of kites) {
-      pieceHexes.add(`${q},${r}`);
-    }
-
-    const occupiedHexes = new Set<string>();
-    for (const key of Object.keys(kiteOwners)) {
-      const hexPart = key.split(":")[0];
-      occupiedHexes.add(hexPart);
-    }
-
-    let adjacent = false;
-    for (const hex of pieceHexes) {
-      if (occupiedHexes.has(hex)) {
-        adjacent = true;
-        break;
-      }
-    }
-
-    if (!adjacent) return false;
+    const hasAdjacentEdge = kites.some(([q, r, k]) =>
+      kiteEdgeNeighbors(q, r, k).some(([nq, nr, nk]) =>
+        kiteToKey(nq, nr, nk) in kiteOwners
+      )
+    );
+    if (!hasAdjacentEdge) return false;
   }
 
   return true;
